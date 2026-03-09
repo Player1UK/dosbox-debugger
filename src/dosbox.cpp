@@ -200,8 +200,8 @@ static void increase_ticks()
 
 		static int64_t cumulative_time_slept_us = 0;
 
-		constexpr auto sleep_duration = std::chrono::microseconds(1000);
-		std::this_thread::sleep_for(sleep_duration);
+		constexpr uint64_t sleep_duration = 1000000;
+		SDL_DelayPrecise(sleep_duration);
 
 		const auto time_slept_us = GetTicksUsSince(ticks_new_us);
 		cumulative_time_slept_us += time_slept_us;
@@ -783,11 +783,9 @@ static void add_dosbox_config_section(const ConfigPtr& conf)
 
 	auto section = conf->AddSection("dosbox");
 	section->AddUpdateHandler(notify_dosbox_setting_updated);
-	
-	auto pbool = section->AddBool("console", OnlyAtStart, true);
-	pbool->SetHelp("Console ('enabled' by default).");
 
 	auto pstring = section->AddString("language", Always, "auto");
+
 	pstring->SetHelp(
 	        "Select the DOS messages language ('auto' by default). Possible values:\n"
 	        "\n"
@@ -853,7 +851,7 @@ static void add_dosbox_config_section(const ConfigPtr& conf)
 	        "\n"
 	        "  vesa_nolfb:     Same as 'svga_s3' (VESA VBE 2.0), plus the \"no linear\n"
 	        "                  framebuffer\" hack (needed only by a few games).");
-	
+
 	pstring = section->AddPath("captures", Deprecated, "capture");
 	pstring->SetHelp(
 	        "Moved to [color=light-cyan][capture][reset] section and "
@@ -969,7 +967,7 @@ static void add_dosbox_config_section(const ConfigPtr& conf)
 	        "               modes available in this mode are often required by late '90s\n"
 	        "               demoscene productions.");
 
-	pbool = section->AddBool("vga_8dot_font", OnlyAtStart, false);
+	auto pbool = section->AddBool("vga_8dot_font", OnlyAtStart, false);
 	pbool->SetHelp("Use 8-pixel-wide fonts on VGA adapters ('off' by default).");
 
 	pbool = section->AddBool("vga_render_per_scanline", OnlyAtStart, true);

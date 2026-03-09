@@ -1179,7 +1179,6 @@ std::optional<bool> parse_bool_setting(const std::string_view setting)
 	        {     "yes",  true},
 
 	        {"disabled", false},
-	        {  "hidden", false},
 	        {   "false", false},
 	        {     "off", false},
 	        {      "no", false},

@@ -10,9 +10,9 @@
     "libmt32emu",
     "libpng",
     "opusfile",
-    "sdl2",
-    "sdl2-image",
-    "sdl2-ttf",
+    "sdl3",
+    "sdl3-image",
+    "sdl3-ttf",
     "speexdsp",
     "zlib-ng"
   ]
