@@ -1,0 +1,31 @@
+# Precompiled Headers
+*.gch
+*.pch
+
+# Other
+compile
+build.log
+clean.log
+make.log
+.previous_build
+.current_build
+*.defines
+missed.txt
+
+# Common names for build dirs
+/build
+/Debug
+/Release
+/out
+
+# VCPKG
+vcpkg_installed
+
+# Visual Studio
+.vs
+
+# External deps for symlinking for local dev
+/lib
+
+# Tests
+/Testing

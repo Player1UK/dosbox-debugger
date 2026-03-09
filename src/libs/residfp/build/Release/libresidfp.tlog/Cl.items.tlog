@@ -1,0 +1,17 @@
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\resample\SincResampler.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\SincResampler.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Dac.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Dac.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\EnvelopeGenerator.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\EnvelopeGenerator.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\ExternalFilter.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\ExternalFilter.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Filter.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Filter.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Filter6581.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Filter6581.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Filter8580.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Filter8580.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\FilterModelConfig.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\FilterModelConfig.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\FilterModelConfig6581.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\FilterModelConfig6581.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\FilterModelConfig8580.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\FilterModelConfig8580.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Integrator6581.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Integrator6581.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Integrator8580.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Integrator8580.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\OpAmp.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\OpAmp.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\SID.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\SID.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\Spline.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\Spline.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\WaveformCalculator.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\WaveformCalculator.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\residfp\WaveformGenerator.cpp;C:\Users\nolan\source\repos\dosbox\src\libs\residfp\build\Release\WaveformGenerator.obj

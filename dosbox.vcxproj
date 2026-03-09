@@ -1,0 +1,540 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{0096F587-8BB5-3041-B415-76E7D780E836}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <VcpkgEnabled>true</VcpkgEnabled>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>dosbox</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>ClangCL</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>ClangCL</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="do_not_import_user.props" Condition="exists('do_not_import_user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Debug\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">build\Debug\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">dosbox_with_debugger</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</GenerateManifest>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Release\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Release|x64'">build\Release\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">dosbox_with_debugger</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgConfiguration>Debug</VcpkgConfiguration>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <VcpkgUseStatic>true</VcpkgUseStatic>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\PDCurses;src\libs\PDCurses\pdcurses;src\libs\glad\src\debug\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;vcpkg_installed\x64-windows-static\x64-windows-static\include\SDL2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>
+      </AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <DisableSpecificWarnings>4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ForceConformanceInForLoopScope>
+      </ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>Disabled</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild>
+      </MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData>
+      </RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <SupportJustMyCode>
+      </SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType>
+      </TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\PDCurses;src\libs\PDCurses\pdcurses;src\libs\glad\src\debug\include;src\libs\YM7128B_emu;src\libs\whereami;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+    <Link>
+      <AdditionalDependencies>brotlicommon.lib;brotlidec.lib;bz2d.lib;freetyped.lib;iir_static.lib;libfluidsynth-3.lib;libpng16d.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;manual-link\SDL2maind.lib;SDL2_image-staticd.lib;SDL2_ttfd.lib;SDL2-staticd.lib;speexdsp.lib;zlibd.lib;zlibstatic-ngd.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libpdcurses.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>src\libs\Debug;vcpkg_installed\x64-windows-static\x64-windows-static\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers>
+      </ImageHasSafeExceptionHandlers>
+      <ImportLibrary>Debug/dosbox_with_debugger.lib</ImportLibrary>
+      <LinkErrorReporting>
+      </LinkErrorReporting>
+      <ProgramDataBaseFile>Debug/dosbox_with_debugger.pdb</ProgramDataBaseFile>
+      <RandomizedBaseAddress>
+      </RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <Manifest>
+      <AdditionalManifestFiles>src\platform\windows\dosbox.manifest;</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\PDCurses;src\libs\PDCurses\pdcurses;src\libs\glad\src\release\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;vcpkg_installed\x64-windows-static\x64-windows-static\include\SDL2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>
+      </AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <DisableSpecificWarnings>4244</DisableSpecificWarnings>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <ForceConformanceInForLoopScope>
+      </ForceConformanceInForLoopScope>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MinimalRebuild>
+      </MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RemoveUnreferencedCodeData>
+      </RemoveUnreferencedCodeData>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SupportJustMyCode>
+      </SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType>
+      </TreatWChar_tAsBuiltInType>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;NDEBUG;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>include;src;src\libs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\PDCurses;src\libs\PDCurses\pdcurses;src\libs\glad\srce\release\include;src\libs\YM7128B_emu;src\libs\whereami;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Lib>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+    </Lib>
+    <Link>
+      <AdditionalDependencies>brotlicommon.lib;brotlidec.lib;bz2.lib;freetype.lib;iir_static.lib;libfluidsynth-3.lib;libpng16.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;manual-link\SDL2main.lib;SDL2-static.lib;SDL2_image-static.lib;SDL2_ttf.lib;speexdsp.lib;zlib.lib;zlibstatic-ng.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libpdcurses.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>src\libs\Release;vcpkg_installed\x64-windows-static\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <DataExecutionPrevention>
+      </DataExecutionPrevention>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImageHasSafeExceptionHandlers>
+      </ImageHasSafeExceptionHandlers>
+      <LinkErrorReporting>
+      </LinkErrorReporting>
+      <RandomizedBaseAddress>
+      </RandomizedBaseAddress>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+    <Manifest>
+      <AdditionalManifestFiles>src\platform\windows\dosbox.manifest;</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\dosbox.cpp" />
+    <ClCompile Include="src\audio\clap\event_list.cpp" />
+    <ClCompile Include="src\audio\clap\library.cpp" />
+    <ClCompile Include="src\audio\clap\plugin.cpp" />
+    <ClCompile Include="src\audio\clap\plugin_manager.cpp" />
+    <ClCompile Include="src\audio\disk_noise.cpp" />
+    <ClCompile Include="src\audio\compressor.cpp" />
+    <ClCompile Include="src\audio\envelope.cpp" />
+    <ClCompile Include="src\audio\mixer.cpp">
+      <ObjectFileName>$(IntDir)/src/audio/mixer.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\audio\noise_gate.cpp" />
+    <ClCompile Include="src\audio\opl_capture.cpp" />
+    <ClCompile Include="src\capture\capture.cpp" />
+    <ClCompile Include="src\capture\capture_audio.cpp" />
+    <ClCompile Include="src\capture\capture_midi.cpp" />
+    <ClCompile Include="src\capture\capture_video.cpp" />
+    <ClCompile Include="src\capture\image\image_capturer.cpp" />
+    <ClCompile Include="src\capture\image\image_saver.cpp" />
+    <ClCompile Include="src\capture\image\image_scaler.cpp" />
+    <ClCompile Include="src\capture\image\png_writer.cpp" />
+    <ClCompile Include="src\config\config.cpp" />
+    <ClCompile Include="src\config\setup.cpp" />
+    <ClCompile Include="src\cpu\callback.cpp" />
+    <ClCompile Include="src\cpu\core_dyn_x86.cpp" />
+    <ClCompile Include="src\cpu\core_dynrec.cpp" />
+    <ClCompile Include="src\cpu\core_full.cpp" />
+    <ClCompile Include="src\cpu\core_normal.cpp" />
+    <ClCompile Include="src\cpu\core_prefetch.cpp" />
+    <ClCompile Include="src\cpu\core_simple.cpp" />
+    <ClCompile Include="src\cpu\cpu.cpp">
+      <ObjectFileName>$(IntDir)/src/cpu/cpu.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\cpu\flags.cpp" />
+    <ClCompile Include="src\cpu\mmx.cpp" />
+    <ClCompile Include="src\cpu\modrm.cpp" />
+    <ClCompile Include="src\cpu\paging.cpp" />
+    <ClCompile Include="src\debugger\debugger.cpp" />
+    <ClCompile Include="src\debugger\debugger_command.cpp" />
+    <ClCompile Include="src\debugger\debugger_disasm.cpp" />
+    <ClCompile Include="src\debugger\debugger_gui.cpp" />
+    <ClCompile Include="src\debugger\debugger_keys.cpp" />
+    <ClCompile Include="src\debugger\debugger_log.cpp" />
+    <ClCompile Include="src\debugger\cbreakpoint.cpp" />
+    <ClCompile Include="src\dos\cdrom.cpp" />
+    <ClCompile Include="src\dos\cdrom_image.cpp" />
+    <ClCompile Include="src\dos\cdrom_ioctl_linux.cpp" />
+    <ClCompile Include="src\dos\cdrom_win32.cpp" />
+    <ClCompile Include="src\dos\dos.cpp">
+      <ObjectFileName>$(IntDir)/src/dos/dos.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\dos\dos_classes.cpp" />
+    <ClCompile Include="src\dos\dos_code_page.cpp" />
+    <ClCompile Include="src\dos\dos_devices.cpp" />
+    <ClCompile Include="src\dos\dos_execute.cpp" />
+    <ClCompile Include="src\dos\dos_files.cpp" />
+    <ClCompile Include="src\dos\dos_ioctl.cpp" />
+    <ClCompile Include="src\dos\dos_keyboard_layout.cpp" />
+    <ClCompile Include="src\dos\dos_locale.cpp" />
+    <ClCompile Include="src\dos\dos_locale_data.cpp" />
+    <ClCompile Include="src\dos\dos_memory.cpp" />
+    <ClCompile Include="src\dos\dos_misc.cpp" />
+    <ClCompile Include="src\dos\dos_mscdex.cpp" />
+    <ClCompile Include="src\dos\dos_programs.cpp" />
+    <ClCompile Include="src\dos\dos_tables.cpp" />
+    <ClCompile Include="src\dos\dos_windows.cpp" />
+    <ClCompile Include="src\dos\drive_cache.cpp" />
+    <ClCompile Include="src\dos\drive_fat.cpp" />
+    <ClCompile Include="src\dos\drive_iso.cpp" />
+    <ClCompile Include="src\dos\drive_local.cpp" />
+    <ClCompile Include="src\dos\drive_overlay.cpp" />
+    <ClCompile Include="src\dos\drive_virtual.cpp" />
+    <ClCompile Include="src\dos\drives.cpp" />
+    <ClCompile Include="src\dos\programs.cpp" />
+    <ClCompile Include="src\dos\programs\attrib.cpp" />
+    <ClCompile Include="src\dos\programs\autotype.cpp" />
+    <ClCompile Include="src\dos\programs\biostest.cpp" />
+    <ClCompile Include="src\dos\programs\boot.cpp" />
+    <ClCompile Include="src\dos\programs\choice.cpp" />
+    <ClCompile Include="src\dos\programs\clip.cpp" />
+    <ClCompile Include="src\dos\programs\help.cpp" />
+    <ClCompile Include="src\dos\programs\makeimg.cpp" />
+    <ClCompile Include="src\dos\programs\imgmount.cpp" />
+    <ClCompile Include="src\dos\programs\intro.cpp" />
+    <ClCompile Include="src\dos\programs\keyb.cpp" />
+    <ClCompile Include="src\dos\programs\loadfix.cpp" />
+    <ClCompile Include="src\dos\programs\loadrom.cpp" />
+    <ClCompile Include="src\dos\programs\ls.cpp" />
+    <ClCompile Include="src\dos\programs\mem.cpp" />
+    <ClCompile Include="src\dos\programs\mixer.cpp">
+      <ObjectFileName>$(IntDir)/src/dos/programs/mixer.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\dos\programs\mode.cpp" />
+    <ClCompile Include="src\dos\programs\more.cpp" />
+    <ClCompile Include="src\dos\programs\more_output.cpp" />
+    <ClCompile Include="src\dos\programs\mount.cpp" />
+    <ClCompile Include="src\dos\programs\mount_common.cpp" />
+    <ClCompile Include="src\dos\programs\mouse.cpp">
+      <ObjectFileName>$(IntDir)/src/dos/programs/mouse.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\dos\programs\mousectl.cpp" />
+    <ClCompile Include="src\dos\programs\move.cpp" />
+    <ClCompile Include="src\dos\programs\rescan.cpp" />
+    <ClCompile Include="src\dos\programs\serial.cpp" />
+    <ClCompile Include="src\dos\programs\setver.cpp" />
+    <ClCompile Include="src\dos\programs\showpic.cpp" />
+    <ClCompile Include="src\dos\programs\subst.cpp" />
+    <ClCompile Include="src\dos\programs\tree.cpp" />
+    <ClCompile Include="src\fpu\fpu.cpp" />
+    <ClCompile Include="src\gui\auto_image_adjustments.cpp" />
+    <ClCompile Include="src\gui\clipboard.cpp" />
+    <ClCompile Include="src\gui\mapper.cpp" />
+    <ClCompile Include="src\gui\sdl_gui.cpp" />
+    <ClCompile Include="src\gui\shader_manager.cpp" />
+    <ClCompile Include="src\gui\titlebar.cpp" />
+    <ClCompile Include="src\gui\render\deinterlacer.cpp" />
+    <ClCompile Include="src\gui\render\opengl_renderer.cpp" />
+    <ClCompile Include="src\gui\render\render.cpp" />
+    <ClCompile Include="src\gui\render\scaler\scalers.cpp" />
+    <ClCompile Include="src\gui\render\sdl_renderer.cpp" />
+    <ClCompile Include="src\hardware\audio\adlib_gold.cpp" />
+    <ClCompile Include="src\hardware\audio\cms.cpp" />
+    <ClCompile Include="src\hardware\audio\covox.cpp" />
+    <ClCompile Include="src\hardware\audio\disney.cpp" />
+    <ClCompile Include="src\hardware\audio\gus.cpp" />
+    <ClCompile Include="src\hardware\audio\imfc.cpp" />
+    <ClCompile Include="src\hardware\audio\innovation.cpp" />
+    <ClCompile Include="src\hardware\audio\lpt_dac.cpp" />
+    <ClCompile Include="src\hardware\audio\mame\saa1099.cpp" />
+    <ClCompile Include="src\hardware\audio\mame\sn76496.cpp" />
+    <ClCompile Include="src\hardware\audio\mpu401.cpp" />
+    <ClCompile Include="src\hardware\audio\opl.cpp" />
+    <ClCompile Include="src\hardware\audio\pcspeaker.cpp" />
+    <ClCompile Include="src\hardware\audio\pcspeaker_discrete.cpp" />
+    <ClCompile Include="src\hardware\audio\pcspeaker_impulse.cpp" />
+    <ClCompile Include="src\hardware\audio\ps1audio.cpp" />
+    <ClCompile Include="src\hardware\audio\soundblaster.cpp" />
+    <ClCompile Include="src\hardware\audio\speaker.cpp" />
+    <ClCompile Include="src\hardware\audio\ston1_dac.cpp" />
+    <ClCompile Include="src\hardware\audio\tandy_sound.cpp" />
+    <ClCompile Include="src\hardware\input\intel8042.cpp" />
+    <ClCompile Include="src\hardware\input\intel8255.cpp" />
+    <ClCompile Include="src\hardware\input\joystick.cpp" />
+    <ClCompile Include="src\hardware\input\keyboard.cpp" />
+    <ClCompile Include="src\hardware\input\keyboard_scancodes.cpp" />
+    <ClCompile Include="src\hardware\input\mouse.cpp">
+      <ObjectFileName>$(IntDir)/src/hardware/input/mouse.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\hardware\input\mouse_common.cpp" />
+    <ClCompile Include="src\hardware\input\mouse_config.cpp" />
+    <ClCompile Include="src\hardware\input\mouse_interfaces.cpp" />
+    <ClCompile Include="src\hardware\input\mouse_manymouse.cpp" />
+    <ClCompile Include="src\hardware\input\mouseif_dos_driver.cpp" />
+    <ClCompile Include="src\hardware\input\mouseif_dos_driver_state.cpp" />
+    <ClCompile Include="src\hardware\input\mouseif_ps2_bios.cpp" />
+    <ClCompile Include="src\hardware\input\mouseif_virtual_machines.cpp" />
+    <ClCompile Include="src\hardware\network\ipx.cpp" />
+    <ClCompile Include="src\hardware\network\ipxserver.cpp" />
+    <ClCompile Include="src\hardware\network\ne2000.cpp" />
+    <ClCompile Include="src\hardware\serialport\misc_util.cpp" />
+    <ClCompile Include="src\hardware\serialport\nullmodem.cpp" />
+    <ClCompile Include="src\hardware\serialport\serialdummy.cpp" />
+    <ClCompile Include="src\hardware\serialport\serialmouse.cpp" />
+    <ClCompile Include="src\hardware\serialport\serialport.cpp" />
+    <ClCompile Include="src\hardware\serialport\softmodem.cpp" />
+    <ClCompile Include="src\hardware\video\reelmagic\driver.cpp" />
+    <ClCompile Include="src\hardware\video\reelmagic\player.cpp" />
+    <ClCompile Include="src\hardware\video\reelmagic\video_mixer.cpp" />
+    <ClCompile Include="src\hardware\video\vga.cpp" />
+    <ClCompile Include="src\hardware\video\vga_attr.cpp" />
+    <ClCompile Include="src\hardware\video\vga_crtc.cpp" />
+    <ClCompile Include="src\hardware\video\vga_dac.cpp" />
+    <ClCompile Include="src\hardware\video\vga_draw.cpp" />
+    <ClCompile Include="src\hardware\video\vga_gfx.cpp" />
+    <ClCompile Include="src\hardware\video\vga_memory.cpp" />
+    <ClCompile Include="src\hardware\video\vga_misc.cpp" />
+    <ClCompile Include="src\hardware\video\vga_other.cpp" />
+    <ClCompile Include="src\hardware\video\vga_paradise.cpp" />
+    <ClCompile Include="src\hardware\video\vga_s3.cpp" />
+    <ClCompile Include="src\hardware\video\vga_seq.cpp" />
+    <ClCompile Include="src\hardware\video\vga_tseng.cpp" />
+    <ClCompile Include="src\hardware\video\vga_xga.cpp" />
+    <ClCompile Include="src\hardware\video\voodoo.cpp" />
+    <ClCompile Include="src\hardware\cmos.cpp" />
+    <ClCompile Include="src\hardware\dma.cpp" />
+    <ClCompile Include="src\hardware\ide.cpp" />
+    <ClCompile Include="src\hardware\memory.cpp">
+      <ObjectFileName>$(IntDir)/src/hardware/memory.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\hardware\pci_bus.cpp" />
+    <ClCompile Include="src\hardware\pic.cpp" />
+    <ClCompile Include="src\hardware\port.cpp" />
+    <ClCompile Include="src\hardware\port_containers.cpp" />
+    <ClCompile Include="src\hardware\timer.cpp" />
+    <ClCompile Include="src\hardware\virtualbox.cpp" />
+    <ClCompile Include="src\hardware\vmware.cpp" />
+    <ClCompile Include="src\ints\bios.cpp" />
+    <ClCompile Include="src\ints\bios_disk.cpp" />
+    <ClCompile Include="src\ints\bios_keyboard.cpp" />
+    <ClCompile Include="src\ints\bios_pci.cpp" />
+    <ClCompile Include="src\ints\ems.cpp" />
+    <ClCompile Include="src\ints\int10.cpp" />
+    <ClCompile Include="src\ints\int10_char.cpp" />
+    <ClCompile Include="src\ints\int10_memory.cpp" />
+    <ClCompile Include="src\ints\int10_misc.cpp" />
+    <ClCompile Include="src\ints\int10_modes.cpp" />
+    <ClCompile Include="src\ints\int10_pal.cpp" />
+    <ClCompile Include="src\ints\int10_put_pixel.cpp" />
+    <ClCompile Include="src\ints\int10_vesa.cpp" />
+    <ClCompile Include="src\ints\int10_video_state.cpp" />
+    <ClCompile Include="src\ints\int10_vptable.cpp" />
+    <ClCompile Include="src\ints\xms.cpp" />
+    <ClCompile Include="src\midi\alsa.cpp" />
+    <ClCompile Include="src\midi\coreaudio.cpp" />
+    <ClCompile Include="src\midi\coremidi.cpp" />
+    <ClCompile Include="src\midi\fluidsynth.cpp" />
+    <ClCompile Include="src\midi\midi.cpp" />
+    <ClCompile Include="src\midi\mt32.cpp" />
+    <ClCompile Include="src\midi\mt32_lasynth_model.cpp" />
+    <ClCompile Include="src\midi\soundcanvas.cpp" />
+    <ClCompile Include="src\midi\win32.cpp" />
+    <ClCompile Include="src\network\ethernet.cpp" />
+    <ClCompile Include="src\network\ethernet_slirp.cpp" />
+    <ClCompile Include="src\misc\ansi_code_markup.cpp" />
+    <ClCompile Include="src\misc\console.cpp" />
+    <ClCompile Include="src\misc\cross.cpp" />
+    <ClCompile Include="src\misc\dos_rwops.cpp" />
+    <ClCompile Include="src\misc\fs_utils.cpp" />
+    <ClCompile Include="src\misc\fs_utils_posix.cpp" />
+    <ClCompile Include="src\misc\fs_utils_win32.cpp" />
+    <ClCompile Include="src\misc\help_util.cpp" />
+    <ClCompile Include="src\misc\host_locale.cpp" />
+    <ClCompile Include="src\misc\host_locale_macos.cpp" />
+    <ClCompile Include="src\misc\host_locale_posix.cpp" />
+    <ClCompile Include="src\misc\host_locale_win32.cpp" />
+    <ClCompile Include="src\misc\image_decoder.cpp" />
+    <ClCompile Include="src\misc\iso_locale_codes.cpp" />
+    <ClCompile Include="src\misc\messages.cpp" />
+    <ClCompile Include="src\misc\messages_adjust.cpp" />
+    <ClCompile Include="src\misc\messages_po_entry.cpp" />
+    <ClCompile Include="src\misc\rwqueue.cpp" />
+    <ClCompile Include="src\misc\support.cpp" />
+    <ClCompile Include="src\misc\unicode.cpp" />
+    <ClCompile Include="src\misc\unicode_encodings.cpp" />
+    <ClCompile Include="src\misc\video.cpp" />
+    <ClCompile Include="src\shell\autoexec.cpp" />
+    <ClCompile Include="src\shell\command_line.cpp" />
+    <ClCompile Include="src\shell\file_reader.cpp" />
+    <ClCompile Include="src\shell\shell.cpp" />
+    <ClCompile Include="src\shell\shell_batch.cpp" />
+    <ClCompile Include="src\shell\shell_cmds.cpp" />
+    <ClCompile Include="src\shell\shell_history.cpp" />
+    <ClCompile Include="src\shell\shell_misc.cpp" />
+    <ClCompile Include="src\utils\env_utils.cpp" />
+    <ClCompile Include="src\utils\string_utils.cpp" />
+    <ClCompile Include="src\webserver\bridge.cpp" />
+    <ClCompile Include="src\webserver\webserver.cpp" />
+    <ClCompile Include="src\webserver\cpu.cpp">
+      <ObjectFileName>$(IntDir)/src/webserver/cpu.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\webserver\memory.cpp">
+      <ObjectFileName>$(IntDir)/src/webserver/memory.cpp.obj</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="src\webserver\dos.cpp">
+      <ObjectFileName>$(IntDir)/src/webserver/dos.cpp.obj</ObjectFileName>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="src\libs\decoders\libdecoders.vcxproj">
+      <Project>{BDDE8D08-BDEB-3DE1-88A2-EFC8F94058B2}</Project>
+      <Name>libdecoders</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\ESFMu\libesfmu.vcxproj">
+      <Project>{0CB1DF5A-4BEF-36C8-BA11-FBA8522190C4}</Project>
+      <Name>libesfmu</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\glad\libglad.vcxproj">
+      <Project>{9031FA43-D7CA-3E49-BD48-CAB427FF4913}</Project>
+      <Name>libglad</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\manymouse\libmanymouse.vcxproj">
+      <Project>{75359FDF-A7AA-3B96-91D5-82380A70880F}</Project>
+      <Name>libmanymouse</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\nuked\libnuked.vcxproj">
+      <Project>{4F6D45AD-BE7F-3232-99D4-512D8AD52C33}</Project>
+      <Name>libnuked</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\PDCurses\libpdcurses.vcxproj">
+      <Project>{B10C2220-406B-39A0-8BA2-2ED4DACD82AC}</Project>
+      <Name>libpdcurses</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\residfp\libresidfp.vcxproj">
+      <Project>{13F66F68-D367-30DC-B0BC-5572CE89D804}</Project>
+      <Name>libresidfp</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\tal-chorus\libtalchorus.vcxproj">
+      <Project>{78D80CF2-CDA9-3C6C-9F4C-54DA017B11CC}</Project>
+      <Name>libtalchorus</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\whereami\libwhereami.vcxproj">
+      <Project>{B6FDF165-76C5-33DA-83C3-DE546205C865}</Project>
+      <Name>libwhereami</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\YM7128B_emu\libym7128bemu.vcxproj">
+      <Project>{DFB2F27A-2E1B-3DDA-B0B0-CE7A932AAC76}</Project>
+      <Name>libym7128bemu</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\loguru\loguru.vcxproj">
+      <Project>{06EE4953-C596-330F-9093-B372A96EE02D}</Project>
+      <Name>loguru</Name>
+    </ProjectReference>
+    <ProjectReference Include="src\libs\zmbv\zmbv.vcxproj">
+      <Project>{C41FE8B3-87AD-3095-9F9D-60B4819BDFB7}</Project>
+      <Name>zmbv</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\platform\windows\winres.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="vcpkg.json" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

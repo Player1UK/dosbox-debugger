@@ -1,0 +1,6 @@
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\linux_evdev.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\linux_evdev.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\macosx_hidmanager.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\macosx_hidmanager.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\macosx_hidutilities.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\macosx_hidutilities.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\manymouse.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\manymouse.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\windows_wminput.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\windows_wminput.obj
+C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\x11_xinput2.c;C:\Users\nolan\source\repos\dosbox\src\libs\manymouse\build\Release\x11_xinput2.obj
