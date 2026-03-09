@@ -13,9 +13,9 @@ make.log
 missed.txt
 
 # Common names for build dirs
-/build
-/Debug
-/Release
+build
+Debug
+Release
 /out
 
 # VCPKG
