@@ -71,11 +71,6 @@
 // Define to 1 to enable internal debugger (using ncurses or pdcurses)
 #define C_DEBUGGER 1
 
-// Define to 1 to enable true type fonts in debugger
-#ifdef C_DEBUGGER
-#define PDC_WIDE 1
-#endif
-
 // Define to 1 to enable heavy debugging (requires C_DEBUGGER)
 #define C_HEAVY_DEBUGGER 1
 

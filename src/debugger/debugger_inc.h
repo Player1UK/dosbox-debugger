@@ -89,7 +89,7 @@ constexpr int DefaultWindowCols = 82;
 constexpr float WindowRounding    = 0.0f;
 constexpr float FrameRounding     = 0.0f;
 constexpr float ScrollbarRounding = 0.0f;
-constexpr float FontSize          = 16.0f;
+constexpr float FontSize          = 18.0f;
 
 // Layout spacing
 constexpr float WindowSeparatorSpacing = 4.0f;

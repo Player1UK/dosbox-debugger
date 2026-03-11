@@ -68,7 +68,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\imgui;src\libs\imgui\backends;src\libs\glad\src\debug\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;vcpkg_installed\x64-windows-static\x64-windows-static\include\SDL2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\imgui;src\libs\imgui\backends;src\libs\glad\src\debug\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -112,7 +112,7 @@
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
     </Lib>
     <Link>
-      <AdditionalDependencies>brotlicommon.lib;brotlidec.lib;bz2d.lib;freetyped.lib;iir_static.lib;libfluidsynth-3.lib;libpng16d.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3_ttf-static.lib;SDL3-static.lib;speexdsp.lib;zlibd.lib;zlibstatic-ngd.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalDependencies>iir_static.lib;libfluidsynth-3.lib;libpng16d.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlibd.lib;zlibstatic-ngd.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>src\libs\Debug;vcpkg_installed\x64-windows-static\x64-windows-static\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention>
@@ -138,7 +138,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\imgui;src\libs\imgui\backends;src\libs\glad\src\release\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;vcpkg_installed\x64-windows-static\x64-windows-static\include\SDL2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>include;src;src\libs;src\libs\include;src\libs\imgui;src\libs\imgui\backends;src\libs\glad\src\release\include;src\libs\YM7128B_emu;src\libs\whereami;vcpkg_installed\x64-windows-static\x64-windows-static\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>
       </AdditionalOptions>
       <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
@@ -185,7 +185,7 @@
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
     </Lib>
     <Link>
-      <AdditionalDependencies>brotlicommon.lib;brotlidec.lib;bz2.lib;freetype.lib;iir_static.lib;libfluidsynth-3.lib;libpng16.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3_ttf-static.lib;SDL3-static.lib;speexdsp.lib;zlib.lib;zlibstatic-ng.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalDependencies>iir_static.lib;libfluidsynth-3.lib;libpng16.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlib.lib;zlibstatic-ng.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>src\libs\Release;vcpkg_installed\x64-windows-static\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention>

@@ -12,7 +12,6 @@
     "opusfile",
     "sdl3",
     "sdl3-image",
-    "sdl3-ttf",
     "speexdsp",
     "zlib-ng"
   ]
