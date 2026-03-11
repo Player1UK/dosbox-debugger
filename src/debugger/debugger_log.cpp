@@ -6,10 +6,11 @@
 
 #if C_DEBUGGER
 
+#if C_HEAVY_DEBUGGER
 #include <fstream>
+#endif
 
 #include "cbreakpoint.h"
-#include "cpu/cpu.h"
 #include "cpu/lazyflags.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"
@@ -21,20 +22,8 @@ extern char curSelectorName[3];
 extern bool showExtend;
 
 extern bool skipFirstInstruction;
-extern std::list<CBreakpoint*> BPoints;
 
-extern uint32_t GetAddress(uint16_t, uint32_t);
 extern uint32_t GetHexValue(char*, char*&);
-
-// Heavy Debugging Vars for logging
-#if C_HEAVY_DEBUGGER
-std::ofstream cpuLogFile;
-bool cpuLog       = false;
-int cpuLogCounter = 0;
-int cpuLogType    = 1; // log detail
-bool zeroProtect  = false;
-bool logHeavy            = false;
-#endif
 
 struct _LogGroup {
 	const char* front = nullptr;
@@ -49,10 +38,10 @@ FILE* debuglog = nullptr;
 
 void LOG::operator()(const char* format, ...)
 {
-	char buf[512];
+	char buf[DBGUI::MsgBufferSize];
 	va_list msg;
 	va_start(msg, format);
-	vsprintf(buf, format, msg);
+	vsnprintf(buf, sizeof(buf), format, msg);
 	va_end(msg);
 
 	if (d_type >= LOG_MAX) {
@@ -80,7 +69,7 @@ void LOG_Init()
 		debuglog = nullptr;
 	}
 
-	char buf[64];
+	char buf[DBGUI::LogNameBufferSize];
 
 	// Skip LOG_ALL, it is always enabled
 	for (Bitu i = LOG_ALL + 1; i < LOG_MAX; i++) {
@@ -141,15 +130,40 @@ void LOG_StartUp()
 
 	pstring->SetHelp("Path of the log file.");
 
-	char buf[64];
+	char buf[DBGUI::LogNameBufferSize];
 	for (Bitu i = LOG_ALL + 1; i < LOG_MAX; i++) {
 		safe_strcpy(buf, loggrp[i].front);
 		lowcase(buf);
 		PropBool* pbool = sect->AddBool(buf, Property::Changeable::Always, true);
 		pbool->SetHelp("Enable/disable logging of this type.");
 	}
-	//	MSG_Add("LOG_CONFIGFILE_HELP","Logging related options for the
-	// debugger.\n");
+}
+
+/***********/
+/* Helpers */
+/***********/
+
+uint32_t PhysMakeProt(uint16_t selector, uint32_t offset)
+{
+	Descriptor desc;
+	if (cpu.gdt.GetDescriptor(selector, desc)) {
+		return desc.GetBase() + offset;
+	}
+	return 0;
+}
+
+uint32_t GetAddress(uint16_t seg, uint32_t offset)
+{
+	if (seg == SegValue(cs)) {
+		return SegPhys(cs) + offset;
+	}
+	if (cpu.pmode && !(reg_flags & FLAG_VM)) {
+		Descriptor desc;
+		if (cpu.gdt.GetDescriptor(seg, desc)) {
+			return PhysMakeProt(seg, offset);
+		}
+	}
+	return (seg << 4) + offset;
 }
 
 char* AnalyzeInstruction(char* inst, bool saveSelector)
@@ -639,6 +653,16 @@ void LogCPUInfo(void)
 }
 
 #if C_HEAVY_DEBUGGER
+
+// Heavy Debugging Vars for logging
+std::ofstream cpuLogFile;
+bool cpuLog = false;
+int cpuLogCounter = 0;
+int cpuLogType = 1; // log detail
+bool zeroProtect = false;
+bool logHeavy = false;
+extern std::list<CBreakpoint*> BPoints;
+
 static void LogInstruction(uint16_t segValue, uint32_t eipValue, std::ofstream& out)
 {
 	static char empty[23] = {32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
@@ -826,9 +850,31 @@ void OutputVecTable(char* filename)
 	              vec_table_file.string().c_str());
 }
 
-// HEAVY DEBUGGING STUFF
-#if C_HEAVY_DEBUGGER
+bool DEBUG_Breakpoint(void)
+{
+	/* First get the physical address and check for a set Breakpoint */
+	if (!CBreakpoint::CheckBreakpoint(SegValue(cs), reg_eip)) {
+		return false;
+	}
+	// Found. Breakpoint is valid
+	// PhysPt where=GetAddress(SegValue(cs),reg_eip); -- "where" is unused
+	CBreakpoint::DeactivateBreakpoints(); // Deactivate all breakpoints
+	return true;
+}
 
+bool DEBUG_IntBreakpoint(uint8_t intNum)
+{
+	/* First get the physical address and check for a set Breakpoint */
+	PhysPt where = GetAddress(SegValue(cs), reg_eip);
+	if (!CBreakpoint::CheckIntBreakpoint(where, intNum, reg_ah, reg_al)) {
+		return false;
+	}
+	// Found. Breakpoint is valid
+	CBreakpoint::DeactivateBreakpoints(); // Deactivate all breakpoints
+	return true;
+}
+
+#if C_HEAVY_DEBUGGER
 const uint32_t LOGCPUMAX = 20000;
 
 static uint32_t logCount = 0;
@@ -1015,6 +1061,140 @@ bool DEBUG_HeavyIsBreakpoint(void)
 
 	return false;
 }
-#endif // HEAVY DEBUG
 
-#endif // DEBUG
+template <typename T>
+void DEBUG_UpdateMemoryReadBreakpoints(const PhysPt addr)
+{
+	static_assert(std::is_unsigned_v<T>);
+	static_assert(std::is_integral_v<T>);
+
+	for (CBreakpoint* bp : BPoints) {
+		if (bp->GetType() == BKPNT_MEMORY_READ) {
+			const PhysPt location_begin = bp->GetLocation();
+			const PhysPt location_end = location_begin + sizeof(T);
+			if ((addr >= location_begin) && (addr < location_end)) {
+				DEBUG_ShowMsg("bpmr hit: %04X:%04X, cs:ip = %04X:%04X",
+					bp->GetSegment(),
+					bp->GetOffset(),
+					SegValue(cs),
+					reg_eip);
+				bp->FlagMemoryAsRead();
+			}
+		}
+	}
+}
+// Explicit instantiations
+template void DEBUG_UpdateMemoryReadBreakpoints<uint8_t>(const PhysPt addr);
+template void DEBUG_UpdateMemoryReadBreakpoints<uint16_t>(const PhysPt addr);
+template void DEBUG_UpdateMemoryReadBreakpoints<uint32_t>(const PhysPt addr);
+template void DEBUG_UpdateMemoryReadBreakpoints<uint64_t>(const PhysPt addr);
+#endif //C_HEAVY_DEBUGGER
+
+/********************/
+/* DebugVar   stuff */
+/********************/
+CDebugVar::CDebugVar(const char* vname, PhysPt address) : adr(address)
+{
+	safe_strcpy(name, vname);
+}
+std::vector<CDebugVar*> varList = {};
+
+void CDebugVar::InsertVariable(char* name, PhysPt adr)
+{
+	varList.push_back(new CDebugVar(name, adr));
+}
+
+void CDebugVar::DeleteAll()
+{
+	std::vector<CDebugVar*>::iterator i;
+	CDebugVar* bp;
+	for (i = varList.begin(); i != varList.end(); i++) {
+		bp = static_cast<CDebugVar*>(*i);
+		delete bp;
+	}
+	(varList.clear)();
+}
+
+CDebugVar* CDebugVar::FindVar(PhysPt pt)
+{
+	if (varList.empty()) {
+		return nullptr;
+	}
+
+	std::vector<CDebugVar*>::size_type s = varList.size();
+	CDebugVar* bp;
+	for (std::vector<CDebugVar*>::size_type i = 0; i != s; i++) {
+		bp = static_cast<CDebugVar*>(varList[i]);
+		if (bp->GetAdr() == pt) {
+			return bp;
+		}
+	}
+	return nullptr;
+}
+
+bool CDebugVar::SaveVars(char* name)
+{
+	if (varList.size() > 65535) {
+		return false;
+	}
+	const std_fs::path vars_file = name;
+	FILE* f = fopen(vars_file.string().c_str(), "wb+");
+	if (!f) {
+		DEBUG_ShowMsg("DEBUG: Output of vars failed.\n");
+		return false;
+	}
+	DEBUG_ShowMsg("DEBUG: vars file '%s' created.\n",
+		std_fs::absolute(vars_file).string().c_str());
+
+	// write number of vars
+	auto num = (uint16_t)varList.size();
+	fwrite(&num, 1, sizeof(num), f);
+
+	std::vector<CDebugVar*>::iterator i;
+	CDebugVar* bp;
+	for (i = varList.begin(); i != varList.end(); i++) {
+		bp = static_cast<CDebugVar*>(*i);
+		// name
+		fwrite(bp->GetName(), 1, 16, f);
+		// adr
+		PhysPt adr = bp->GetAdr();
+		fwrite(&adr, 1, sizeof(adr), f);
+	}
+	fclose(f);
+	return true;
+}
+
+bool CDebugVar::LoadVars(char* name)
+{
+	const std_fs::path vars_file = name;
+	FILE* f = fopen(vars_file.string().c_str(), "rb");
+	if (!f) {
+		DEBUG_ShowMsg("DEBUG: Load of vars from %s failed.\n", name);
+		return false;
+	}
+	DEBUG_ShowMsg("DEBUG: vars file '%s' loaded.\n",
+		std_fs::absolute(vars_file).string().c_str());
+	// read number of vars
+	uint16_t num;
+	if (fread(&num, sizeof(num), 1, f) != 1) {
+		fclose(f);
+		return false;
+	}
+	for (uint16_t i = 0; i < num; i++) {
+		char name[16];
+		// name
+		if (fread(name, 16, 1, f) != 1) {
+			break;
+		}
+		// adr
+		PhysPt adr;
+		if (fread(&adr, sizeof(adr), 1, f) != 1) {
+			break;
+		}
+		// insert
+		InsertVariable(name, adr);
+	}
+	fclose(f);
+	return true;
+}
+#endif // C_DEBUGGER

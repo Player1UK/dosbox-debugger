@@ -77,7 +77,7 @@
 #endif
 
 // Define to 1 to enable heavy debugging (requires C_DEBUGGER)
-#define C_HEAVY_DEBUGGER 0
+#define C_HEAVY_DEBUGGER 1
 
 // Define to 1 to enable MT-32 emulator
 #define C_MT32EMU 1

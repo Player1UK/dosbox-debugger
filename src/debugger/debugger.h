@@ -4,12 +4,12 @@
 #ifndef DOSBOX_DEBUG_H
 #define DOSBOX_DEBUG_H
 
-#include "config/config.h"
-#include "config/setup.h"
 #include "dosbox.h"
-#include "hardware/memory.h"
 
 #if C_DEBUGGER
+
+#include "config/config.h"
+#include "hardware/memory.h"
 
 void DEBUG_AddConfigSection(const ConfigPtr& conf);
 void DEBUG_Init();
@@ -17,14 +17,14 @@ void DEBUG_Destroy();
 
 void DEBUG_Close();
 void DEBUG_DrawScreen();
-bool DEBUG_Breakpoint();
-bool DEBUG_IntBreakpoint(uint8_t intNum);
 void DEBUG_Enable(bool pressed);
 void DEBUG_CheckExecuteBreakpoint(uint16_t seg, uint32_t off);
 bool DEBUG_ExitLoop(void);
 void DEBUG_RefreshPage(int scroll);
-void DEBUG_RefreshLayout();
 Bitu DEBUG_EnableDebugger();
+
+bool DEBUG_Breakpoint();
+bool DEBUG_IntBreakpoint(uint8_t intNum);
 
 void LOG_StartUp();
 void LOG_Init();
@@ -36,7 +36,6 @@ extern Bitu debugCallback;
 /********************/
 /* DebugVar   stuff */
 /********************/
-
 class CDebugVar {
 public:
 	CDebugVar(const char* vname, PhysPt address);
@@ -76,7 +75,6 @@ public:
 	static bool SaveVars(char* name);
 	static bool LoadVars(char* name);
 };
-
 #endif // C_DEBUGGER
 
 #if C_DEBUGGER && C_HEAVY_DEBUGGER
@@ -85,9 +83,7 @@ void DEBUG_HeavyWriteLogInstruction();
 
 template <typename T>
 void DEBUG_UpdateMemoryReadBreakpoints(const PhysPt addr);
-
 #else
-
 template <typename T>
 constexpr void DEBUG_UpdateMemoryReadBreakpoints(const PhysPt)
 {

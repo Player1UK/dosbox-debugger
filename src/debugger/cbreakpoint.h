@@ -3,9 +3,10 @@
 #define DOSBOX_CBREAKPOINT_H
 
 #include "dosbox.h"
-#include "hardware/memory.h"
 
 #if C_DEBUGGER
+
+#include "hardware/memory.h"
 
 enum EBreakpoint {
 	BKPNT_UNKNOWN,

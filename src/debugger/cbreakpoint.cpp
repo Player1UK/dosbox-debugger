@@ -1,14 +1,11 @@
-#include <stdint.h>
-
 #include "cbreakpoint.h"
-#include "cpu/cpu.h"
-#include "cpu/paging.h"
 
 #if C_DEBUGGER
 
-extern char* AnalyzeInstruction(char*, bool);
+#include "cpu/cpu.h"
+#include "cpu/paging.h"
+
 extern uint32_t GetAddress(uint16_t, uint32_t);
-extern bool showExtend;
 
 std::list<CBreakpoint*> BPoints = {};
 
@@ -398,4 +395,5 @@ void CBreakpoint::ShowList(void)
 		nr++;
 	}
 }
-#endif // DEBUG
+
+#endif // C_DEBUGGER

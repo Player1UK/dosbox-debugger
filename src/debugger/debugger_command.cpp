@@ -6,7 +6,9 @@
 
 #if C_DEBUGGER
 
+#if C_HEAVY_DEBUGGER
 #include <fstream>
+#endif
 
 #include "cbreakpoint.h"
 #include "cpu/paging.h"
@@ -24,8 +26,6 @@ extern bool zeroProtect;
 extern bool logHeavy;
 #endif
 
-extern int old_cursor_state;
-
 extern void SaveMemory(uint16_t, uint32_t, uint32_t);
 extern void SaveMemoryBin(uint16_t, uint32_t, uint32_t);
 extern void LogMCBS(void);
@@ -39,12 +39,10 @@ extern void OutputVecTable(char*);
 extern void DrawCode(void);
 
 extern uint32_t GetAddress(uint16_t, uint32_t);
-extern bool GetDescriptorInfo(char*, char*, char*);
 extern void SetCodeWinStart();
 
 extern SCodeViewData codeViewData;
 
-extern DBGBlock dbg;
 extern bool debugging;
 
 extern bool showExtend;
@@ -264,6 +262,121 @@ bool ChangeRegister(char* str)
 	return true;
 }
 
+static char empty_sel[] = { ' ', ' ', 0 };
+
+bool GetDescriptorInfo(char* selname, char* out1, char* out2)
+{
+	Bitu sel;
+	Descriptor desc;
+
+	if (strstr(selname, "cs") || strstr(selname, "CS")) {
+		sel = SegValue(cs);
+	}
+	else if (strstr(selname, "ds") || strstr(selname, "DS")) {
+		sel = SegValue(ds);
+	}
+	else if (strstr(selname, "es") || strstr(selname, "ES")) {
+		sel = SegValue(es);
+	}
+	else if (strstr(selname, "fs") || strstr(selname, "FS")) {
+		sel = SegValue(fs);
+	}
+	else if (strstr(selname, "gs") || strstr(selname, "GS")) {
+		sel = SegValue(gs);
+	}
+	else if (strstr(selname, "ss") || strstr(selname, "SS")) {
+		sel = SegValue(ss);
+	}
+	else {
+		sel = GetHexValue(selname, selname);
+		if (*selname == 0) {
+			selname = empty_sel;
+		}
+	}
+	if (cpu.gdt.GetDescriptor(sel, desc)) {
+		switch (desc.Type()) {
+		case DESC_TASK_GATE:
+			sprintf(out1,
+				"%s: s:%08X type:%02X p",
+				selname,
+				desc.GetSelector(),
+				desc.saved.gate.type);
+			sprintf(out2,
+				"    TaskGate   dpl : %01X %1X",
+				desc.saved.gate.dpl,
+				desc.saved.gate.p);
+			return true;
+		case DESC_LDT:
+		case DESC_286_TSS_A:
+		case DESC_286_TSS_B:
+		case DESC_386_TSS_A:
+		case DESC_386_TSS_B:
+			sprintf(out1,
+				"%s: b:%08X type:%02X pag",
+				selname,
+				desc.GetBase(),
+				desc.saved.seg.type);
+			sprintf(out2,
+				"    l:%08X dpl : %01X %1X%1X%1X",
+				desc.GetLimit(),
+				desc.saved.seg.dpl,
+				desc.saved.seg.p,
+				desc.saved.seg.avl,
+				desc.saved.seg.g);
+			return true;
+		case DESC_286_CALL_GATE:
+		case DESC_386_CALL_GATE:
+			sprintf(out1,
+				"%s: s:%08X type:%02X p params: %02X",
+				selname,
+				desc.GetSelector(),
+				desc.saved.gate.type,
+				desc.saved.gate.paramcount);
+			sprintf(out2,
+				"    o:%08X dpl : %01X %1X",
+				desc.GetOffset(),
+				desc.saved.gate.dpl,
+				desc.saved.gate.p);
+			return true;
+		case DESC_286_INT_GATE:
+		case DESC_286_TRAP_GATE:
+		case DESC_386_INT_GATE:
+		case DESC_386_TRAP_GATE:
+			sprintf(out1,
+				"%s: s:%08X type:%02X p",
+				selname,
+				desc.GetSelector(),
+				desc.saved.gate.type);
+			sprintf(out2,
+				"    o:%08X dpl : %01X %1X",
+				desc.GetOffset(),
+				desc.saved.gate.dpl,
+				desc.saved.gate.p);
+			return true;
+		}
+		sprintf(out1,
+			"%s: b:%08X type:%02X parbg",
+			selname,
+			desc.GetBase(),
+			desc.saved.seg.type);
+		sprintf(out2,
+			"    l:%08X dpl : %01X %1X%1X%1X%1X%1X",
+			desc.GetLimit(),
+			desc.saved.seg.dpl,
+			desc.saved.seg.p,
+			desc.saved.seg.avl,
+			desc.saved.seg.r,
+			desc.saved.seg.big,
+			desc.saved.seg.g);
+		return true;
+	}
+	else {
+		strcpy(out1, "                                     ");
+		strcpy(out2, "                                     ");
+	}
+	return false;
+}
+
 static void DEBUG_RaiseTimerIrq(void)
 {
 	PIC_ActivateIRQ(0);
@@ -329,9 +442,8 @@ bool ParseCommand(char* str)
 		if (!name[0]) {
 			return false;
 		}
-		DEBUG_ShowMsg("DEBUG: Created debug var %s at %04X:%08X\n", name, seg, ofs);
+		DEBUG_ShowMsg("DEBUG: Created debug var %s at %04X:%04X\n", name, seg, ofs);
 		CDebugVar::InsertVariable(name, GetAddress(seg, ofs));
-		wclear(dbg.win_var);
 		return true;
 	}
 
@@ -372,7 +484,6 @@ bool ParseCommand(char* str)
 		DEBUG_ShowMsg("DEBUG: Variable list load (%s) : %s.\n",
 		              name,
 		              (CDebugVar::LoadVars(name) ? "ok" : "failure"));
-		wclear(dbg.win_var);
 		return true;
 	}
 
@@ -410,7 +521,6 @@ bool ParseCommand(char* str)
 			}
 		}
 		DEBUG_ShowMsg("DEBUG: Memory changed.\n");
-		wclear(dbg.win_var);
 		return true;
 	}
 
@@ -547,7 +657,6 @@ bool ParseCommand(char* str)
 	}
 
 #if C_HEAVY_DEBUGGER
-
 	if (command == "LOG") { // Create Cpu normal log file
 		cpuLogType = 1;
 		command    = "logcode";
@@ -589,7 +698,6 @@ bool ParseCommand(char* str)
 		DOSBOX_SetNormalLoop();
 		return true;
 	}
-
 #endif
 
 	if (command == "INTT") { // trace int.
