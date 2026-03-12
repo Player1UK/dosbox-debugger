@@ -18,41 +18,61 @@
 #include "shell/shell.h"
 
 #include <imgui.h>
+#include <imgui_impl_sdl3.h>
 
-extern uint32_t DEBUG_CheckKeys(void);
+extern uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent );
 extern void SetCodeWinStart();
 
 DBGBlock dbg   = {};
 bool debugging = false;
 bool exitLoop  = false;
 
+// Event queue
+std::queue<DebuggerInputEvent> debugger_event_queue = {};
+const int64_t frameInterval = 1000 / 60;
+
 Bitu DEBUG_Loop(void)
 {
 	// TODO Disable sound
-	GFX_PollAndHandleEvents();
-
-	// Start a new ImGui frame
-	DBGUI_NewFrame();
-
-	// Draw debugger windows
-	DEBUG_DrawScreen();
-
-	// Render ImGui
-	DBGUI_Render();
+	if( !GFX_PollAndHandleEvents( ) )
+		return -1;
 
 	// Interrupt started ? - then skip it
-	uint16_t oldCS  = SegValue(cs);
+	uint16_t oldCS = SegValue( cs );
 	uint32_t oldEIP = reg_eip;
-	PIC_runIRQs();
-	Delay(1);
-	if ((oldCS != SegValue(cs)) || (oldEIP != reg_eip)) {
-		CBreakpoint::AddBreakpoint(oldCS, oldEIP, true);
-		CBreakpoint::ActivateBreakpointsExceptAt(SegPhys(cs) + reg_eip);
+	PIC_runIRQs( );
+	Delay( 1 );
+	if( ( oldCS != SegValue( cs ) ) || ( oldEIP != reg_eip ) ) {
+		CBreakpoint::AddBreakpoint( oldCS, oldEIP, true );
+		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
 		debugging = false;
-		DOSBOX_SetNormalLoop();
+		DOSBOX_SetNormalLoop( );
 		return 0;
 	}
-	return DEBUG_CheckKeys();
+	// Check event queue
+	while( !debugger_event_queue.empty( ) ) {
+		DebuggerInputEvent event = debugger_event_queue.front( );
+		debugger_event_queue.pop( );
+
+		// Process ImGui events
+		ImGui_ImplSDL3_ProcessEvent( &event.ev );
+
+		switch( event.ev.type ) {
+		case SDL_EVENT_KEY_DOWN:
+			DEBUG_ProcessKey( event.ev.key );
+			break;
+		default:
+			break;
+		}
+	}
+	static auto tickCounter = GetTicks( );
+	if( GetTicksSince( tickCounter ) > frameInterval ) {
+		DBGUI_NewFrame( ); // Start a new ImGui frame
+		DEBUG_DrawScreen( ); // Draw debugger windows
+		DBGUI_Render( ); // Render ImGui
+		tickCounter += frameInterval;
+	}
+	return 0;
 }
 
 void DEBUG_Enable(bool pressed)

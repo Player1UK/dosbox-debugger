@@ -74,6 +74,7 @@ void DEBUG_ShowMsg( const char* format, ... ) {
 	if( logBuff.size( ) > DBGUI::MaxLogBuffer ) {
 		logBuff.pop_front( );
 	}
+	dbg.update_win[WIN_OUT] = true;
 	// Don't reset scroll offset - let user stay at their scroll position
 }
 
@@ -81,11 +82,11 @@ void DEBUG_RefreshPage( int scroll ) {
 	if( !imgui_initialized ) {
 		return;
 	}
-
 	output_scroll_offset -= scroll;
 	if( output_scroll_offset < 0 ) {
 		output_scroll_offset = 0;
 	}
+	dbg.update_win[WIN_OUT] = true;
 }
 
 void SetCodeWinStart( ) {
@@ -102,6 +103,7 @@ void SetCodeWinStart( ) {
 		codeViewData.useEIP = codeViewData.goodEIP = reg_eip;
 	}
 	codeViewData.cursorPos = -1; // Recalc Cursor position
+	dbg.update_win[WIN_CODE] = true;
 }
 
 /********************/
@@ -111,6 +113,10 @@ void SetCodeWinStart( ) {
 extern char* AnalyzeInstruction( char*, bool );
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern bool GetDescriptorInfo( char*, char*, char* );
+
+const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
+const ImVec4 grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
+const ImVec4 red_bg_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
 
 void DrawCode( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
@@ -122,10 +128,9 @@ void DrawCode( void ) {
 	float line_height = ImGui::GetTextLineHeightWithSpacing( );
 	float title_bar_height = ImGui::GetFrameHeight( );
 	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float separator_height = 4.0f;
 	float window_width = DBGUI_GetWindowWidth( );
 	float window_height = ( dbg.rows_code * line_height ) + title_bar_height +
-		padding + separator_height;
+		padding;
 
 	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_CODE ) ),
 		ImGuiCond_FirstUseEver );
@@ -137,38 +142,23 @@ void DrawCode( void ) {
 		// Handle mouse wheel scrolling when hovering over this window
 		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
 			float wheel = ImGui::GetIO( ).MouseWheel;
-			if( wheel > 0 ) {
-				// Scroll up - move cursor up or scroll code
-				if( codeViewData.cursorPos > 0 ) {
-					codeViewData.cursorPos--;
-				} else {
-					codeViewData.useEIP -= 1;
+			if( wheel ) {
+				if( wheel > 0 ) { // Scroll up - move cursor up or scroll code
+					if( codeViewData.cursorPos > 0 ) {
+						codeViewData.cursorPos--;
+					} else {
+						codeViewData.useEIP -= 1;
+					}
+				} else { // Scroll down - move cursor down or scroll code
+					if( codeViewData.cursorPos < dbg.rows_code - 1 ) {
+						codeViewData.cursorPos++;
+					} else {
+						codeViewData.useEIP += codeViewData.firstInstSize;
+					}
 				}
-			} else if( wheel < 0 ) {
-				// Scroll down - move cursor down or scroll code
-				if( codeViewData.cursorPos < dbg.rows_code - 2 ) {
-					codeViewData.cursorPos++;
-				} else {
-					codeViewData.useEIP += codeViewData.firstInstSize;
-				}
+				dbg.update_win[WIN_CODE] = true;
 			}
 		}
-
-		ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
-		ImVec4 grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
-		ImVec4 red_bg_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
-
-		// Reserve space at the bottom for the input line
-		float input_line_height = ImGui::GetTextLineHeightWithSpacing( ) + 4.0f;
-		float available_height = ImGui::GetContentRegionAvail( ).y -
-			input_line_height;
-
-		// Scrollable code region
-		ImGui::BeginChild( "CodeScrolling",
-			ImVec2( 0, available_height ),
-			false,
-			ImGuiWindowFlags_HorizontalScrollbar );
-
 		bool saveSel;
 		uint32_t disEIP = codeViewData.useEIP;
 		PhysPt start = GetAddress( codeViewData.useCS, codeViewData.useEIP );
@@ -176,7 +166,7 @@ void DrawCode( void ) {
 		Bitu size;
 		Bitu c;
 
-		for( int i = 0, iMid = dbg.rows_code * 0.95; i < dbg.rows_code - 1; ++i ) {
+		for( int i = 0, iMid = dbg.rows_code * 0.95; i < dbg.rows_code; ++i ) {
 			saveSel = false;
 			bool is_current_ip = ( codeViewData.useCS == SegValue( cs ) ) &&
 				( disEIP == reg_eip );
@@ -198,7 +188,6 @@ void DrawCode( void ) {
 				codeViewData.cursorOfs = disEIP;
 				saveSel = true;
 			}
-
 			// Build the line
 			char line[256];
 			char* ptr = line;
@@ -292,29 +281,13 @@ void DrawCode( void ) {
 			if( i == iMid ) {
 				codeViewData.useEIPmid = disEIP;
 			}
+			codeViewData.useEIPlast = disEIP;
 		}
-
-		codeViewData.useEIPlast = disEIP;
-
-		ImGui::EndChild( );
-
-		// Input line or running indicator (fixed at bottom)
-		ImGui::Separator( );
-		if( !debugging ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-			ImGui::Text( "(Running)" );
-			ImGui::PopStyleColor( );
-		} else {
-			char* dispPtr = codeViewData.inputStr;
-			ImGui::Text( "%c-> %s_",
-				( codeViewData.ovrMode ? 'O' : 'I' ),
-				dispPtr );
+		if( dbg.update_win[WIN_CODE] ) {
+			dbg.update_win[WIN_CODE] = false;
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
-}
-
-void DrawConsole( void ) {
 }
 
 static void DrawData( void ) {
@@ -340,15 +313,15 @@ static void DrawData( void ) {
 		// Handle mouse wheel scrolling when hovering over this window
 		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
 			float wheel = ImGui::GetIO( ).MouseWheel;
-			if( wheel != 0.0f ) { // Scroll up
+			if( wheel ) {
 				if( wheel > 0.0f && dataOfs[dbg.active_win_data] <= 48U ) {
 					dataOfs[dbg.active_win_data] = 0U;
 				} else {
 					dataOfs[dbg.active_win_data] -= 48U * wheel;
 				}
+				dbg.update_win[WIN_DATA] = true;
 			}
 		}
-
 		uint8_t ch;
 		uint32_t add, address;
 		bool f16bit = false;
@@ -392,28 +365,39 @@ static void DrawData( void ) {
 				ImGui::TextUnformatted( line );
 			}
 		}
+		if( dbg.update_win[WIN_DATA] ) {
+			dbg.update_win[WIN_DATA] = false;
+		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
 static struct {
-	uint32_t eax = 0;
-	uint32_t ebx = 0;
-	uint32_t ecx = 0;
-	uint32_t edx = 0;
-	uint32_t esi = 0;
-	uint32_t edi = 0;
-	uint32_t ebp = 0;
-	uint32_t esp = 0;
-	uint32_t eip = 0;
+	uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+	uint32_t esi = 0, edi = 0, ebp = 0, esp = 0, eip = 0;
 } oldregs = {};
 
 static auto oldcpucpl = cpu.cpl;
 static auto oldflags = cpu_regs.flags;
 static Segment oldsegs[6] = {};
 
-const float fWIDTH = 8.5f;
-const float COLUMN[] = { 0.0f * fWIDTH, 16.0f * fWIDTH, 32.0f * fWIDTH, 42.0f * fWIDTH, 52.0f * fWIDTH, 66.0f * fWIDTH, 74.0f * fWIDTH };
+enum :uint8_t { COL_1, COL_2, COL_3, COL_4, COL_5, COL_6 };
+
+const ImVec4 highlight_color = ImVec4( 1.0f, 1.0f, 0.0f, 1.0f );
+
+/*#define REGNAMES \
+    REGNAME(eax)\
+    REGNAME(ebx)\
+    REGNAME(ecx)\
+    REGNAME(edx)
+
+#define REGNAME(val) reg_##val = oldregs.val;
+REGNAMES
+#undef REGNAME
+
+#define REGNAME(val) reg_##val,
+inline constexpr std::array<int, 4> reg_array = { REGNAMES };
+#undef X*/
 
 static void DrawRegisters( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
@@ -433,9 +417,10 @@ static void DrawRegisters( void ) {
 	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
 		ImGuiCond_FirstUseEver );
 
+	static const float COLUMN[] = { window_width * 0.2f, window_width * 0.4f, window_width * 0.525f, window_width * 0.65f, window_width * 0.825f, window_width * 0.925f };
+
 	if( DBGUI_BeginWindowWithStyledTitle( "                                    Registers                                   ",
-		ImGuiWindowFlags_NoCollapse ) ) {
-		ImVec4 highlight_color = ImVec4( 1.0f, 1.0f, 0.0f, 1.0f );
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
 
 		// Row 1: EAX, ESI, CS, FS, EIP, Mode
 		ImGui::Text( "EAX" );
@@ -447,9 +432,8 @@ static void DrawRegisters( void ) {
 		if( reg_eax != oldregs.eax ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.eax = reg_eax;
 
-		ImGui::SameLine( COLUMN[1] );
+		ImGui::SameLine( COLUMN[COL_1] );
 		ImGui::Text( "ESI" );
 		ImGui::SameLine( );
 		if( reg_esi != oldregs.esi ) {
@@ -459,9 +443,8 @@ static void DrawRegisters( void ) {
 		if( reg_esi != oldregs.esi ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.esi = reg_esi;
 
-		ImGui::SameLine( COLUMN[2] );
+		ImGui::SameLine( COLUMN[COL_2] );
 		ImGui::Text( "CS" );
 		ImGui::SameLine( );
 		if( SegValue( cs ) != oldsegs[cs].val ) {
@@ -471,9 +454,8 @@ static void DrawRegisters( void ) {
 		if( SegValue( cs ) != oldsegs[cs].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[cs].val = SegValue( cs );
 
-		ImGui::SameLine( COLUMN[3] );
+		ImGui::SameLine( COLUMN[COL_3] );
 		ImGui::Text( "FS" );
 		ImGui::SameLine( );
 		if( SegValue( fs ) != oldsegs[fs].val ) {
@@ -483,9 +465,8 @@ static void DrawRegisters( void ) {
 		if( SegValue( fs ) != oldsegs[fs].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[fs].val = SegValue( fs );
 
-		ImGui::SameLine( COLUMN[4] );
+		ImGui::SameLine( COLUMN[COL_4] );
 		ImGui::Text( "EIP" );
 		ImGui::SameLine( );
 		if( reg_eip != oldregs.eip ) {
@@ -495,9 +476,8 @@ static void DrawRegisters( void ) {
 		if( reg_eip != oldregs.eip ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.eip = reg_eip;
 
-		ImGui::SameLine( COLUMN[6] );
+		ImGui::SameLine( COLUMN[COL_6] );
 		const char* mode_str = "Real";
 		if( cpu.pmode ) {
 			if( reg_flags & FLAG_VM ) {
@@ -520,9 +500,8 @@ static void DrawRegisters( void ) {
 		if( reg_ebx != oldregs.ebx ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.ebx = reg_ebx;
 
-		ImGui::SameLine( COLUMN[1], 0.0f );
+		ImGui::SameLine( COLUMN[COL_1], 0.0f );
 		ImGui::Text( "EDI" );
 		ImGui::SameLine( );
 		if( reg_edi != oldregs.edi ) {
@@ -532,9 +511,8 @@ static void DrawRegisters( void ) {
 		if( reg_edi != oldregs.edi ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.edi = reg_edi;
 
-		ImGui::SameLine( COLUMN[2] );
+		ImGui::SameLine( COLUMN[COL_2] );
 		ImGui::Text( "DS" );
 		ImGui::SameLine( );
 		if( SegValue( ds ) != oldsegs[ds].val ) {
@@ -544,9 +522,8 @@ static void DrawRegisters( void ) {
 		if( SegValue( ds ) != oldsegs[ds].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[ds].val = SegValue( ds );
 
-		ImGui::SameLine( COLUMN[3] );
+		ImGui::SameLine( COLUMN[COL_3] );
 		ImGui::Text( "GS" );
 		ImGui::SameLine( );
 		if( SegValue( gs ) != oldsegs[gs].val ) {
@@ -556,13 +533,10 @@ static void DrawRegisters( void ) {
 		if( SegValue( gs ) != oldsegs[gs].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[gs].val = SegValue( gs );
-
 
 		Bitu changed_flags = reg_flags ^ oldflags;
-		oldflags = reg_flags;
 
-		ImGui::SameLine( COLUMN[4] );
+		ImGui::SameLine( COLUMN[COL_4] );
 		ImGui::Text( "C" );
 		ImGui::SameLine( 0.0f, 0.0f );
 		if( changed_flags & FLAG_CF ) {
@@ -663,7 +637,7 @@ static void DrawRegisters( void ) {
 
 		// Row 3: ECX, EBP, ES, SS, Cycles, IOPL, CPL
 		ImGui::Text( "ECX" );
-		ImGui::SameLine( COLUMN[0] );
+		ImGui::SameLine( );
 		if( reg_ecx != oldregs.ecx ) {
 			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
 		}
@@ -671,9 +645,8 @@ static void DrawRegisters( void ) {
 		if( reg_ecx != oldregs.ecx ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.ecx = reg_ecx;
 
-		ImGui::SameLine( COLUMN[1] );
+		ImGui::SameLine( COLUMN[COL_1] );
 		ImGui::Text( "EBP" );
 		ImGui::SameLine( );
 		if( reg_ebp != oldregs.ebp ) {
@@ -683,9 +656,8 @@ static void DrawRegisters( void ) {
 		if( reg_ebp != oldregs.ebp ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.ebp = reg_ebp;
 
-		ImGui::SameLine( COLUMN[2] );
+		ImGui::SameLine( COLUMN[COL_2] );
 		ImGui::Text( "ES" );
 		ImGui::SameLine( );
 		if( SegValue( es ) != oldsegs[es].val ) {
@@ -695,9 +667,8 @@ static void DrawRegisters( void ) {
 		if( SegValue( es ) != oldsegs[es].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[es].val = SegValue( es );
 
-		ImGui::SameLine( COLUMN[3] );
+		ImGui::SameLine( COLUMN[COL_3] );
 		ImGui::Text( "SS" );
 		ImGui::SameLine( );
 		if( SegValue( ss ) != oldsegs[ss].val ) {
@@ -707,12 +678,11 @@ static void DrawRegisters( void ) {
 		if( SegValue( ss ) != oldsegs[ss].val ) {
 			ImGui::PopStyleColor( );
 		}
-		oldsegs[ss].val = SegValue( ss );
 
-		ImGui::SameLine( COLUMN[4] );
+		ImGui::SameLine( COLUMN[COL_4] );
 		ImGui::Text( "%" PRIuPTR, cycle_count );
 
-		ImGui::SameLine( COLUMN[5] );
+		ImGui::SameLine( COLUMN[COL_5] );
 		ImGui::Text( "IOPL" );
 		ImGui::SameLine( 0.0f, 0.0f );
 		if( changed_flags & FLAG_IOPL ) {
@@ -723,7 +693,7 @@ static void DrawRegisters( void ) {
 			ImGui::PopStyleColor( );
 		}
 
-		ImGui::SameLine( COLUMN[6] );
+		ImGui::SameLine( COLUMN[COL_6] );
 		ImGui::Text( "CPL" );
 		ImGui::SameLine( 0.0f, 0.0f );
 		if( cpu.cpl != oldcpucpl ) {
@@ -733,7 +703,6 @@ static void DrawRegisters( void ) {
 		if( cpu.cpl != oldcpucpl ) {
 			ImGui::PopStyleColor( );
 		}
-		oldcpucpl = cpu.cpl;
 
 		// Row 4: EDX, ESP
 		ImGui::Text( "EDX" );
@@ -745,9 +714,8 @@ static void DrawRegisters( void ) {
 		if( reg_edx != oldregs.edx ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.edx = reg_edx;
 
-		ImGui::SameLine( COLUMN[1] );
+		ImGui::SameLine( COLUMN[COL_1] );
 		ImGui::Text( "ESP" );
 		ImGui::SameLine( );
 		if( reg_esp != oldregs.esp ) {
@@ -757,14 +725,34 @@ static void DrawRegisters( void ) {
 		if( reg_esp != oldregs.esp ) {
 			ImGui::PopStyleColor( );
 		}
-		oldregs.esp = reg_esp;
 
 		// Selector info, if available
 		if( ( cpu.pmode ) && curSelectorName[0] ) {
 			char out1[200], out2[200];
 			GetDescriptorInfo( curSelectorName, out1, out2 );
-			ImGui::SameLine( COLUMN[2] );
+			ImGui::SameLine( COLUMN[COL_2] );
 			ImGui::Text( "%s %s", out1, out2 );
+		}
+
+		if( dbg.update_win[WIN_REG] ) {
+			dbg.update_win[WIN_REG] = false;
+			oldregs.eax = reg_eax;
+			oldregs.ebx = reg_ebx;
+			oldregs.ecx = reg_ecx;
+			oldregs.edx = reg_edx;
+			oldregs.esi = reg_esi;
+			oldregs.edi = reg_edi;
+			oldregs.ebp = reg_ebp;
+			oldregs.esp = reg_esp;
+			oldregs.eip = reg_eip;
+			oldsegs[cs].val = SegValue( cs );
+			oldsegs[ds].val = SegValue( ds );
+			oldsegs[es].val = SegValue( es );
+			oldsegs[fs].val = SegValue( fs );
+			oldsegs[gs].val = SegValue( gs );
+			oldsegs[ss].val = SegValue( ss );
+			oldcpucpl = cpu.cpl;
+			oldflags = reg_flags;
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
@@ -790,7 +778,7 @@ static void DrawVariables( ) {
 		ImGuiCond_FirstUseEver );
 
 	if( DBGUI_BeginWindowWithStyledTitle( "                                    Variables                                   ",
-		ImGuiWindowFlags_NoCollapse ) ) {
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
 		if( varList.empty( ) ) {
 			ImGui::TextDisabled( "(no variables defined)" );
 		} else {
@@ -821,8 +809,39 @@ static void DrawVariables( ) {
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
+	if( dbg.update_win[WIN_VAR] ) {
+		dbg.update_win[WIN_VAR] = false;
+	}
 }
 #undef DEBUG_VAR_BUF_LEN
+
+void DrawConsole( void ) {
+	// Calculate window dimensions based on character rows/columns
+	float line_height = ImGui::GetTextLineHeightWithSpacing( );
+	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
+	float window_width = DBGUI_GetWindowWidth( );
+	float window_height = ( dbg.rows_console * line_height ) + padding;
+
+	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_CON ) ),
+		ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
+		ImGuiCond_FirstUseEver );
+
+	if( DBGUI_BeginWindow( "Console", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) ) {
+		if( !debugging ) {
+			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
+			ImGui::Text( "(Running)" );
+			ImGui::PopStyleColor( );
+		} else {
+			ImGui::Text( "%c", ( codeViewData.ovrMode ? 'O' : 'I' ) );
+			ImGui::SameLine( );
+			if( ImGui::InputText( "##console_input", codeViewData.inputStr, IM_ARRAYSIZE( codeViewData.inputStr ), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll ) ) {
+				// buf now contains the updated text
+			}
+		}
+	}
+	DBGUI_EndWindow( );
+}
 
 // Calculate window height for a given number of rows
 static float CalcWindowHeight( int rows ) {
@@ -847,6 +866,8 @@ float DBGUI_GetWindowY( uint32_t window_index ) {
 	case NUM_WINDOWS:
 		y += CalcWindowHeight( dbg.rows_output );
 	case WIN_OUT:
+		y += CalcWindowHeight( dbg.rows_console );
+	case WIN_CON:
 		y += CalcWindowHeight( dbg.rows_variables );
 	case WIN_VAR:
 		y += CalcWindowHeight( dbg.rows_data[0] );
@@ -873,10 +894,11 @@ float DBGUI_GetWindowWidth( ) {
 }
 
 void DEBUG_DrawScreen( void ) {
-	DrawData( );
 	DrawCode( );
 	DrawRegisters( );
+	DrawData( );
 	DrawVariables( );
+	DrawConsole( );
 	DBGUI_DrawOutputWindow( );
 }
 
@@ -1090,6 +1112,10 @@ void DBGUI_Render( void ) {
 	SDL_SubmitGPUCommandBuffer( command_buffer );
 }
 
+static bool BeginWindow( const char* name, ImGuiWindowFlags flags ) {
+	return ImGui::Begin( name, nullptr, flags );
+}
+
 // Title bar colors - cyan background with black text (classic DOS style)
 static const ImVec4 TitleBgColor = ImVec4( 0.0f, 0.667f, 0.667f, 1.0f ); // Cyan
 static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );     // Black
@@ -1110,6 +1136,10 @@ static bool BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flag
 	return result;
 }
 
+static void EndWindow( ) {
+	ImGui::End( );
+}
+
 // Helper to end a styled window
 static void EndWindowWithStyledTitle( ) {
 	ImGui::End( );
@@ -1117,6 +1147,14 @@ static void EndWindowWithStyledTitle( ) {
 }
 
 // Public versions for use from debugger.cpp
+bool DBGUI_BeginWindow( const char* name, int flags ) {
+	return BeginWindow( name, static_cast<ImGuiWindowFlags>( flags | ImGuiWindowFlags_NoTitleBar ) );
+}
+
+void DBGUI_EndWindow( ) {
+	EndWindow( );
+}
+
 bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags ) {
 	return BeginWindowWithStyledTitle( title, static_cast<ImGuiWindowFlags>( flags ) );
 }
@@ -1197,7 +1235,6 @@ void DBGUI_DrawOutputWindow( void ) {
 	if( !imgui_initialized ) {
 		return;
 	}
-
 	// Calculate window dimensions based on character rows/columns
 	float window_width = DBGUI_GetWindowWidth( );
 	float window_height = CalcWindowHeight( dbg.rows_output );
@@ -1210,7 +1247,8 @@ void DBGUI_DrawOutputWindow( void ) {
 	if( DBGUI_BeginWindowWithStyledTitle( "                                     Output                    [SHIFT] Home/End ",
 		ImGuiWindowFlags_NoCollapse |
 		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse ) ) {
+		ImGuiWindowFlags_NoScrollWithMouse |
+		ImGuiWindowFlags_NoNavFocus ) ) {
 		// Handle mouse wheel scrolling when hovering over this window
 		if( ImGui::IsWindowHovered( ) ) {
 			float wheel = ImGui::GetIO( ).MouseWheel;
@@ -1248,6 +1286,9 @@ void DBGUI_DrawOutputWindow( void ) {
 		}
 	}
 	EndWindowWithStyledTitle( );
+	if( dbg.update_win[WIN_OUT] ) {
+		dbg.update_win[WIN_OUT] = false;
+	}
 }
 
 #endif

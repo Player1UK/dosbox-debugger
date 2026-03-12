@@ -36,11 +36,8 @@ float DBGUI_GetWindowWidth();
 // Window title styling helpers (cyan background, black text)
 bool DBGUI_BeginWindowWithStyledTitle(const char* title, int flags);
 void DBGUI_EndWindowWithStyledTitle();
-
-// Input handling
-int DBGUI_GetKey();
-void DBGUI_UngetKey(int key);
-bool DBGUI_HasKey();
+bool DBGUI_BeginWindow( const char* name, int flags );
+void DBGUI_EndWindow( );
 
 // Key constants (matching ncurses/PDCurses)
 constexpr int KEY_NONE            = -1;
@@ -109,6 +106,7 @@ enum WINDOW_ID :uint32_t {
 	WIN_REG,
 	WIN_DATA,
 	WIN_VAR,
+	WIN_CON,
 	WIN_OUT,
 	NUM_WINDOWS
 };
@@ -118,13 +116,15 @@ struct DBGBlock {
 	SDL_GPUDevice* gpu_device = nullptr;
 	uint32_t active_win    = 0;
 	uint32_t active_win_data = 0;    /* Current active data window */
+	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true };
 	uint32_t input_y       = 0;
 	uint32_t global_mask   = 0;
 	/* Window height values in rows */
 	int32_t rows_registers = 4;
-	int32_t rows_data[NUM_WIN_DATA] = { 50 };// , 50, 50, 50 };
-	int32_t rows_code      = 40;
+	int32_t rows_data[NUM_WIN_DATA] = { 48 };// , 50, 50, 50 };
+	int32_t rows_code      = 38;
 	int32_t rows_variables = 4;
+	int32_t rows_console   = 1;
 	int32_t rows_output    = 8;
 
 	// Scrolling state
