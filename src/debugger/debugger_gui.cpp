@@ -382,20 +382,6 @@ enum :uint8_t { COL_1, COL_2, COL_3, COL_4, COL_5, COL_6 };
 
 const ImVec4 highlight_color = ImVec4( 1.0f, 1.0f, 0.0f, 1.0f );
 
-/*#define REGNAMES \
-    REGNAME(eax)\
-    REGNAME(ebx)\
-    REGNAME(ecx)\
-    REGNAME(edx)
-
-#define REGNAME(val) reg_##val = oldregs.val;
-REGNAMES
-#undef REGNAME
-
-#define REGNAME(val) reg_##val,
-inline constexpr std::array<int, 4> reg_array = { REGNAMES };
-#undef X*/
-
 enum TYPE :uint8_t { tREG, tSEG, tIP, tMODE, tFLAG, tCYCLE, tIOPL, tCPL, tXTRA };
 struct ENTRY {
 	const TYPE type;
