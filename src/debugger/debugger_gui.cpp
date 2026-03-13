@@ -372,14 +372,11 @@ static void DrawData( void ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
-static struct {
-	uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
-	uint32_t esi = 0, edi = 0, ebp = 0, esp = 0, eip = 0;
-} oldregs = {};
-
+const uint8_t oEIP = 8;
+static uint32_t oldregs[oEIP + 1] = {};
+static Segment oldsegs[6] = {};
 static auto oldcpucpl = cpu.cpl;
 static auto oldflags = cpu_regs.flags;
-static Segment oldsegs[6] = {};
 
 enum :uint8_t { COL_1, COL_2, COL_3, COL_4, COL_5, COL_6 };
 
@@ -399,6 +396,23 @@ REGNAMES
 inline constexpr std::array<int, 4> reg_array = { REGNAMES };
 #undef X*/
 
+enum TYPE :uint8_t { tREG, tSEG, tIP, tMODE, tFLAG, tCYCLE, tIOPL, tCPL, tXTRA };
+struct ENTRY {
+	const TYPE type;
+	const char label[8] = "";
+	const uint32_t x = 0U;
+	const char separator = ' ';
+	const char delimeter = '\t';
+};
+const ENTRY layout[] = {
+	{ tREG, "EAX", REGI_AX }, { tREG, "ESI", REGI_SI }, { tSEG, "CS", cs }, { tSEG, "FS", fs }, { tIP, "EIP", 0U, ' ', 2 }, { tMODE, "", 0U, 0, '\n' },\
+	{ tREG, "EBX", REGI_BX }, { tREG, "EDI", REGI_DI }, { tSEG, "DS", ds }, { tSEG, "GS", gs }, { tFLAG, "C", FLAG_CF, 0, ' ' },\
+	{ tFLAG, "Z", FLAG_ZF, 0, ' ' }, { tFLAG, "S", FLAG_SF, 0, ' ' }, { tFLAG, "O", FLAG_OF, 0, ' ' }, { tFLAG, "A", FLAG_AF, 0, ' ' },\
+	{ tFLAG, "P", FLAG_PF, 0, ' ' }, { tFLAG, "D", FLAG_DF, 0, ' ' }, { tFLAG, "I", FLAG_IF, 0, ' ' }, { tFLAG, "T", FLAG_TF, 0, '\n' },\
+	{ tREG, "ECX", REGI_CX }, { tREG, "EBP", REGI_BP }, { tSEG, "ES", es }, { tSEG, "SS", ss }, { tCYCLE }, { tIOPL, "IOPL", FLAG_IOPL, 0, '\t' }, { tCPL, "CPL", 0U, 0, '\n' },\
+	{ tREG, "EDX", REGI_DX }, { tREG, "ESP", REGI_SP }, { tXTRA }
+};
+
 static void DrawRegisters( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
 		return;
@@ -417,340 +431,113 @@ static void DrawRegisters( void ) {
 	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
 		ImGuiCond_FirstUseEver );
 
-	static const float COLUMN[] = { window_width * 0.2f, window_width * 0.4f, window_width * 0.525f, window_width * 0.65f, window_width * 0.825f, window_width * 0.925f };
+	static const float TAB_POS[] = { 0.0f, window_width * 0.205f, window_width * 0.405f, window_width * 0.53f, window_width * 0.655f, window_width * 0.84f, window_width * 0.93f, window_width };
 
 	if( DBGUI_BeginWindowWithStyledTitle( "                                    Registers                                   ",
 		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
 
-		// Row 1: EAX, ESI, CS, FS, EIP, Mode
-		ImGui::Text( "EAX" );
-		ImGui::SameLine( );
-		if( reg_eax != oldregs.eax ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_eax >> 16 ) & 0xFFFF, reg_eax & 0xFFFF );
-		if( reg_eax != oldregs.eax ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_1] );
-		ImGui::Text( "ESI" );
-		ImGui::SameLine( );
-		if( reg_esi != oldregs.esi ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_esi >> 16 ) & 0xFFFF, reg_esi & 0xFFFF );
-		if( reg_esi != oldregs.esi ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_2] );
-		ImGui::Text( "CS" );
-		ImGui::SameLine( );
-		if( SegValue( cs ) != oldsegs[cs].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( cs ) );
-		if( SegValue( cs ) != oldsegs[cs].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_3] );
-		ImGui::Text( "FS" );
-		ImGui::SameLine( );
-		if( SegValue( fs ) != oldsegs[fs].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( fs ) );
-		if( SegValue( fs ) != oldsegs[fs].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_4] );
-		ImGui::Text( "EIP" );
-		ImGui::SameLine( );
-		if( reg_eip != oldregs.eip ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_eip >> 16 ) & 0xFFFF, reg_eip & 0xFFFF );
-		if( reg_eip != oldregs.eip ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_6] );
-		const char* mode_str = "Real";
-		if( cpu.pmode ) {
-			if( reg_flags & FLAG_VM ) {
-				mode_str = "VM86";
-			} else if( cpu.code.big ) {
-				mode_str = "Pr32";
-			} else {
-				mode_str = "Pr16";
+		Bitu changed_flags = reg_flags ^ oldflags;
+		for( ENTRY e : layout ) {
+			if( e.label[0] ) {
+				ImGui::Text( "%s", e.label );
+				if( e.separator ) {
+					ImGui::SameLine( 0.0f, 0.0f );
+					ImGui::Text( "%c", e.separator );
+				}
+				ImGui::SameLine( 0.0f, 0.0f );
+			}
+			switch( e.type ) {
+			case tREG:
+				if( cpu_regs.regs[e.x].dword[DW_INDEX] != oldregs[e.x] )
+					ImGui::TextColored( highlight_color, "%04X %04X", ( cpu_regs.regs[e.x].dword[DW_INDEX] >> 16 ) & 0xFFFF, cpu_regs.regs[e.x].dword[DW_INDEX] & 0xFFFF );
+				else
+					ImGui::Text( "%04X %04X", ( cpu_regs.regs[e.x].dword[DW_INDEX] >> 16 ) & 0xFFFF, cpu_regs.regs[e.x].dword[DW_INDEX] & 0xFFFF );
+				break;
+			case tSEG:
+				if( SegValue( static_cast<SegNames>( e.x ) ) != oldsegs[e.x].val )
+					ImGui::TextColored( highlight_color, "%04X", SegValue( static_cast<SegNames>( e.x ) ) );
+				else
+					ImGui::Text( "%04X", SegValue( static_cast<SegNames>( e.x ) ) );
+				break;
+			case tIP:
+				if( reg_eip != oldregs[oEIP] )
+					ImGui::TextColored( highlight_color, "%04X %04X", ( reg_eip >> 16 ) & 0xFFFF, reg_eip & 0xFFFF );
+				else
+					ImGui::Text( "%04X %04X", ( reg_eip >> 16 ) & 0xFFFF, reg_eip & 0xFFFF );
+				break;
+			case tMODE: {
+				const char* mode_str = "Real";
+				if( cpu.pmode ) {
+					if( reg_flags & FLAG_VM ) {
+						mode_str = "VM86";
+					} else if( cpu.code.big ) {
+						mode_str = "Pr32";
+					} else {
+						mode_str = "Pr16";
+					}
+				}
+				ImGui::Text( "%s", mode_str );
+			}
+				break;
+			case tFLAG:
+				if( changed_flags & e.x )
+					ImGui::TextColored( highlight_color, "%d", ( reg_flags & e.x ) ? 1 : 0 );
+				else
+					ImGui::Text( "%d", ( reg_flags & e.x ) ? 1 : 0 );
+				break;
+			case tCYCLE:
+				ImGui::Text( "%" PRIuPTR, cycle_count );
+				break;
+			case tIOPL:
+				if( changed_flags & FLAG_IOPL )
+					ImGui::TextColored( highlight_color, "%d", (int) ( GETFLAG( IOPL ) >> 12 ) );
+				else
+					ImGui::Text( "%d", (int) ( GETFLAG( IOPL ) >> 12 ) );
+				break;
+			case tCPL:
+				if( cpu.cpl != oldcpucpl )
+					ImGui::TextColored( highlight_color, "%d", (int) cpu.cpl );
+				else
+					ImGui::Text( "%d", (int) cpu.cpl );
+				break;
+			case tXTRA: // Selector info, if available
+				if( ( cpu.pmode ) && curSelectorName[0] ) {
+					char out1[200], out2[200];
+					GetDescriptorInfo( curSelectorName, out1, out2 );
+					ImGui::Text( "%s %s", out1, out2 );
+				}
+				break;
+			}
+			switch( e.delimeter ) {
+			case 0:
+				ImGui::SameLine( 0.0f, 0.0f );
+				break;
+			case ' ':
+				ImGui::SameLine( );
+				break;
+			case '\n':
+				break;
+			case '\t':
+			default:{
+				ImGui::SameLine( 0.0f, 0.0f );
+				uint8_t col = 0;
+				for( float xPos = ImGui::GetCursorPosX( ); col < sizeof( TAB_POS ) - 1; ++col )
+					if( xPos < TAB_POS[col] )
+						break;
+				if( e.delimeter != '\t' && static_cast<uint8_t>( col + ( e.delimeter - 1 ) ) < static_cast<uint8_t>( sizeof( TAB_POS ) - 1 ) )
+					col += e.delimeter - 1;
+				ImGui::SameLine( TAB_POS[col] );
+			}
+				break;
 			}
 		}
-		ImGui::Text( "%s", mode_str );
-
-		// Row 2: EBX, EDI, DS, GS, Flags
-		ImGui::Text( "EBX" );
-		ImGui::SameLine( );
-		if( reg_ebx != oldregs.ebx ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_ebx >> 16 ) & 0xFFFF, reg_ebx & 0xFFFF );
-		if( reg_ebx != oldregs.ebx ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_1], 0.0f );
-		ImGui::Text( "EDI" );
-		ImGui::SameLine( );
-		if( reg_edi != oldregs.edi ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_edi >> 16 ) & 0xFFFF, reg_edi & 0xFFFF );
-		if( reg_edi != oldregs.edi ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_2] );
-		ImGui::Text( "DS" );
-		ImGui::SameLine( );
-		if( SegValue( ds ) != oldsegs[ds].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( ds ) );
-		if( SegValue( ds ) != oldsegs[ds].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_3] );
-		ImGui::Text( "GS" );
-		ImGui::SameLine( );
-		if( SegValue( gs ) != oldsegs[gs].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( gs ) );
-		if( SegValue( gs ) != oldsegs[gs].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		Bitu changed_flags = reg_flags ^ oldflags;
-
-		ImGui::SameLine( COLUMN[COL_4] );
-		ImGui::Text( "C" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_CF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( CF ) ? 1 : 0 );
-		if( changed_flags & FLAG_CF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "Z" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_ZF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( ZF ) ? 1 : 0 );
-		if( changed_flags & FLAG_ZF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "S" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_SF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( SF ) ? 1 : 0 );
-		if( changed_flags & FLAG_SF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "O" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_OF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( OF ) ? 1 : 0 );
-		if( changed_flags & FLAG_OF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "A" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_AF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( AF ) ? 1 : 0 );
-		if( changed_flags & FLAG_AF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "P" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_PF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( PF ) ? 1 : 0 );
-		if( changed_flags & FLAG_PF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "D" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_DF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( DF ) ? 1 : 0 );
-		if( changed_flags & FLAG_DF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "I" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_IF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( IF ) ? 1 : 0 );
-		if( changed_flags & FLAG_IF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( );
-		ImGui::Text( "T" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_TF ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", GETFLAG( TF ) ? 1 : 0 );
-		if( changed_flags & FLAG_TF ) {
-			ImGui::PopStyleColor( );
-		}
-
-		// Row 3: ECX, EBP, ES, SS, Cycles, IOPL, CPL
-		ImGui::Text( "ECX" );
-		ImGui::SameLine( );
-		if( reg_ecx != oldregs.ecx ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_ecx >> 16 ) & 0xFFFF, reg_ecx & 0xFFFF );
-		if( reg_ecx != oldregs.ecx ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_1] );
-		ImGui::Text( "EBP" );
-		ImGui::SameLine( );
-		if( reg_ebp != oldregs.ebp ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_ebp >> 16 ) & 0xFFFF, reg_ebp & 0xFFFF );
-		if( reg_ebp != oldregs.ebp ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_2] );
-		ImGui::Text( "ES" );
-		ImGui::SameLine( );
-		if( SegValue( es ) != oldsegs[es].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( es ) );
-		if( SegValue( es ) != oldsegs[es].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_3] );
-		ImGui::Text( "SS" );
-		ImGui::SameLine( );
-		if( SegValue( ss ) != oldsegs[ss].val ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X", SegValue( ss ) );
-		if( SegValue( ss ) != oldsegs[ss].val ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_4] );
-		ImGui::Text( "%" PRIuPTR, cycle_count );
-
-		ImGui::SameLine( COLUMN[COL_5] );
-		ImGui::Text( "IOPL" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( changed_flags & FLAG_IOPL ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", (int) ( GETFLAG( IOPL ) >> 12 ) );
-		if( changed_flags & FLAG_IOPL ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_6] );
-		ImGui::Text( "CPL" );
-		ImGui::SameLine( 0.0f, 0.0f );
-		if( cpu.cpl != oldcpucpl ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%d", (int) cpu.cpl );
-		if( cpu.cpl != oldcpucpl ) {
-			ImGui::PopStyleColor( );
-		}
-
-		// Row 4: EDX, ESP
-		ImGui::Text( "EDX" );
-		ImGui::SameLine( );
-		if( reg_edx != oldregs.edx ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_edx >> 16 ) & 0xFFFF, reg_edx & 0xFFFF );
-		if( reg_edx != oldregs.edx ) {
-			ImGui::PopStyleColor( );
-		}
-
-		ImGui::SameLine( COLUMN[COL_1] );
-		ImGui::Text( "ESP" );
-		ImGui::SameLine( );
-		if( reg_esp != oldregs.esp ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, highlight_color );
-		}
-		ImGui::Text( "%04X %04X", ( reg_esp >> 16 ) & 0xFFFF, reg_esp & 0xFFFF );
-		if( reg_esp != oldregs.esp ) {
-			ImGui::PopStyleColor( );
-		}
-
-		// Selector info, if available
-		if( ( cpu.pmode ) && curSelectorName[0] ) {
-			char out1[200], out2[200];
-			GetDescriptorInfo( curSelectorName, out1, out2 );
-			ImGui::SameLine( COLUMN[COL_2] );
-			ImGui::Text( "%s %s", out1, out2 );
-		}
-
 		if( dbg.update_win[WIN_REG] ) {
 			dbg.update_win[WIN_REG] = false;
-			oldregs.eax = reg_eax;
-			oldregs.ebx = reg_ebx;
-			oldregs.ecx = reg_ecx;
-			oldregs.edx = reg_edx;
-			oldregs.esi = reg_esi;
-			oldregs.edi = reg_edi;
-			oldregs.ebp = reg_ebp;
-			oldregs.esp = reg_esp;
-			oldregs.eip = reg_eip;
-			oldsegs[cs].val = SegValue( cs );
-			oldsegs[ds].val = SegValue( ds );
-			oldsegs[es].val = SegValue( es );
-			oldsegs[fs].val = SegValue( fs );
-			oldsegs[gs].val = SegValue( gs );
-			oldsegs[ss].val = SegValue( ss );
+			for( uint8_t i = 0; i < oEIP; ++i )
+				oldregs[i] = cpu_regs.regs[i].dword[DW_INDEX];
+			oldregs[oEIP] = reg_eip;
+			for( uint8_t i = 0; i < 6; ++i )
+				oldsegs[i].val = SegValue( static_cast<SegNames>( i ) );
 			oldcpucpl = cpu.cpl;
 			oldflags = reg_flags;
 		}
@@ -1116,9 +903,9 @@ static bool BeginWindow( const char* name, ImGuiWindowFlags flags ) {
 	return ImGui::Begin( name, nullptr, flags );
 }
 
-// Title bar colors - cyan background with black text (classic DOS style)
-static const ImVec4 TitleBgColor = ImVec4( 0.0f, 0.667f, 0.667f, 1.0f ); // Cyan
-static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );     // Black
+// Title bar colors - purple background with black text
+static const ImVec4 TitleBgColor = ImVec4( 0.42f, 0.41f, 0.84f, 0.8f ); // Purple
+static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );  // Black
 
 // Helper to begin a window with cyan title bar and black title text
 static bool BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flags ) {

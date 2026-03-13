@@ -122,7 +122,7 @@ struct DBGBlock {
 	/* Window height values in rows */
 	int32_t rows_registers = 4;
 	int32_t rows_data[NUM_WIN_DATA] = { 48 };// , 50, 50, 50 };
-	int32_t rows_code      = 38;
+	int32_t rows_code      = 36;
 	int32_t rows_variables = 4;
 	int32_t rows_console   = 1;
 	int32_t rows_output    = 8;
