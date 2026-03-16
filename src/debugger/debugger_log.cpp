@@ -663,7 +663,7 @@ static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream&
 	PhysPt start = GetAddress( segValue, eipValue );
 	char dline[200];
 	Bitu size;
-	size = DasmI386( dline, start, reg_eip, cpu.code.big );
+	size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend && ( cpuLogType > 0 ) ) {
 		res = AnalyzeInstruction( dline, false );
@@ -894,7 +894,7 @@ void DEBUG_HeavyLogInstruction( ) {
 
 	PhysPt start = GetAddress( SegValue( cs ), reg_eip );
 	char dline[200];
-	DasmI386( dline, start, reg_eip, cpu.code.big );
+	DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend ) {
 		res = AnalyzeInstruction( dline, false );

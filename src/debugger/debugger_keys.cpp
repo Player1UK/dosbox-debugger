@@ -37,16 +37,12 @@ bool skipFirstInstruction = false;
 static std::list<std::string> histBuff = {};
 static auto histBuffPos = histBuff.end( );
 
-const uint32_t MAXSIZE_EIPARRAY = 150U;
-uint32_t indexEIParray = 0;
-uint32_t EIParray[MAXSIZE_EIPARRAY];
-
 static bool StepOver( ) {
 	exitLoop = false;
 	PhysPt start = GetAddress( SegValue( cs ), reg_eip );
 	char dline[200];
 	Bitu size;
-	size = DasmI386( dline, start, reg_eip, cpu.code.big );
+	size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
 
 	if( strstr( dline, "call" ) || strstr( dline, "int" ) ||
 		strstr( dline, "loop" ) || strstr( dline, "rep" ) ) {
@@ -58,46 +54,6 @@ static bool StepOver( ) {
 		return true;
 	}
 	return false;
-}
-
-static void PopulateEIParray( ) {
-	PhysPt start = GetAddress( codeViewData.useCS, 0 );
-	Bitu size = 0;
-	indexEIParray = 0;
-	EIParray[MAXSIZE_EIPARRAY - 1] = -1;
-	for( uint32_t newEIP = 0; newEIP < codeViewData.useEIP;
-		newEIP += size, start += size ) {
-		EIParray[indexEIParray] = newEIP;
-		if( ++indexEIParray > MAXSIZE_EIPARRAY ) {
-			indexEIParray = 0U;
-		}
-		char dline[200];
-		size = DasmI386( dline, start, newEIP, cpu.code.big );
-	}
-}
-
-static bool UseExistingEIP( uint32_t gap ) {
-	if( indexEIParray >= MAXSIZE_EIPARRAY ) {
-		return false;
-	}
-	auto indexEIParray_original = indexEIParray;
-	if( indexEIParray >= gap ) {
-		indexEIParray -= gap;
-	} else if( EIParray[MAXSIZE_EIPARRAY - 1] < EIParray[0] ) {
-		indexEIParray = MAXSIZE_EIPARRAY - ( gap - indexEIParray );
-	} else {
-		indexEIParray = 0U;
-	}
-	if( indexEIParray != indexEIParray_original && EIParray[indexEIParray] < codeViewData.useEIP ) {
-		codeViewData.useEIP = EIParray[indexEIParray];
-		return true;
-	}
-	return false;
-}
-
-static void ClearInputLine( void ) {
-	codeViewData.inputStr[0] = 0;
-	codeViewData.inputPos = 0;
 }
 
 static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
@@ -191,130 +147,6 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		}
 		dbg.update_win[WIN_DATA] = true;
 		break;
-	case SDLK_PAGEUP:
-		if( key.mod & SDL_KMOD_SHIFT ) {
-			if( dataOfs[dbg.active_win_data] >
-				static_cast<uint32_t>(
-					dbg.rows_data[dbg.active_win_data] * 16 ) ) {
-				dataOfs[dbg.active_win_data] -=
-					dbg.rows_data[dbg.active_win_data] *
-					16;
-			} else {
-				dataOfs[dbg.active_win_data] = 0;
-			}
-		} else if( key.mod & SDL_KMOD_CTRL ) {
-			if( dbg.rows_output > 2 ) {
-				--dbg.rows_output;
-			}
-		} else {
-			if( dataOfs[dbg.active_win_data] > 16 ) {
-				dataOfs[dbg.active_win_data] -= 16;
-			} else {
-				dataOfs[dbg.active_win_data] = 0;
-			}
-		}
-		dbg.update_win[WIN_DATA] = true;
-		break;
-	case SDLK_PAGEDOWN:
-		if( key.mod & SDL_KMOD_SHIFT ) {
-			dataOfs[dbg.active_win_data] +=
-				dbg.rows_data[dbg.active_win_data] * 16;
-		} else if( key.mod & SDL_KMOD_CTRL ) {
-			if( dbg.rows_data[0U] > 1 ) {
-				++dbg.rows_output;
-			}
-		} else
-			dataOfs[dbg.active_win_data] += 16;
-		dbg.update_win[WIN_DATA] = true;
-		break;
-	case SDLK_UP:
-		if( key.mod & SDL_KMOD_SHIFT ) {
-			if( codeViewData.cursorPos == 0 ) {
-				if( UseExistingEIP( dbg.rows_code ) ) {
-					break;
-				}
-				PopulateEIParray( );
-				UseExistingEIP( dbg.rows_code );
-			} else {
-				codeViewData.cursorPos = 0;
-			}
-		} else if( key.mod & SDL_KMOD_CTRL ) {
-			if( dbg.rows_output > 2 ) {
-				--dbg.rows_output;
-				++dbg.rows_code;
-			}
-		} else {
-			if( codeViewData.cursorPos > 0 ) {
-				codeViewData.cursorPos--;
-			} else if( codeViewData.useEIP ) {
-				if( UseExistingEIP( 1U ) ) {
-					break;
-				}
-				PopulateEIParray( );
-				UseExistingEIP( 1U );
-			}
-		}
-		dbg.update_win[WIN_CODE] = true;
-		break;
-	case SDLK_DOWN:
-		if( key.mod & SDL_KMOD_SHIFT ) {
-			if( codeViewData.cursorPos < dbg.rows_code - 1 ) {
-				codeViewData.cursorPos = dbg.rows_code - 1;
-			} else {
-				codeViewData.useEIP = codeViewData.useEIPlast;
-			}
-			indexEIParray = MAXSIZE_EIPARRAY;
-		} else if( key.mod & SDL_KMOD_CTRL ) {
-			if( dbg.rows_code > 1 ) {
-				--dbg.rows_code;
-				++dbg.rows_output;
-			}
-		} else {
-			if( codeViewData.cursorPos < dbg.rows_code - 1 ) {
-				codeViewData.cursorPos++;
-			} else {
-				codeViewData.useEIP += codeViewData.firstInstSize;
-			}
-			indexEIParray = MAXSIZE_EIPARRAY;
-		}
-		dbg.update_win[WIN_CODE] = true;
-		break;
-	case SDLK_TAB:
-		if( key.mod & SDL_KMOD_SHIFT ) {
-			if( dbg.active_win_data-- == 0U ) {
-				dbg.active_win_data = NUM_WIN_DATA - 1;
-			}
-		} else {
-			if( ++dbg.active_win_data >= NUM_WIN_DATA ) {
-				dbg.active_win_data = 0U;
-			}
-		}
-		break;
-	case SDLK_HOME: // Home: scroll log page up
-		if( key.mod & SDL_KMOD_SHIFT )
-			DEBUG_RefreshPage( -dbg.rows_output + 1 );
-		else
-			DEBUG_RefreshPage( -1 );
-		break;
-	case SDLK_END: // End: scroll log page down
-		if( key.mod & SDL_KMOD_SHIFT )
-			DEBUG_RefreshPage( dbg.rows_output - 1 );
-		else
-			DEBUG_RefreshPage( 1 );
-		break;
-	case SDLK_INSERT: // Insert: toggle insert/overwrite
-		codeViewData.ovrMode = !codeViewData.ovrMode;
-		break;
-		/*case SDLK_LEFT: // move to the left in command line
-			if (codeViewData.inputPos > 0) {
-				codeViewData.inputPos--;
-			}
-			break;
-		case SDLK_RIGHT: // move to the right in command line
-			if (codeViewData.inputStr[codeViewData.inputPos]) {
-				codeViewData.inputPos++;
-			}
-			break;*/
 	case SDLK_F6: // previous command (f1-f4 generate rubbish at my place)
 	case SDLK_F3: // previous command
 		if( histBuffPos == histBuff.begin( ) ) {
@@ -326,7 +158,6 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 				codeViewData.inputStr );
 		}
 		safe_strcpy( codeViewData.inputStr, ( --histBuffPos )->c_str( ) );
-		codeViewData.inputPos = safe_strlen( codeViewData.inputStr );
 		break;
 	case SDLK_F7: // next command (f1-f4 generate rubbish at my place)
 	case SDLK_F4: // next command
@@ -341,7 +172,6 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			safe_strcpy( codeViewData.inputStr,
 				codeViewData.suspInputStr );
 		}
-		codeViewData.inputPos = safe_strlen( codeViewData.inputStr );
 		break;
 	case SDLK_F5: // Run Program
 		debugging = false;
@@ -394,34 +224,9 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 				histBuff.pop_front( );
 			}
 			histBuffPos = histBuff.end( );
-			ClearInputLine( );
-		} else {
-			codeViewData.inputPos = safe_strlen(
-				codeViewData.inputStr );
+			//ClearInputLine( );
 		}
 		break;
-		/*case SDLK_BACKSPACE: // backspace
-		case 0x7f: // backspace in some terminal emulators (linux)
-		case 0x08: // delete
-			if (codeViewData.inputPos == 0) {
-				break;
-			}
-			codeViewData.inputPos--;
-			[[fallthrough]];
-		case SDLK_DELETE: // delete character
-			if ((codeViewData.inputPos < 0) ||
-				(codeViewData.inputPos >= MAXCMDLEN)) {
-				break;
-			}
-			if (codeViewData.inputStr[codeViewData.inputPos] != 0) {
-				codeViewData.inputStr[MAXCMDLEN] = '\0';
-				for (char* p =
-								&codeViewData.inputStr[codeViewData.inputPos];
-						(*p = *(p + 1));
-						p++) {
-				}
-			}
-			break;*/
 	default:
 		break;
 	}

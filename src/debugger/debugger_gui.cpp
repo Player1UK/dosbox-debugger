@@ -9,6 +9,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
+#include <imgui_internal.h>
 
 #include "cbreakpoint.h"
 #include "cpu/cpu.h"
@@ -18,6 +19,8 @@
 
 #include "IBM_VGA_8x16.h"
 
+extern void DasmRecursiveDisassemble( char *, const uint32_t, const uint32_t, const bool, const bool );
+
 extern DBGBlock dbg;
 extern bool debugging;
 
@@ -25,6 +28,8 @@ extern FILE* debuglog;
 extern std::vector<CDebugVar*> varList;
 
 SCodeViewData codeViewData = {};
+
+char codeBuffer[24 * 4096 * 128];
 
 // Scroll state for Output window (lines from bottom, 0 = at bottom)
 static int output_scroll_offset = 0;
@@ -102,7 +107,6 @@ void SetCodeWinStart( ) {
 		codeViewData.useCS = SegValue( cs );
 		codeViewData.useEIP = codeViewData.goodEIP = reg_eip;
 	}
-	codeViewData.cursorPos = -1; // Recalc Cursor position
 	dbg.update_win[WIN_CODE] = true;
 }
 
@@ -114,8 +118,46 @@ extern char* AnalyzeInstruction( char*, bool );
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern bool GetDescriptorInfo( char*, char*, char* );
 
+/*const uint32_t MAXSIZE_EIPARRAY = 150U;
+uint32_t indexEIParray = 0;
+uint32_t EIParray[MAXSIZE_EIPARRAY];
+
+static void PopulateEIParray( ) {
+	PhysPt start = GetAddress( codeViewData.useCS, 0 );
+	Bitu size = 0;
+	indexEIParray = 0;
+	EIParray[MAXSIZE_EIPARRAY - 1] = -1;
+	for( uint32_t newEIP = 0; newEIP < codeViewData.useEIP;
+		newEIP += size, start += size ) {
+		EIParray[indexEIParray] = newEIP;
+		if( ++indexEIParray > MAXSIZE_EIPARRAY ) {
+			indexEIParray = 0U;
+		}
+		char dline[200];
+		size = DasmI386( dline, start, newEIP, cpu.code.big );
+	}
+}
+
+static bool UseExistingEIP( uint32_t gap ) {
+	if( indexEIParray >= MAXSIZE_EIPARRAY ) {
+		return false;
+	}
+	auto indexEIParray_original = indexEIParray;
+	if( indexEIParray >= gap ) {
+		indexEIParray -= gap;
+	} else if( EIParray[MAXSIZE_EIPARRAY - 1] < EIParray[0] ) {
+		indexEIParray = MAXSIZE_EIPARRAY - ( gap - indexEIParray );
+	} else {
+		indexEIParray = 0U;
+	}
+	if( indexEIParray != indexEIParray_original && EIParray[indexEIParray] < codeViewData.useEIP ) {
+		codeViewData.useEIP = EIParray[indexEIParray];
+		return true;
+	}
+	return false;
+}*/
+
 const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
-const ImVec4 grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
 const ImVec4 red_bg_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
 
 void DrawCode( void ) {
@@ -137,73 +179,90 @@ void DrawCode( void ) {
 	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
 		ImGuiCond_FirstUseEver );
 
-	if( DBGUI_BeginWindowWithStyledTitle( "                                      Code               [CTRL]/[SHIFT] Up/Down ",
-		ImGuiWindowFlags_NoCollapse ) ) {
+	if( dbg.update_win[WIN_CODE] ) {
+		dbg.update_win[WIN_CODE] = false;
+		auto startOffset = GetAddress( codeViewData.useCS, codeViewData.useEIP );
+		DasmRecursiveDisassemble( codeBuffer, startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
+	}
+
+	if( DBGUI_BeginWindowWithStyledTitle( "Code",
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
 		// Handle mouse wheel scrolling when hovering over this window
+
+		//ImGui::TextUnformatted( codeBuffer );
+		static uint32_t selectedIndex = 0;
+		uint32_t i = 0;
+		for( auto line = codeBuffer; *line; ++line, ++i ) {
+			// Make line selectable
+			bool isSelected = ( selectedIndex == i );
+			if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+				selectedIndex = i;
+				char *endptr;
+				codeViewData.cursorSeg = strtol( line, &endptr, 16 );
+				if( *endptr == ':' )
+					++endptr;
+				codeViewData.cursorOfs = strtol( endptr, &endptr, 16 );
+			}
+			if( isSelected && ImGui::IsItemFocused( ) ) {
+				selectedIndex = i;
+			}
+			while( *line ) ++line;
+		}
+	}
+	if( false) {
 		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
 			float wheel = ImGui::GetIO( ).MouseWheel;
 			if( wheel ) {
 				if( wheel > 0 ) { // Scroll up - move cursor up or scroll code
-					if( codeViewData.cursorPos > 0 ) {
-						codeViewData.cursorPos--;
-					} else {
-						codeViewData.useEIP -= 1;
-					}
+					//--codeViewData.cursorPos;
 				} else { // Scroll down - move cursor down or scroll code
-					if( codeViewData.cursorPos < dbg.rows_code - 1 ) {
-						codeViewData.cursorPos++;
-					} else {
+					//if( codeViewData.cursorPos == dbg.rows_code ) {
 						codeViewData.useEIP += codeViewData.firstInstSize;
-					}
+					//}
+					//++codeViewData.cursorPos;
 				}
-				dbg.update_win[WIN_CODE] = true;
+				//dbg.update_win[WIN_CODE] = true;
 			}
 		}
-		bool saveSel;
+		/*if( codeViewData.cursorPos < 0 ) {
+			if( !UseExistingEIP( -codeViewData.cursorPos ) ) {
+				PopulateEIParray( );
+				UseExistingEIP( -codeViewData.cursorPos );
+			}
+			codeViewData.cursorPos = 0;
+		} else if( codeViewData.cursorPos >= dbg.rows_code ) {
+			indexEIParray = MAXSIZE_EIPARRAY;
+			codeViewData.cursorPos = dbg.rows_code - 1;
+		}*/
 		uint32_t disEIP = codeViewData.useEIP;
 		PhysPt start = GetAddress( codeViewData.useCS, codeViewData.useEIP );
-		char dline[200];
+		char dline[2048];
 		Bitu size;
 		Bitu c;
 
+		static int selectedIndex = 0;
+
 		for( int i = 0, iMid = dbg.rows_code * 0.95; i < dbg.rows_code; ++i ) {
-			saveSel = false;
-			bool is_current_ip = ( codeViewData.useCS == SegValue( cs ) ) &&
-				( disEIP == reg_eip );
-			bool is_cursor = ( i == codeViewData.cursorPos );
-			bool is_breakpoint = CBreakpoint::IsBreakpoint(
-				codeViewData.useCS, disEIP );
+			bool is_current_ip = ( codeViewData.useCS == SegValue( cs ) ) && ( disEIP == reg_eip );
+			bool is_breakpoint = CBreakpoint::IsBreakpoint( codeViewData.useCS, disEIP );
 
-			if( is_current_ip ) {
-				if( codeViewData.cursorPos == -1 ) {
-					codeViewData.cursorPos = i;
-				}
-				if( is_cursor ) {
-					codeViewData.cursorSeg = SegValue( cs );
-					codeViewData.cursorOfs = disEIP;
-				}
-				saveSel = is_cursor;
-			} else if( is_cursor ) {
-				codeViewData.cursorSeg = codeViewData.useCS;
-				codeViewData.cursorOfs = disEIP;
-				saveSel = true;
-			}
 			// Build the line
-			char line[256];
+			char line[2048];
 			char* ptr = line;
-			ptr += sprintf( ptr, "%04X:%04X  ", codeViewData.useCS, disEIP );
+			ptr += sprintf( ptr, "%04X:%04X %c", codeViewData.useCS, disEIP, ( is_breakpoint ? '*' : ' ' ) );
 
-			Bitu drawsize = size =
-				DasmI386( dline, start, disEIP, cpu.code.big );
+			Bitu drawsize = size = DasmI386( dline, start, disEIP, cpu.code.big, cpu.pmode );
+			if( disEIP < codeViewData.goodEIP &&
+				disEIP + size > codeViewData.goodEIP ) {
+				size = drawsize = codeViewData.goodEIP - disEIP;
+			}
 			bool toolarge = false;
 
-			if( drawsize > check_cast<uint32_t>( dbg.rows_code - 1 ) ) {
+			if( drawsize > check_cast<uint32_t>( dbg.rows_code ) ) {
 				toolarge = true;
-				drawsize = dbg.rows_code - 2;
+				drawsize = dbg.rows_code - 1;
 			}
-
-			// Hex bytes
-			for( c = 0; c < drawsize; c++ ) {
+			for( c = 0; c < drawsize; c++ ) { // Hex bytes
 				uint8_t value;
 				if( mem_readb_checked( start + c, &value ) ) {
 					value = 0;
@@ -212,23 +271,20 @@ void DrawCode( void ) {
 			}
 			if( toolarge ) {
 				ptr += sprintf( ptr, ".." );
-				drawsize++;
+				++drawsize;
 			}
-
 			// Pad hex to fixed width
 			int hex_len = drawsize * 2 + ( toolarge ? 2 : 0 );
 			while( hex_len < 20 ) {
 				*ptr++ = ' ';
-				hex_len++;
+				++hex_len;
 			}
-
 			// Disassembly
 			char empty_res[] = { 0 };
 			char* res = empty_res;
 			if( showExtend ) {
-				res = AnalyzeInstruction( dline, saveSel );
+				res = AnalyzeInstruction( dline, false );
 			}
-
 			// Pad disassembly
 			size_t dline_len = safe_strlen( dline );
 			if( dline_len > 28 ) {
@@ -236,10 +292,9 @@ void DrawCode( void ) {
 			}
 			memcpy( ptr, dline, dline_len );
 			ptr += dline_len;
-			for( size_t pad = dline_len; pad < 28; pad++ ) {
+			for( size_t pad = dline_len; pad < 28; ++pad ) {
 				*ptr++ = ' ';
 			}
-
 			// Result
 			if( res && res[0] ) {
 				size_t res_len = strlen( res );
@@ -256,22 +311,20 @@ void DrawCode( void ) {
 				ImGui::PushStyleColor( ImGuiCol_Text, green_color );
 			} else if( is_breakpoint ) {
 				ImGui::PushStyleColor( ImGuiCol_Text, red_bg_color );
-			} else if( is_cursor ) {
-				ImGui::PushStyleColor( ImGuiCol_Text, grey_color );
 			}
-
 			// Make line selectable
-			bool selected = is_cursor;
-			if( ImGui::Selectable( line, selected ) ) {
-				codeViewData.cursorPos = i;
+			bool isSelected = ( selectedIndex == i );
+			if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+				selectedIndex = i;
 				codeViewData.cursorSeg = codeViewData.useCS;
 				codeViewData.cursorOfs = disEIP;
 			}
-
-			if( is_current_ip || is_breakpoint || is_cursor ) {
+			if( isSelected && ImGui::IsItemFocused( ) ) {
+				selectedIndex = i;
+			}
+			if( is_current_ip || is_breakpoint ) {
 				ImGui::PopStyleColor( );
 			}
-
 			start += size;
 			disEIP += size;
 
@@ -281,11 +334,8 @@ void DrawCode( void ) {
 			if( i == iMid ) {
 				codeViewData.useEIPmid = disEIP;
 			}
-			codeViewData.useEIPlast = disEIP;
 		}
-		if( dbg.update_win[WIN_CODE] ) {
-			dbg.update_win[WIN_CODE] = false;
-		}
+		codeViewData.useEIPlast = disEIP;
 	}
 	DBGUI_EndWindowWithStyledTitle( );
 }
@@ -308,8 +358,8 @@ static void DrawData( void ) {
 	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
 		ImGuiCond_FirstUseEver );
 
-	if( DBGUI_BeginWindowWithStyledTitle( "                                      Data          [CTRL]/[SHIFT] Page Up/Down ",
-		ImGuiWindowFlags_NoCollapse ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( "Data",
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
 		// Handle mouse wheel scrolling when hovering over this window
 		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
 			float wheel = ImGui::GetIO( ).MouseWheel;

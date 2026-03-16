@@ -13,6 +13,7 @@
     "sdl3",
     "sdl3-image",
     "speexdsp",
-    "zlib-ng"
+    "zlib-ng",
+    "zydis"
   ]
 }

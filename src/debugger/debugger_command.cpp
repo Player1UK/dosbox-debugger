@@ -630,7 +630,6 @@ bool ParseCommand( char* str ) {
 		codeViewData.useCS = codeSeg;
 		codeViewData.useEIP = codeOfs;
 		codeViewData.goodEIP = 0;
-		codeViewData.cursorPos = 0;
 		return true;
 	}
 
@@ -765,7 +764,6 @@ bool ParseCommand( char* str ) {
 				intNr );
 			codeViewData.useCS = mem_readw( intNr * 4 + 2 );
 			codeViewData.useEIP = codeViewData.goodEIP = mem_readw( intNr * 4 );
-			codeViewData.cursorPos = 0;
 			return true;
 		}
 	}
