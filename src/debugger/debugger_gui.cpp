@@ -193,18 +193,22 @@ void DrawCode( void ) {
 		static uint32_t selectedIndex = 0;
 		uint32_t i = 0;
 		for( auto line = codeBuffer; *line; ++line, ++i ) {
-			// Make line selectable
-			bool isSelected = ( selectedIndex == i );
-			if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				selectedIndex = i;
-				char *endptr;
-				codeViewData.cursorSeg = strtol( line, &endptr, 16 );
-				if( *endptr == ':' )
-					++endptr;
-				codeViewData.cursorOfs = strtol( endptr, &endptr, 16 );
-			}
-			if( isSelected && ImGui::IsItemFocused( ) ) {
-				selectedIndex = i;
+			if( *line == '\n' ) {
+				ImGui::Spacing( );
+			} else {
+				// Make line selectable
+				bool isSelected = ( selectedIndex == i );
+				if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+					selectedIndex = i;
+					char *endptr;
+					codeViewData.cursorSeg = strtol( line, &endptr, 16 );
+					if( *endptr == ':' )
+						++endptr;
+					codeViewData.cursorOfs = strtol( endptr, &endptr, 16 );
+				}
+				if( isSelected && ImGui::IsItemFocused( ) ) {
+					selectedIndex = i;
+				}
 			}
 			while( *line ) ++line;
 		}

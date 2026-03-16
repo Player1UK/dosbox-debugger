@@ -96,7 +96,6 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                     *pBuffer++ = ' ';
                 ZydisFormatterFormatInstruction( &formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT, pBuffer, 256, address.offset, ZYAN_NULL );
                 while( *pBuffer ) ++pBuffer;
-                ++pBuffer;
 
                 address.offset += instruction.length;
                 base_offset += instruction.length;
@@ -146,6 +145,9 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                     break;
                 }
                 if( mnemonicMask & MM_Branch ) {
+                    *pBuffer = '\n';
+                    *++pBuffer = 0;
+
                     ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
                     for( uint8_t i = 0; i < instruction.operand_count; ++i ) {
                         auto& op = operands[i];
@@ -198,11 +200,19 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                         --pBuffer;
                         while( pBuffer < pBufferEnd )
                             *pBuffer++ = ' ';
-                        pBuffer += sprintf( pBuffer, "; DOS - Exit" );
+                        pBuffer += sprintf( pBuffer, "; DOS - Exit\n" );
                         ++pBuffer;
+                        if( !toReturn.empty( ) ) {
+                            toReturn.pop_back( );
+                        }
+                        break;
                     }
+                    *pBuffer = '\n';
+                    *++pBuffer = 0;
                 }
                 if( mnemonicMask & MM_RET ) {
+                    *pBuffer = '\n';
+                    *++pBuffer = 0;
                     if( !toReturn.empty( ) ) {
                         address = toReturn.back( );
                         toReturn.pop_back( );
@@ -221,6 +231,11 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
     for( const auto &line : orderedCode ) {
         strcpy( pBuffer, line.second );
         while( *pBuffer ) ++pBuffer;
+        if( pBuffer[-1] == '\n' ) {
+            pBuffer[-1] = 0;
+            *pBuffer = '\n';
+            *++pBuffer = 0;
+        }
         ++pBuffer;
         delete[] line.second;
     }
