@@ -72,6 +72,7 @@ const uint32_t NUM_WIN_DATA = 1;
 
 enum WINDOW_ID :uint32_t {
 	WIN_CODE = 0,
+	WIN_SEG,
 	WIN_REG,
 	WIN_DATA,
 	WIN_VAR,
@@ -86,18 +87,11 @@ struct DBGBlock {
 	uint32_t active_win = 0;
 	uint32_t active_win_data = 0;    /* Current active data window */
 	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true };
+	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false };
 	uint32_t input_y = 0;
 	uint32_t global_mask = 0;
 	/* Window height values in rows */
-	int32_t rows_registers = 4;
-	int32_t rows_data[NUM_WIN_DATA] = { 32 };// , 50, 50, 50 };
-	int32_t rows_code = 52;
-	int32_t rows_variables = 4;
-	int32_t rows_console = 1;
-	int32_t rows_output = 8;
-
-	// Scrolling state
-	float output_scroll_y = 0.0f;
+	uint16_t rows[NUM_WINDOWS] = { 52, 1U, 4U, 32U, 4U, 1U, 8U };
 
 	// Window dimensions (in characters)
 	int32_t window_cols = DBGUI::DefaultWindowCols;
@@ -124,10 +118,7 @@ extern DBGBlock dbg;
 struct SCodeViewData {
 	uint16_t firstInstSize = 0;
 	uint16_t useCS = 0;
-	uint32_t useEIPlast = 0;
-	uint32_t useEIPmid = 0;
 	uint32_t useEIP = 0;
-	uint32_t goodEIP = 0;
 	uint16_t cursorSeg = 0;
 	uint32_t cursorOfs = 0;
 

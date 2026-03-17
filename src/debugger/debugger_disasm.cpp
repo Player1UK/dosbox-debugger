@@ -5,9 +5,28 @@
 #include <vector>
 #include <unordered_set>
 #include <set>
-//#include <string.h>
 
 static int opsize = 16;
+static std::vector<uint16_t> code_segments;
+static std::unordered_set<uint32_t> visited;
+
+uint16_t NumCodeSegments( ) {
+    return code_segments.size( );
+}
+
+uint16_t CodeSegment( uint16_t index ) {
+    if( index < code_segments.size( ) )
+        return code_segments[index];
+    return static_cast<uint16_t>( -1 );
+}
+
+bool AddressVisited( uint32_t address ) {
+    return visited.count( address );
+}
+
+bool AddressVisited( uint16_t segment, uint32_t offset ) {
+    return AddressVisited( offset + ( segment << 4 ) );
+}
 
 Bitu DasmI386( char *buffer, const PhysPt pc, const Bitu ip, const bool f32bit, const bool fProtected ) {
 	if( f32bit ) opsize = 32;
@@ -55,14 +74,15 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
         ( f32bit ? ZYDIS_STACK_WIDTH_32 : ZYDIS_STACK_WIDTH_16 ) );
     ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL );
     std::set<std::pair<uint32_t, char *>> orderedCode;
+    std::set<uint16_t> orderedSegments;
 
     auto binary = MemBase;
     const size_t binarySize = MEM_TotalPages( ) * 4096; // DosPageSize
 
     uint32_t segment0 = startOffset - ip;
-    std::unordered_set<uint32_t> added, visited;
+    std::unordered_set<uint32_t> added;
     std::vector<ZydisDecodedOperandPtr> toVisit{ { static_cast<ZyanU16>( ( segment0 ) >> 4 ), ip } };
-    std::vector<ZydisDecodedOperandPtr> toReturn;
+    visited.clear( );
 
     uint8_t ah = 0U;
 
@@ -70,18 +90,17 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
         ZydisDecodedOperandPtr address = toVisit.back( );
         toVisit.pop_back( );
 
+        if( !orderedSegments.count( address.segment ) )
+            orderedSegments.insert( address.segment );
+
         auto base_offset = address.offset + ( address.segment << 4 );
         while( base_offset < binarySize ) {
-            if( visited.count( base_offset ) ) {
-                if( !toReturn.empty( ) ) {
-                    address = toReturn.back( );
-                    toReturn.pop_back( );
-                    base_offset = address.offset + ( address.segment << 4 );
-                    continue;
-                }
+            if( visited.count( base_offset ) )
                 break;
-            }
             visited.insert( base_offset );
+
+            if( binary[base_offset] == 0 && binary[base_offset + 1] == 0 ) // 00 00
+                break;
 
             ZydisDecodedInstruction instruction;
             ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
@@ -173,11 +192,6 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                         if( !added.count( addr ) && !visited.count( addr ) ) {
                             added.insert( addr );
                             toVisit.push_back( ptr );
-                            if( mnemonicMask & MM_CALL ) {
-                                toReturn.push_back( address );
-                                break;
-                            } else if( mnemonicMask & MM_JMP )
-                                break;
                         }
                     }
                     if( mnemonicMask & MM_JMP )
@@ -195,30 +209,19 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                     }
                 } else if( mnemonicMask & MM_INT ) {
                     if( operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
-                        mnemonicMask = static_cast<MNEMONIC_MASK>( mnemonicMask | MM_RET );
                         pBufferEnd = &pBuffer[24];
                         --pBuffer;
                         while( pBuffer < pBufferEnd )
                             *pBuffer++ = ' ';
                         pBuffer += sprintf( pBuffer, "; DOS - Exit\n" );
                         ++pBuffer;
-                        if( !toReturn.empty( ) ) {
-                            toReturn.pop_back( );
-                        }
                         break;
                     }
                     *pBuffer = '\n';
                     *++pBuffer = 0;
-                }
-                if( mnemonicMask & MM_RET ) {
+                } else if( mnemonicMask & MM_RET ) {
                     *pBuffer = '\n';
                     *++pBuffer = 0;
-                    if( !toReturn.empty( ) ) {
-                        address = toReturn.back( );
-                        toReturn.pop_back( );
-                        base_offset = address.offset + ( address.segment << 4 );
-                        continue;
-                    }
                     break;
                 }
             } else { // Treat as data; step forward 1 byte
@@ -241,5 +244,7 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
     }
     pBuffer += sprintf( pBuffer, "Disassembly finished. Processed %d instruction offsets.", (unsigned) visited.size( ) );
     *++pBuffer = 0;
+    code_segments.clear( );
+    std::copy( orderedSegments.begin( ), orderedSegments.end( ), std::back_inserter( code_segments ) );
 }
 #endif // C_DEBUGGER

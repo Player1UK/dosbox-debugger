@@ -39,7 +39,7 @@ extern void OutputVecTable( char* );
 extern void DrawCode( void );
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
-extern void SetCodeWinStart( );
+extern void SetCodeWinToEIP( );
 
 extern SCodeViewData codeViewData;
 
@@ -629,7 +629,7 @@ bool ParseCommand( char* str ) {
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", codeSeg, codeOfs );
 		codeViewData.useCS = codeSeg;
 		codeViewData.useEIP = codeOfs;
-		codeViewData.goodEIP = 0;
+		dbg.update_win_scroll[WIN_CODE] = true;
 		return true;
 	}
 
@@ -640,6 +640,7 @@ bool ParseCommand( char* str ) {
 		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n",
 			dataSeg[dbg.active_win_data],
 			dataOfs[dbg.active_win_data] );
+		dbg.update_win[WIN_DATA] = true;
 		return true;
 	}
 
@@ -691,7 +692,7 @@ bool ParseCommand( char* str ) {
 		auto intNr = (uint8_t) GetHexValue( found, found );
 		DEBUG_ShowMsg( "DEBUG: Tracing INT %02X\n", intNr );
 		CPU_HW_Interrupt( intNr );
-		SetCodeWinStart( );
+		SetCodeWinToEIP( );
 		return true;
 	}
 
@@ -763,7 +764,7 @@ bool ParseCommand( char* str ) {
 			DEBUG_ShowMsg( "DEBUG: Set code overview to interrupt handler %X\n",
 				intNr );
 			codeViewData.useCS = mem_readw( intNr * 4 + 2 );
-			codeViewData.useEIP = codeViewData.goodEIP = mem_readw( intNr * 4 );
+			codeViewData.useEIP = mem_readw( intNr * 4 );
 			return true;
 		}
 	}

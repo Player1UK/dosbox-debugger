@@ -20,7 +20,6 @@ void DEBUG_DrawScreen();
 void DEBUG_Enable(bool pressed);
 void DEBUG_CheckExecuteBreakpoint(uint16_t seg, uint32_t off);
 bool DEBUG_ExitLoop(void);
-void DEBUG_RefreshPage(int scroll);
 Bitu DEBUG_EnableDebugger();
 
 bool DEBUG_Breakpoint();

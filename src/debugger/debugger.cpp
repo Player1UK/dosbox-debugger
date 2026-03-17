@@ -21,7 +21,7 @@
 #include <imgui_impl_sdl3.h>
 
 extern uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent );
-extern void SetCodeWinStart( );
+extern void SetCodeWinToEIP( );
 
 DBGBlock dbg = {};
 bool debugging = false;
@@ -75,11 +75,9 @@ Bitu DEBUG_Loop( void ) {
 }
 
 void DEBUG_Enable( bool pressed ) {
-	if( !pressed ) {
+	if( !pressed )
 		return;
-	}
 
-	// Maybe construct the debugger's UI
 	static bool was_ui_started = false;
 	if( !was_ui_started ) {
 		DBGUI_StartUp( );
@@ -88,27 +86,23 @@ void DEBUG_Enable( bool pressed ) {
 		//SDL_ShowWindow(pdc_window);
 	}
 
-	// The debugger is run in release mode so cannot use asserts
-	if( !was_ui_started ) {
+	if( !was_ui_started ) { // The debugger is run in release mode so cannot use asserts
 		LOG_ERR( "DEBUG: Failed to start up the debug window" );
 		return;
 	}
 
-	// Defocus the graphical UI and bring the debugger UI into focus
-	GFX_LosingFocus( );
-	SDL_RaiseWindow( dbg.win_main );
-	SetCodeWinStart( );
+	GFX_LosingFocus( );					// Defocus the graphical UI...
+	SDL_RaiseWindow( dbg.win_main );	// ...and bring the debugger UI into focus
+	SetCodeWinToEIP( );
 
-	// Maybe show help for the first time in the debugger
 	static bool was_help_shown = false;
-	if( !was_help_shown ) {
+	if( !was_help_shown ) { // Show first time help
 		DEBUG_ShowMsg( "           TYPE ? or HELP (+ENTER) TO GET AN OVERVIEW OF ALL COMMANDS           \n" );
 		was_help_shown = true;
 	}
 
-	// Start the debugging loops
 	debugging = true;
-	DOSBOX_SetLoop( &DEBUG_Loop );
+	DOSBOX_SetLoop( &DEBUG_Loop ); // Start the debugging loop
 
 	KEYBOARD_ClrBuffer( );
 }

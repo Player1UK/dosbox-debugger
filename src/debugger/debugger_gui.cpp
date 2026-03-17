@@ -19,7 +19,9 @@
 
 #include "IBM_VGA_8x16.h"
 
+extern bool AddressVisited( uint16_t, uint32_t );
 extern void DasmRecursiveDisassemble( char *, const uint32_t, const uint32_t, const bool, const bool );
+extern bool ParseCommand( char * );
 
 extern DBGBlock dbg;
 extern bool debugging;
@@ -30,9 +32,8 @@ extern std::vector<CDebugVar*> varList;
 SCodeViewData codeViewData = {};
 
 char codeBuffer[24 * 4096 * 128];
+char dataBuffer[24 * 4096 * 128];
 
-// Scroll state for Output window (lines from bottom, 0 = at bottom)
-static int output_scroll_offset = 0;
 Bitu cycle_count = 0;
 
 bool showExtend;
@@ -42,6 +43,13 @@ char curSelectorName[3] = { 0, 0, 0 };
 
 static bool imgui_initialized = false;
 static float display_scale = 1.0f;
+
+static float char_width;
+static float line_height;
+static float line_height_no_spacing;
+static float padding;
+static float title_bar_height;
+static float CalcWindowHeight( int rows, bool fTitle = true );
 
 bool DBGUI_IsInitialized( ) {
 	return imgui_initialized;
@@ -83,31 +91,12 @@ void DEBUG_ShowMsg( const char* format, ... ) {
 	// Don't reset scroll offset - let user stay at their scroll position
 }
 
-void DEBUG_RefreshPage( int scroll ) {
-	if( !imgui_initialized ) {
-		return;
-	}
-	output_scroll_offset -= scroll;
-	if( output_scroll_offset < 0 ) {
-		output_scroll_offset = 0;
-	}
-	dbg.update_win[WIN_OUT] = true;
-}
-
-void SetCodeWinStart( ) {
-	if( ( SegValue( cs ) == codeViewData.useCS ) && ( reg_eip >= codeViewData.useEIP ) &&
-		( reg_eip <= codeViewData.useEIPlast ) ) {
-		// in valid window - scroll ?
-		if( reg_eip >= codeViewData.useEIPmid ) {
-			codeViewData.useEIP += codeViewData.firstInstSize;
-		}
-
-	} else {
-		// totally out of range.
-		codeViewData.useCS = SegValue( cs );
-		codeViewData.useEIP = codeViewData.goodEIP = reg_eip;
-	}
-	dbg.update_win[WIN_CODE] = true;
+void SetCodeWinToEIP( ) {
+	if( !AddressVisited( SegValue( cs ), reg_eip ) ) // address not already disassembled
+		dbg.update_win[WIN_CODE] = true;
+	codeViewData.useCS = SegValue( cs );
+	codeViewData.useEIP = reg_eip;
+	dbg.update_win_scroll[WIN_CODE] = true;
 }
 
 /********************/
@@ -118,45 +107,6 @@ extern char* AnalyzeInstruction( char*, bool );
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern bool GetDescriptorInfo( char*, char*, char* );
 
-/*const uint32_t MAXSIZE_EIPARRAY = 150U;
-uint32_t indexEIParray = 0;
-uint32_t EIParray[MAXSIZE_EIPARRAY];
-
-static void PopulateEIParray( ) {
-	PhysPt start = GetAddress( codeViewData.useCS, 0 );
-	Bitu size = 0;
-	indexEIParray = 0;
-	EIParray[MAXSIZE_EIPARRAY - 1] = -1;
-	for( uint32_t newEIP = 0; newEIP < codeViewData.useEIP;
-		newEIP += size, start += size ) {
-		EIParray[indexEIParray] = newEIP;
-		if( ++indexEIParray > MAXSIZE_EIPARRAY ) {
-			indexEIParray = 0U;
-		}
-		char dline[200];
-		size = DasmI386( dline, start, newEIP, cpu.code.big );
-	}
-}
-
-static bool UseExistingEIP( uint32_t gap ) {
-	if( indexEIParray >= MAXSIZE_EIPARRAY ) {
-		return false;
-	}
-	auto indexEIParray_original = indexEIParray;
-	if( indexEIParray >= gap ) {
-		indexEIParray -= gap;
-	} else if( EIParray[MAXSIZE_EIPARRAY - 1] < EIParray[0] ) {
-		indexEIParray = MAXSIZE_EIPARRAY - ( gap - indexEIParray );
-	} else {
-		indexEIParray = 0U;
-	}
-	if( indexEIParray != indexEIParray_original && EIParray[indexEIParray] < codeViewData.useEIP ) {
-		codeViewData.useEIP = EIParray[indexEIParray];
-		return true;
-	}
-	return false;
-}*/
-
 const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
 const ImVec4 red_bg_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
 
@@ -164,238 +114,109 @@ void DrawCode( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
 		return;
 	}
-
-	// Calculate window dimensions based on character rows/columns
-	// (code rows + 1 for input line)
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float title_bar_height = ImGui::GetFrameHeight( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = ( dbg.rows_code * line_height ) + title_bar_height +
-		padding;
-
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_CODE ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_CODE ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_CODE] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
 
 	if( dbg.update_win[WIN_CODE] ) {
 		dbg.update_win[WIN_CODE] = false;
 		auto startOffset = GetAddress( codeViewData.useCS, codeViewData.useEIP );
 		DasmRecursiveDisassemble( codeBuffer, startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
+		dbg.update_win_scroll[WIN_CODE] = true;
 	}
-
-	if( DBGUI_BeginWindowWithStyledTitle( "Code",
-		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
-		// Handle mouse wheel scrolling when hovering over this window
-
-		//ImGui::TextUnformatted( codeBuffer );
+	if( DBGUI_BeginWindowWithStyledTitle( " Code", ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
 		static uint32_t selectedIndex = 0;
 		uint32_t i = 0;
 		for( auto line = codeBuffer; *line; ++line, ++i ) {
 			if( *line == '\n' ) {
 				ImGui::Spacing( );
-			} else {
+			} else if( line[4] == ':' ) {
+				char *endptr;
+				uint16_t segment = strtol( line, &endptr, 16 );
+				if( *endptr == ':' )
+					++endptr;
+				uint32_t offset = strtol( endptr, &endptr, 16 );
+
+				if( dbg.update_win_scroll[WIN_CODE] && segment == codeViewData.useCS && offset == codeViewData.useEIP ) {
+					dbg.update_win_scroll[WIN_CODE] = false;
+					ImGui::SetScrollHereY( );
+				}
+				
+				bool is_current_ip = ( segment == SegValue( cs ) ) && ( offset == reg_eip );
+				bool is_breakpoint = CBreakpoint::IsBreakpoint( segment, offset );
+				if( is_current_ip )
+					ImGui::PushStyleColor( ImGuiCol_Text, green_color );
+				else if( is_breakpoint )
+					ImGui::PushStyleColor( ImGuiCol_Text, red_bg_color );
 				// Make line selectable
 				bool isSelected = ( selectedIndex == i );
 				if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 					selectedIndex = i;
-					char *endptr;
-					codeViewData.cursorSeg = strtol( line, &endptr, 16 );
-					if( *endptr == ':' )
-						++endptr;
-					codeViewData.cursorOfs = strtol( endptr, &endptr, 16 );
+					codeViewData.cursorSeg = segment;
+					codeViewData.cursorOfs = offset;
 				}
 				if( isSelected && ImGui::IsItemFocused( ) ) {
 					selectedIndex = i;
 				}
+				if( is_current_ip || is_breakpoint )
+					ImGui::PopStyleColor( );
+			} else {
+				ImGui::TextUnformatted( line );
 			}
 			while( *line ) ++line;
 		}
 	}
-	if( false) {
-		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
-			float wheel = ImGui::GetIO( ).MouseWheel;
-			if( wheel ) {
-				if( wheel > 0 ) { // Scroll up - move cursor up or scroll code
-					//--codeViewData.cursorPos;
-				} else { // Scroll down - move cursor down or scroll code
-					//if( codeViewData.cursorPos == dbg.rows_code ) {
-						codeViewData.useEIP += codeViewData.firstInstSize;
-					//}
-					//++codeViewData.cursorPos;
-				}
-				//dbg.update_win[WIN_CODE] = true;
-			}
-		}
-		/*if( codeViewData.cursorPos < 0 ) {
-			if( !UseExistingEIP( -codeViewData.cursorPos ) ) {
-				PopulateEIParray( );
-				UseExistingEIP( -codeViewData.cursorPos );
-			}
-			codeViewData.cursorPos = 0;
-		} else if( codeViewData.cursorPos >= dbg.rows_code ) {
-			indexEIParray = MAXSIZE_EIPARRAY;
-			codeViewData.cursorPos = dbg.rows_code - 1;
-		}*/
-		uint32_t disEIP = codeViewData.useEIP;
-		PhysPt start = GetAddress( codeViewData.useCS, codeViewData.useEIP );
-		char dline[2048];
-		Bitu size;
-		Bitu c;
-
-		static int selectedIndex = 0;
-
-		for( int i = 0, iMid = dbg.rows_code * 0.95; i < dbg.rows_code; ++i ) {
-			bool is_current_ip = ( codeViewData.useCS == SegValue( cs ) ) && ( disEIP == reg_eip );
-			bool is_breakpoint = CBreakpoint::IsBreakpoint( codeViewData.useCS, disEIP );
-
-			// Build the line
-			char line[2048];
-			char* ptr = line;
-			ptr += sprintf( ptr, "%04X:%04X %c", codeViewData.useCS, disEIP, ( is_breakpoint ? '*' : ' ' ) );
-
-			Bitu drawsize = size = DasmI386( dline, start, disEIP, cpu.code.big, cpu.pmode );
-			if( disEIP < codeViewData.goodEIP &&
-				disEIP + size > codeViewData.goodEIP ) {
-				size = drawsize = codeViewData.goodEIP - disEIP;
-			}
-			bool toolarge = false;
-
-			if( drawsize > check_cast<uint32_t>( dbg.rows_code ) ) {
-				toolarge = true;
-				drawsize = dbg.rows_code - 1;
-			}
-			for( c = 0; c < drawsize; c++ ) { // Hex bytes
-				uint8_t value;
-				if( mem_readb_checked( start + c, &value ) ) {
-					value = 0;
-				}
-				ptr += sprintf( ptr, "%02X", value );
-			}
-			if( toolarge ) {
-				ptr += sprintf( ptr, ".." );
-				++drawsize;
-			}
-			// Pad hex to fixed width
-			int hex_len = drawsize * 2 + ( toolarge ? 2 : 0 );
-			while( hex_len < 20 ) {
-				*ptr++ = ' ';
-				++hex_len;
-			}
-			// Disassembly
-			char empty_res[] = { 0 };
-			char* res = empty_res;
-			if( showExtend ) {
-				res = AnalyzeInstruction( dline, false );
-			}
-			// Pad disassembly
-			size_t dline_len = safe_strlen( dline );
-			if( dline_len > 28 ) {
-				dline_len = 28;
-			}
-			memcpy( ptr, dline, dline_len );
-			ptr += dline_len;
-			for( size_t pad = dline_len; pad < 28; ++pad ) {
-				*ptr++ = ' ';
-			}
-			// Result
-			if( res && res[0] ) {
-				size_t res_len = strlen( res );
-				if( res_len > 20 ) {
-					res_len = 20;
-				}
-				memcpy( ptr, res, res_len );
-				ptr += res_len;
-			}
-			*ptr = '\0';
-
-			// Determine color
-			if( is_current_ip ) {
-				ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-			} else if( is_breakpoint ) {
-				ImGui::PushStyleColor( ImGuiCol_Text, red_bg_color );
-			}
-			// Make line selectable
-			bool isSelected = ( selectedIndex == i );
-			if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				selectedIndex = i;
-				codeViewData.cursorSeg = codeViewData.useCS;
-				codeViewData.cursorOfs = disEIP;
-			}
-			if( isSelected && ImGui::IsItemFocused( ) ) {
-				selectedIndex = i;
-			}
-			if( is_current_ip || is_breakpoint ) {
-				ImGui::PopStyleColor( );
-			}
-			start += size;
-			disEIP += size;
-
-			if( i == 0 ) {
-				codeViewData.firstInstSize = size;
-			}
-			if( i == iMid ) {
-				codeViewData.useEIPmid = disEIP;
-			}
-		}
-		codeViewData.useEIPlast = disEIP;
-	}
 	DBGUI_EndWindowWithStyledTitle( );
+}
+
+extern uint16_t NumCodeSegments( );
+extern uint16_t CodeSegment( uint16_t );
+
+static void DrawSegments( void ) {
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_SEG ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_SEG] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
+
+	if( DBGUI_BeginWindow( "Segments", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollWithMouse ) ) {
+		ImGui::Text( "Segments: " );
+		for( uint16_t count = NumCodeSegments( ), i = 0U; count; --count, ++i ) {
+			ImGui::SameLine( );
+			ImGui::Text( "%04X ", CodeSegment( i ) );
+		}
+	}
+	DBGUI_EndWindow( );
 }
 
 static void DrawData( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
 		return;
 	}
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_DATA ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_DATA] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
 
-	// Calculate window dimensions based on character rows/columns
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float title_bar_height = ImGui::GetFrameHeight( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = ( dbg.rows_data[dbg.active_win_data] * line_height ) + title_bar_height +
-		padding;
+	//for( auto dw = 0U; dw < 1U; ++dw )
 
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_DATA ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
-
-	if( DBGUI_BeginWindowWithStyledTitle( "Data",
-		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
-		// Handle mouse wheel scrolling when hovering over this window
-		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
-			float wheel = ImGui::GetIO( ).MouseWheel;
-			if( wheel ) {
-				if( wheel > 0.0f && dataOfs[dbg.active_win_data] <= 48U ) {
-					dataOfs[dbg.active_win_data] = 0U;
-				} else {
-					dataOfs[dbg.active_win_data] -= 48U * wheel;
-				}
-				dbg.update_win[WIN_DATA] = true;
-			}
-		}
-		uint8_t ch;
-		uint32_t add, address;
-		bool f16bit = false;
-		for( auto dw = 0U; dw < 1U; ++dw ) {
-			add = dataOfs[dw];
-			for( auto y = 0; y < dbg.rows_data[dw]; ++y ) {
-				char line[128];
-
+	if( DBGUI_BeginWindowWithStyledTitle( " Data", ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
+		if( dbg.update_win[WIN_DATA] ) {
+			uint32_t add = 0U;
+			char *line = dataBuffer;
+			for( uint16_t count = 0xFFF; count; --count, line += 81 ) {
+				bool f16bit = false;
 				// Address
-				if( add <= 0xFFFF ) {
-					sprintf( line, "%04X:%04X      ", dataSeg[dw], add );
-					f16bit = false;
-				} else {
-					sprintf( line, "%04X:%08X  ", dataSeg[dw], add );
+				if( add <= 0xFFFF )
+					sprintf( line, "%04X:%04X      ", dataSeg[0], add );
+				else {
+					sprintf( line, "%04X:%08X  ", dataSeg[0], add );
 					f16bit = true;
 				}
-
 				// Hex values
 				for( int x = 0; x < 16; ++x, ++add ) {
-					address = GetAddress( dataSeg[dw], add );
+					uint32_t address = GetAddress( dataSeg[0], add );
+					uint8_t ch;
 					if( mem_readb_checked( address, &ch ) ) {
 						ch = 0;
 					}
@@ -414,13 +235,13 @@ static void DrawData( void ) {
 				}
 				if( line[62] == 0 ) line[62] = ' ';
 				if( line[63] != ' ' ) line[63] = ' ';
-				line[80] = '\0';
-
-				ImGui::TextUnformatted( line );
+				line[80] = '\n';
 			}
 		}
+		ImGui::TextUnformatted( dataBuffer );
 		if( dbg.update_win[WIN_DATA] ) {
 			dbg.update_win[WIN_DATA] = false;
+			ImGui::SetScrollY( ( dataOfs[0] >> 4 ) * line_height_no_spacing );
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
@@ -431,6 +252,16 @@ static uint32_t oldregs[oEIP + 1] = {};
 static Segment oldsegs[6] = {};
 static auto oldcpucpl = cpu.cpl;
 static auto oldflags = cpu_regs.flags;
+
+void SaveCPUstate( ) {
+	for( uint8_t i = 0; i < oEIP; ++i )
+		oldregs[i] = cpu_regs.regs[i].dword[DW_INDEX];
+	oldregs[oEIP] = reg_eip;
+	for( uint8_t i = 0; i < 6; ++i )
+		oldsegs[i].val = SegValue( static_cast<SegNames>( i ) );
+	oldcpucpl = cpu.cpl;
+	oldflags = reg_flags;
+}
 
 enum :uint8_t { COL_1, COL_2, COL_3, COL_4, COL_5, COL_6 };
 
@@ -457,24 +288,15 @@ static void DrawRegisters( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
 		return;
 	}
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_REG ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_REG] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
 
-	// Calculate window dimensions based on character rows/columns
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float title_bar_height = ImGui::GetFrameHeight( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = ( dbg.rows_registers * line_height ) +
-		title_bar_height + padding;
+	static const float TAB_POS[] = { 0.0f, window_size.x * 0.205f, window_size.x * 0.405f, window_size.x * 0.53f, window_size.x * 0.655f, window_size.x * 0.84f, window_size.x * 0.93f, window_size.x };
 
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_REG ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
-
-	static const float TAB_POS[] = { 0.0f, window_width * 0.205f, window_width * 0.405f, window_width * 0.53f, window_width * 0.655f, window_width * 0.84f, window_width * 0.93f, window_width };
-
-	if( DBGUI_BeginWindowWithStyledTitle( "                                    Registers                                   ",
-		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( " Registers",
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
 
 		Bitu changed_flags = reg_flags ^ oldflags;
 		for( ENTRY e : layout ) {
@@ -573,13 +395,6 @@ static void DrawRegisters( void ) {
 		}
 		if( dbg.update_win[WIN_REG] ) {
 			dbg.update_win[WIN_REG] = false;
-			for( uint8_t i = 0; i < oEIP; ++i )
-				oldregs[i] = cpu_regs.regs[i].dword[DW_INDEX];
-			oldregs[oEIP] = reg_eip;
-			for( uint8_t i = 0; i < 6; ++i )
-				oldsegs[i].val = SegValue( static_cast<SegNames>( i ) );
-			oldcpucpl = cpu.cpl;
-			oldflags = reg_flags;
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );
@@ -590,22 +405,13 @@ static void DrawVariables( ) {
 	if( !DBGUI_IsInitialized( ) ) {
 		return;
 	}
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_VAR ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_VAR] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
 
-	// Calculate window dimensions based on character rows/columns
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float title_bar_height = ImGui::GetFrameHeight( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = ( dbg.rows_variables * line_height ) +
-		title_bar_height + padding;
-
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_VAR ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
-
-	if( DBGUI_BeginWindowWithStyledTitle( "                                    Variables                                   ",
-		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( " Variables",
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoResize ) ) {
 		if( varList.empty( ) ) {
 			ImGui::TextDisabled( "(no variables defined)" );
 		} else {
@@ -642,19 +448,18 @@ static void DrawVariables( ) {
 }
 #undef DEBUG_VAR_BUF_LEN
 
-void DrawConsole( void ) {
-	// Calculate window dimensions based on character rows/columns
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = ( dbg.rows_console * line_height ) + padding;
+// History stuff
+#define MAX_HIST_BUFFER 50
+std::list<std::string> histBuff = {};
+std::list<std::string>::iterator histBuffPos = histBuff.end( );
 
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_CON ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
+static void DrawConsole( void ) {
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_CON ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_CON], false ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
 
-	if( DBGUI_BeginWindow( "Console", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) ) {
+	if( DBGUI_BeginWindow( "Console", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) ) {
 		if( !debugging ) {
 			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
 			ImGui::Text( "(Running)" );
@@ -662,27 +467,55 @@ void DrawConsole( void ) {
 		} else {
 			ImGui::Text( "%c", ( codeViewData.ovrMode ? 'O' : 'I' ) );
 			ImGui::SameLine( );
+			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
 			if( ImGui::InputText( "##console_input", codeViewData.inputStr, IM_ARRAYSIZE( codeViewData.inputStr ), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll ) ) {
-				// buf now contains the updated text
+				codeViewData.inputStr[MAXCMDLEN] = '\0';
+				if( ParseCommand( codeViewData.inputStr ) ) {
+					char *cmd = ltrim( codeViewData.inputStr );
+					if( histBuff.empty( ) || *--histBuff.end( ) != cmd ) {
+						histBuff.emplace_back( cmd );
+					}
+					if( histBuff.size( ) > MAX_HIST_BUFFER ) {
+						histBuff.pop_front( );
+					}
+					histBuffPos = histBuff.end( );
+					codeViewData.inputStr[0] = 0;
+				}
 			}
+			ImGui::PopStyleColor( );
 		}
 	}
 	DBGUI_EndWindow( );
 }
 
+void DBGUI_DrawOutputWindow( void ) {
+	if( !imgui_initialized ) {
+		return;
+	}
+	static auto window_pos = ImVec2( 0, DBGUI_GetWindowY( WIN_OUT ) );
+	static auto window_size = ImVec2( DBGUI_GetWindowWidth( ), CalcWindowHeight( dbg.rows[WIN_OUT] ) );
+	ImGui::SetNextWindowPos( window_pos, ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size, ImGuiCond_FirstUseEver );
+
+	if( DBGUI_BeginWindowWithStyledTitle( " Output",
+		ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNavFocus ) ) {
+
+		for( auto it = logBuff.begin( ); it != logBuff.end( ); ++it )
+			ImGui::TextUnformatted( it->c_str( ) );
+	}
+	DBGUI_EndWindowWithStyledTitle( );
+	if( dbg.update_win[WIN_OUT] ) {
+		dbg.update_win[WIN_OUT] = false;
+	}
+}
+
 // Calculate window height for a given number of rows
-static float CalcWindowHeight( int rows ) {
-	float line_height = ImGui::GetTextLineHeightWithSpacing( );
-	float title_bar_height = ImGui::GetFrameHeight( );
-	float padding = ImGui::GetStyle( ).WindowPadding.y * 2;
-	return ( rows * line_height ) + title_bar_height + padding;
+static float CalcWindowHeight( int rows, bool fTitle ) {
+	return ( rows * line_height ) + ( fTitle ? title_bar_height : 0.0f ) + padding;
 }
 
 // Calculate window width for a given number of columns
 static float CalcWindowWidth( int cols ) {
-	// Use a representative character to get monospace font width
-	float char_width = ImGui::CalcTextSize( "X" ).x;
-	float padding = ImGui::GetStyle( ).WindowPadding.x * 2;
 	return ( cols * char_width ) + padding;
 }
 
@@ -691,18 +524,19 @@ float DBGUI_GetWindowY( uint32_t window_index ) {
 	float y = 0;
 	switch( window_index ) {
 	case NUM_WINDOWS:
-		y += CalcWindowHeight( dbg.rows_output );
+		y += CalcWindowHeight( dbg.rows[WIN_OUT] );
 	case WIN_OUT:
-		y += CalcWindowHeight( dbg.rows_console );
+		y += CalcWindowHeight( dbg.rows[WIN_CON], false );
 	case WIN_CON:
-		y += CalcWindowHeight( dbg.rows_variables );
+		y += CalcWindowHeight( dbg.rows[WIN_VAR] );
 	case WIN_VAR:
-		y += CalcWindowHeight( dbg.rows_data[0] );
+		y += CalcWindowHeight( dbg.rows[WIN_DATA] );
 	case WIN_DATA:
-		y += CalcWindowHeight( dbg.rows_registers );
+		y += CalcWindowHeight( dbg.rows[WIN_REG] );
 	case WIN_REG:
-		y += CalcWindowHeight( dbg.rows_code ) +
-			DBGUI::WindowSeparatorSpacing; // After Code (with separator)
+		y += CalcWindowHeight( dbg.rows[WIN_SEG], false );
+	case WIN_SEG:
+		y += CalcWindowHeight( dbg.rows[WIN_CODE] );
 	case WIN_CODE:
 	default:
 		break;
@@ -722,6 +556,7 @@ float DBGUI_GetWindowWidth( ) {
 
 void DEBUG_DrawScreen( void ) {
 	DrawCode( );
+	DrawSegments( );
 	DrawRegisters( );
 	DrawData( );
 	DrawVariables( );
@@ -839,6 +674,11 @@ void DBGUI_StartUp( void ) {
 	ImGui::NewFrame( );
 
 	// Calculate window dimensions from character rows/columns
+	char_width = ImGui::CalcTextSize( "X" ).x; // Use a representative character to get monospace font width
+	line_height = ImGui::GetTextLineHeightWithSpacing( );
+	line_height_no_spacing = ImGui::GetTextLineHeight( );
+	padding = ImGui::GetStyle( ).WindowPadding.y * 2;
+	title_bar_height = ImGui::GetFrameHeight( );
 	dbg.window_width = static_cast<int>( DBGUI_GetWindowWidth( ) );
 	dbg.window_height = static_cast<int>( DBGUI_GetTotalHeight( ) );
 	SDL_SetWindowSize( dbg.win_main, dbg.window_width, dbg.window_height );
@@ -939,16 +779,12 @@ void DBGUI_Render( void ) {
 	SDL_SubmitGPUCommandBuffer( command_buffer );
 }
 
-static bool BeginWindow( const char* name, ImGuiWindowFlags flags ) {
-	return ImGui::Begin( name, nullptr, flags );
-}
-
 // Title bar colors - purple background with black text
 static const ImVec4 TitleBgColor = ImVec4( 0.42f, 0.41f, 0.84f, 0.8f ); // Purple
 static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );  // Black
 
 // Helper to begin a window with cyan title bar and black title text
-static bool BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flags ) {
+bool DBGUI_BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flags ) {
 	// Push title bar colors
 	ImGui::PushStyleColor( ImGuiCol_TitleBg, TitleBgColor );
 	ImGui::PushStyleColor( ImGuiCol_TitleBgActive, TitleBgColor );
@@ -962,32 +798,17 @@ static bool BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flag
 
 	return result;
 }
-
-static void EndWindow( ) {
-	ImGui::End( );
-}
-
 // Helper to end a styled window
-static void EndWindowWithStyledTitle( ) {
+void DBGUI_EndWindowWithStyledTitle( ) {
 	ImGui::End( );
 	ImGui::PopStyleColor( 3 ); // Pop title bar colors
 }
 
-// Public versions for use from debugger.cpp
-bool DBGUI_BeginWindow( const char* name, int flags ) {
-	return BeginWindow( name, static_cast<ImGuiWindowFlags>( flags | ImGuiWindowFlags_NoTitleBar ) );
+bool DBGUI_BeginWindow( const char *name, int flags ) {
+	return ImGui::Begin( name, nullptr, static_cast<ImGuiWindowFlags>( flags | ImGuiWindowFlags_NoTitleBar ) );
 }
-
 void DBGUI_EndWindow( ) {
-	EndWindow( );
-}
-
-bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags ) {
-	return BeginWindowWithStyledTitle( title, static_cast<ImGuiWindowFlags>( flags ) );
-}
-
-void DBGUI_EndWindowWithStyledTitle( ) {
-	EndWindowWithStyledTitle( );
+	ImGui::End( );
 }
 
 // Render functions for debugger windows - called from debugger.cpp
@@ -998,7 +819,7 @@ void DBGUI_DrawRegisterWindow( void ) {
 
 	// Calculate window dimensions based on character rows/columns
 	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = CalcWindowHeight( dbg.rows_registers );
+	float window_height = CalcWindowHeight( dbg.rows[WIN_REG] );
 
 	ImGui::SetNextWindowPos( ImVec2( 0, 0 ), ImGuiCond_FirstUseEver );
 	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
@@ -1057,65 +878,4 @@ void DBGUI_DrawRegisterWindow( void ) {
 	}
 	ImGui::End( );
 }
-
-void DBGUI_DrawOutputWindow( void ) {
-	if( !imgui_initialized ) {
-		return;
-	}
-	// Calculate window dimensions based on character rows/columns
-	float window_width = DBGUI_GetWindowWidth( );
-	float window_height = CalcWindowHeight( dbg.rows_output );
-
-	ImGui::SetNextWindowPos( ImVec2( 0, DBGUI_GetWindowY( WIN_OUT ) ),
-		ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( ImVec2( window_width, window_height ),
-		ImGuiCond_FirstUseEver );
-
-	if( DBGUI_BeginWindowWithStyledTitle( "                                     Output                    [SHIFT] Home/End ",
-		ImGuiWindowFlags_NoCollapse |
-		ImGuiWindowFlags_NoScrollbar |
-		ImGuiWindowFlags_NoScrollWithMouse |
-		ImGuiWindowFlags_NoNavFocus ) ) {
-		// Handle mouse wheel scrolling when hovering over this window
-		if( ImGui::IsWindowHovered( ) ) {
-			float wheel = ImGui::GetIO( ).MouseWheel;
-			if( wheel > 0 ) {
-				output_scroll_offset++; // Scroll up (older messages)
-			} else if( wheel < 0 && output_scroll_offset > 0 ) {
-				output_scroll_offset--; // Scroll down (newer messages)
-			}
-		}
-
-		// Calculate how many lines we can display
-		int visible_lines = dbg.rows_output - 1; // -1 for title bar
-		int total_lines = static_cast<int>( logBuff.size( ) );
-
-		// Clamp scroll offset to valid range
-		int max_offset = total_lines > visible_lines ? total_lines - visible_lines : 0;
-		if( output_scroll_offset > max_offset ) {
-			output_scroll_offset = max_offset;
-		}
-
-		// Calculate start index (from the end, accounting for offset)
-		int start_idx = total_lines - visible_lines - output_scroll_offset;
-		if( start_idx < 0 ) {
-			start_idx = 0;
-		}
-
-		// Display visible lines
-		auto it = logBuff.begin( );
-		std::advance( it, start_idx );
-		int lines_shown = 0;
-		while( it != logBuff.end( ) && lines_shown < visible_lines ) {
-			ImGui::TextUnformatted( it->c_str( ) );
-			++it;
-			++lines_shown;
-		}
-	}
-	EndWindowWithStyledTitle( );
-	if( dbg.update_win[WIN_OUT] ) {
-		dbg.update_win[WIN_OUT] = false;
-	}
-}
-
 #endif

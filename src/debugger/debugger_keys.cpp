@@ -15,8 +15,8 @@
 #include "shell/shell.h"
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
-extern bool ParseCommand( char* );
-extern void SetCodeWinStart( );
+extern void SetCodeWinToEIP( );
+extern void SaveCPUstate( );
 
 extern bool exitLoop;
 
@@ -32,17 +32,12 @@ uint32_t dataOfs[NUM_WIN_DATA] = { 0 };//, 0, 0, 0 };
 
 bool skipFirstInstruction = false;
 
-// History stuff
-#define MAX_HIST_BUFFER 50
-static std::list<std::string> histBuff = {};
-static auto histBuffPos = histBuff.end( );
+extern std::list<std::string> histBuff;
+extern std::list<std::string>::iterator histBuffPos;
 
-static bool StepOver( ) {
-	exitLoop = false;
-	PhysPt start = GetAddress( SegValue( cs ), reg_eip );
+static bool SetRedirectBreakpoint( ) {
 	char dline[200];
-	Bitu size;
-	size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
+	Bitu size = DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
 
 	if( strstr( dline, "call" ) || strstr( dline, "int" ) ||
 		strstr( dline, "loop" ) || strstr( dline, "rep" ) ) {
@@ -50,21 +45,19 @@ static bool StepOver( ) {
 		if( !CBreakpoint::FindPhysBreakpoint( SegValue( cs ), reg_eip + size, true ) ) {
 			CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip + size, true );
 		}
-		debugging = false;
 		return true;
 	}
 	return false;
 }
 
 static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
+	SaveCPUstate( );
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
 	int32_t ret = ( *cpudecoder )( );
-	dbg.update_win[WIN_CODE] = true;
-	dbg.update_win[WIN_REG] = true;
 	if( quickexit ) {
-		SetCodeWinStart( );
+		SetCodeWinToEIP( );
 	} else {
 		// ensure all breakpoints are activated
 		CBreakpoint::ActivateBreakpoints( );
@@ -202,30 +195,19 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 				codeViewData.cursorOfs );
 		}
 		break;
-	case SDLK_F10: // Step over inst
-		if( StepOver( ) ) {
+	case SDLK_F11: // trace into
+		if( ( key.mod & SDL_KMOD_SHIFT ) ) { // exit trace into
+			debugging = false;
 			ret = DEBUG_Run( 1, false );
 			break;
 		}
-		// If we aren't stepping over something, do a normal step.
-		[[fallthrough]];
-	case SDLK_F11: // trace into
+	case SDLK_F10: // Step over instruction
 		exitLoop = false;
-		ret = DEBUG_Run( 1, true );
-		break;
-	case SDLK_RETURN: // Parse typed Command
-		codeViewData.inputStr[MAXCMDLEN] = '\0';
-		if( ParseCommand( codeViewData.inputStr ) ) {
-			char* cmd = ltrim( codeViewData.inputStr );
-			if( histBuff.empty( ) || *--histBuff.end( ) != cmd ) {
-				histBuff.emplace_back( cmd );
-			}
-			if( histBuff.size( ) > MAX_HIST_BUFFER ) {
-				histBuff.pop_front( );
-			}
-			histBuffPos = histBuff.end( );
-			//ClearInputLine( );
-		}
+		if( SetRedirectBreakpoint( ) && key.key == SDLK_F10 ) {
+			debugging = false;
+			ret = DEBUG_Run( 1, false );
+		} else
+			ret = DEBUG_Run( 1, true );
 		break;
 	default:
 		break;
