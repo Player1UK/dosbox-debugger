@@ -1,14 +1,65 @@
 #include "dosbox.h"
 #if C_DEBUGGER
+#include "debugger_disasm.h"
+
 #include "hardware/memory.h"
-#include "Zydis/Zydis.h"
 #include <vector>
 #include <unordered_set>
 #include <set>
 
-static int opsize = 16;
+struct CompareFirst {
+    bool operator()( const std::pair<uint32_t, DecodedLine> &a,
+        const std::pair<uint32_t, DecodedLine> &b ) const {
+        return a.first < b.first;
+    }
+};
+static std::set<std::pair<uint32_t, DecodedLine>, CompareFirst> orderedCode;
+static std::set<uint16_t> orderedSegments;
 static std::vector<uint16_t> code_segments;
 static std::unordered_set<uint32_t> visited;
+
+static std::set<std::pair<uint32_t, DecodedLine>, CompareFirst>::iterator currentLine = orderedCode.end( );
+
+const DecodedLine & operator++( DecodedLine const &source ) { // Prefix increment
+    if( currentLine != orderedCode.end( ) && ++currentLine != orderedCode.end( ) )
+        const_cast<DecodedLine &>( source ) = currentLine->second;
+    else
+        const_cast<DecodedLine &>( source ) = orderedCode.begin( )->second;
+    return source;
+}
+const DecodedLine operator++( DecodedLine const &source, int ) { // Postfix increment
+    const DecodedLine original = source;
+    ++source;
+    return original;
+}
+
+const DecodedLine &operator--( DecodedLine const &source ) { // Prefix decrement
+    if( currentLine != orderedCode.begin( ) )
+        const_cast<DecodedLine &>( source ) = (--currentLine)->second;
+    return source;
+}
+const DecodedLine operator--( DecodedLine const &source, int ) { // Postfix decrement
+    const DecodedLine original = source;
+    --source;
+    return original;
+}
+
+const DecodedLine & DecodedLine::first( ) {
+    currentLine = orderedCode.begin( );
+    return currentLine->second;
+}
+const DecodedLine &DecodedLine::last( ) {
+    currentLine = orderedCode.end( );
+    --currentLine;
+    return currentLine->second;
+}
+
+bool DecodedLine::isStart( ) {
+    return currentLine == orderedCode.begin( );
+}
+bool DecodedLine::isEnd( ) {
+    return currentLine == orderedCode.end( );
+}
 
 uint16_t NumCodeSegments( ) {
     return code_segments.size( );
@@ -28,63 +79,43 @@ bool AddressVisited( uint16_t segment, uint32_t offset ) {
     return AddressVisited( offset + ( segment << 4 ) );
 }
 
-Bitu DasmI386( char *buffer, const PhysPt pc, const Bitu ip, const bool f32bit, const bool fProtected ) {
-	if( f32bit ) opsize = 32;
-	else opsize = 16;
-
-	// Loop over the instructions in our buffer.
+uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const bool f32bit, const bool fProtected ) {
 	ZydisDisassembledInstruction instruction;
 	if( ZYAN_SUCCESS( ZydisDisassembleIntel(
-		/* machine_mode:    */ ( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
-		/* runtime_address: */ ip,
-		/* buffer:          */ MemBase + pc,
-		/* length:          */ 8,
-		/* instruction:     */ &instruction
-	) ) ) {
+		( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
+		ip, MemBase + pc, ZYDIS_MAX_OPERAND_COUNT + 1, &instruction ) ) ) {
 		sprintf( buffer, "%s", instruction.text );
-	} else {
-		/* invalid instruction, use db xx */
+	} else { // invalid instruction, use db xx
 		sprintf( buffer, "db %02X", (unsigned) MemBase[pc] );
-		return 1;
+		return 1U;
 	}
 	return instruction.info.length;
 }
 
-int DasmLastOperandSize( ) {
-	return opsize;
+void DasmReset( ) {
+    orderedSegments.clear( );
+    visited.clear( );
+    orderedCode.clear( );
+    currentLine = orderedCode.end( );
 }
 
-typedef enum Mnemonic_Mask : uint8_t {
-	MM_NONE	            = 0x00,
-	MM_ConditionalJump  = 0x01,
-	MM_JMP		        = 0x02,
-	MM_CALL		        = 0x04,
-	MM_INT		        = 0x08,
-	MM_MOV		        = 0x10,
-	MM_RET		        = 0x20,
-	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
-} MNEMONIC_MASK;
-
 // Recursive disassembly function (credit: CoPilot)
-void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
+void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
     ZydisDecoder decoder;
     ZydisFormatter formatter;
     ZydisDecoderInit( &decoder,
         ( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
         ( f32bit ? ZYDIS_STACK_WIDTH_32 : ZYDIS_STACK_WIDTH_16 ) );
     ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL );
-    std::set<std::pair<uint32_t, char *>> orderedCode;
-    std::set<uint16_t> orderedSegments;
 
-    auto binary = MemBase;
+    const auto binary = MemBase;
     const size_t binarySize = MEM_TotalPages( ) * 4096; // DosPageSize
 
     uint32_t segment0 = startOffset - ip;
-    std::unordered_set<uint32_t> added;
     std::vector<ZydisDecodedOperandPtr> toVisit{ { static_cast<ZyanU16>( ( segment0 ) >> 4 ), ip } };
-    visited.clear( );
+    std::unordered_set<uint32_t> added;
 
-    uint8_t ah = 0U;
+    uint8_t ah = 0U; // for int 21h tracking
 
     while( !toVisit.empty( ) ) {
         ZydisDecodedOperandPtr address = toVisit.back( );
@@ -102,34 +133,40 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
             if( binary[base_offset] == 0 && binary[base_offset + 1] == 0 ) // 00 00
                 break;
 
-            ZydisDecodedInstruction instruction;
-            ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
-            if( ZYAN_SUCCESS( ZydisDecoderDecodeFull( &decoder, &binary[base_offset], binarySize - base_offset, &instruction, operands ) ) ) {
-                char *pBuffer = new char[128];
-                orderedCode.insert( { base_offset, pBuffer } );
+            auto entry = orderedCode.insert( { base_offset, DecodedLine( address, base_offset ) } );
+            if( !entry.second )
+                break;
+            DecodedLine &dline = const_cast<DecodedLine &>( entry.first->second );
+            if( ZYAN_SUCCESS( ZydisDecoderDecodeFull( &decoder, &binary[base_offset], binarySize - base_offset, &dline.instruction, dline.operands ) ) ) {
+                char *pBuffer = dline.szFormatted;
                 pBuffer += sprintf( pBuffer, "%04X:%04X ", address.segment, address.offset );
                 char *pBufferEnd = &pBuffer[24];
-                for( auto i = 0; i < instruction.length; ++i )
+                char *pOpCode = dline.szOpcode;
+                for( auto i = 0; i < dline.instruction.length; ++i ) {
                     pBuffer += sprintf( pBuffer, "%02X ", binary[base_offset + i] );
-                while( pBuffer < pBufferEnd )
+                    pOpCode += sprintf( pOpCode, "%02X ", binary[base_offset + i] );
+                }
+                while( pBuffer < pBufferEnd ) {
                     *pBuffer++ = ' ';
-                ZydisFormatterFormatInstruction( &formatter, &instruction, operands, ZYDIS_MAX_OPERAND_COUNT, pBuffer, 256, address.offset, ZYAN_NULL );
+                    *pOpCode++ = ' ';
+                }
+                *pOpCode = 0;
+                ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, pBuffer, 256, address.offset, ZYAN_NULL );
                 while( *pBuffer ) ++pBuffer;
 
-                address.offset += instruction.length;
-                base_offset += instruction.length;
+                address.offset += dline.instruction.length;
+                base_offset += dline.instruction.length;
 
                 // Handle recursion for jumps/calls
-                MNEMONIC_MASK mnemonicMask = MM_NONE;
-                switch( instruction.mnemonic ) {
+                switch( dline.instruction.mnemonic ) {
                 case ZYDIS_MNEMONIC_INT:
-                    mnemonicMask = MM_INT;
+                    dline.mnemonicMask = MM_INT;
                     break;
                 case ZYDIS_MNEMONIC_CALL:
-                    mnemonicMask = MM_CALL;
+                    dline.mnemonicMask = MM_CALL;
                     break;
                 case ZYDIS_MNEMONIC_JMP:
-                    mnemonicMask = MM_JMP;
+                    dline.mnemonicMask = MM_JMP;
                     break;
                 case ZYDIS_MNEMONIC_JB:
                 case ZYDIS_MNEMONIC_JBE:
@@ -152,24 +189,24 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                 case ZYDIS_MNEMONIC_JRCXZ:
                 case ZYDIS_MNEMONIC_JS:
                 case ZYDIS_MNEMONIC_JZ:
-                    mnemonicMask = MM_ConditionalJump;
+                    dline.mnemonicMask = MM_ConditionalJump;
                     break;
                 case ZYDIS_MNEMONIC_MOV:
-                    mnemonicMask = MM_MOV;
+                    dline.mnemonicMask = MM_MOV;
                     break;
                 case ZYDIS_MNEMONIC_RET:
-                    mnemonicMask = MM_RET;
+                    dline.mnemonicMask = MM_RET;
                     break;
                 default:
                     break;
                 }
-                if( mnemonicMask & MM_Branch ) {
+                if( dline.mnemonicMask & MM_Branch ) {
                     *pBuffer = '\n';
                     *++pBuffer = 0;
 
                     ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
-                    for( uint8_t i = 0; i < instruction.operand_count; ++i ) {
-                        auto& op = operands[i];
+                    for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
+                        auto& op = dline.operands[i];
                         switch( op.type ) {
                         case ZYDIS_OPERAND_TYPE_IMMEDIATE:
                             ptr.segment = address.segment;
@@ -194,21 +231,21 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                             toVisit.push_back( ptr );
                         }
                     }
-                    if( mnemonicMask & MM_JMP )
+                    if( dline.mnemonicMask & MM_JMP )
                         break;
-                } else if( mnemonicMask & MM_MOV ) {
-                    if( instruction.operand_count == 2 ) {
-                        if( operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER && ( operands[0].reg.value == ZYDIS_REGISTER_AH || operands[0].reg.value == ZYDIS_REGISTER_AX ) ) {
-                            if( operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE ) {
-                                if( operands[0].reg.value == ZYDIS_REGISTER_AH )
-                                    ah = static_cast<uint8_t>( operands[1].imm.value.u );
+                } else if( dline.mnemonicMask & MM_MOV ) {
+                    if( dline.instruction.operand_count == 2 ) {
+                        if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER && ( dline.operands[0].reg.value == ZYDIS_REGISTER_AH || dline.operands[0].reg.value == ZYDIS_REGISTER_AX ) ) {
+                            if( dline.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE ) {
+                                if( dline.operands[0].reg.value == ZYDIS_REGISTER_AH )
+                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u );
                                 else
-                                    ah = static_cast<uint8_t>( operands[1].imm.value.u >> 8U );
+                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
                             }
                         }
                     }
-                } else if( mnemonicMask & MM_INT ) {
-                    if( operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
+                } else if( dline.mnemonicMask & MM_INT ) {
+                    if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && dline.operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
                         pBufferEnd = &pBuffer[24];
                         --pBuffer;
                         while( pBuffer < pBufferEnd )
@@ -219,7 +256,7 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
                     }
                     *pBuffer = '\n';
                     *++pBuffer = 0;
-                } else if( mnemonicMask & MM_RET ) {
+                } else if( dline.mnemonicMask & MM_RET ) {
                     *pBuffer = '\n';
                     *++pBuffer = 0;
                     break;
@@ -230,20 +267,7 @@ void DasmRecursiveDisassemble( char *buffer, const uint32_t startOffset, const u
             }
         }
     }
-    char *pBuffer = buffer;
-    for( const auto &line : orderedCode ) {
-        strcpy( pBuffer, line.second );
-        while( *pBuffer ) ++pBuffer;
-        if( pBuffer[-1] == '\n' ) {
-            pBuffer[-1] = 0;
-            *pBuffer = '\n';
-            *++pBuffer = 0;
-        }
-        ++pBuffer;
-        delete[] line.second;
-    }
-    pBuffer += sprintf( pBuffer, "Disassembly finished. Processed %d instruction offsets.", (unsigned) visited.size( ) );
-    *++pBuffer = 0;
+    DEBUG_ShowMsg( "Disassembly finished. Processed %d instruction offsets.", (unsigned) visited.size( ) );
     code_segments.clear( );
     std::copy( orderedSegments.begin( ), orderedSegments.end( ), std::back_inserter( code_segments ) );
 }

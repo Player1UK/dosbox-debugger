@@ -1738,5 +1738,8 @@
     <ClInclude Include="include\unistd.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\debugger\debugger_disasm.h">
+      <Filter>Source Files\debugger</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

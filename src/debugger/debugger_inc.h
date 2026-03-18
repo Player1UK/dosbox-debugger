@@ -134,12 +134,7 @@ struct DebuggerInputEvent {
 	SDL_Event ev = {};
 	std::string text = {};
 };
-
 extern std::queue<DebuggerInputEvent> debugger_event_queue;
-
-/* Local Debug Stuff */
-Bitu DasmI386( char *buffer, const PhysPt pc, const Bitu cur_ip, const bool f32bit, const bool fProtected );
-int DasmLastOperandSize( );
 
 #endif // C_DEBUGGER
 

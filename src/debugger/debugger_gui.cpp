@@ -15,12 +15,12 @@
 #include "cpu/cpu.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"
+#include "debugger_disasm.h"
 #include "utils/string_utils.h"
 
 #include "IBM_VGA_8x16.h"
 
 extern bool AddressVisited( uint16_t, uint32_t );
-extern void DasmRecursiveDisassemble( char *, const uint32_t, const uint32_t, const bool, const bool );
 extern bool ParseCommand( char * );
 
 extern DBGBlock dbg;
@@ -31,7 +31,6 @@ extern std::vector<CDebugVar*> varList;
 
 SCodeViewData codeViewData = {};
 
-char codeBuffer[24 * 4096 * 128];
 char dataBuffer[24 * 4096 * 128];
 
 Bitu cycle_count = 0;
@@ -103,12 +102,20 @@ void SetCodeWinToEIP( ) {
 /*   Draw windows   */
 /********************/
 
-extern char* AnalyzeInstruction( char*, bool );
+extern char* AnalyzeInstruction( char*, bool, const bool );
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern bool GetDescriptorInfo( char*, char*, char* );
 
+const ImVec4 blue_color = ImVec4( 0.0f, 0.64f, 0.91f, 1.0f );
 const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
+const ImVec4 yellow_color = ImVec4( 1.0f, 0.99f, 0.33f, 1.0f );
+const ImVec4 jmp_color = ImVec4( 1.0f, 1.0f, 0.57f, 1.0f );
+const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
+const ImVec4 green_bg_color = ImVec4( 0.0f, 1.0f, 0.0f, 0.8f );
 const ImVec4 red_bg_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
+const ImVec4 segment_color = ImVec4( 0.73f, 0.48f, 0.34f, 1.0f );
+const ImVec4 grey_color = ImVec4( 0.5f, 0.5f, 0.5f, 1.0f );
+const ImVec4 offset_color = ImVec4( 0.94f, 0.53f, 0.31f, 1.0f );
 
 void DrawCode( void ) {
 	if( !DBGUI_IsInitialized( ) ) {
@@ -122,49 +129,73 @@ void DrawCode( void ) {
 	if( dbg.update_win[WIN_CODE] ) {
 		dbg.update_win[WIN_CODE] = false;
 		auto startOffset = GetAddress( codeViewData.useCS, codeViewData.useEIP );
-		DasmRecursiveDisassemble( codeBuffer, startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
+		DasmRecursiveDisassemble( startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
 		dbg.update_win_scroll[WIN_CODE] = true;
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( " Code", ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize ) ) {
 		static uint32_t selectedIndex = 0;
 		uint32_t i = 0;
-		for( auto line = codeBuffer; *line; ++line, ++i ) {
-			if( *line == '\n' ) {
-				ImGui::Spacing( );
-			} else if( line[4] == ':' ) {
-				char *endptr;
-				uint16_t segment = strtol( line, &endptr, 16 );
-				if( *endptr == ':' )
-					++endptr;
-				uint32_t offset = strtol( endptr, &endptr, 16 );
-
-				if( dbg.update_win_scroll[WIN_CODE] && segment == codeViewData.useCS && offset == codeViewData.useEIP ) {
-					dbg.update_win_scroll[WIN_CODE] = false;
-					ImGui::SetScrollHereY( );
-				}
-				
-				bool is_current_ip = ( segment == SegValue( cs ) ) && ( offset == reg_eip );
-				bool is_breakpoint = CBreakpoint::IsBreakpoint( segment, offset );
-				if( is_current_ip )
-					ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-				else if( is_breakpoint )
-					ImGui::PushStyleColor( ImGuiCol_Text, red_bg_color );
-				// Make line selectable
-				bool isSelected = ( selectedIndex == i );
-				if( ImGui::Selectable( line, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-					selectedIndex = i;
-					codeViewData.cursorSeg = segment;
-					codeViewData.cursorOfs = offset;
-				}
-				if( isSelected && ImGui::IsItemFocused( ) ) {
-					selectedIndex = i;
-				}
-				if( is_current_ip || is_breakpoint )
-					ImGui::PopStyleColor( );
-			} else {
-				ImGui::TextUnformatted( line );
+		for( auto dline = DecodedLine::first( ); !DecodedLine::isEnd( ); ++dline, ++i ) {
+			if( dbg.update_win_scroll[WIN_CODE] && dline.address.segment == codeViewData.useCS && dline.address.offset == codeViewData.useEIP ) {
+				dbg.update_win_scroll[WIN_CODE] = false;
+				ImGui::SetScrollHereY( );
 			}
-			while( *line ) ++line;
+			bool is_current_ip = ( dline.address.segment == SegValue( cs ) ) && ( dline.address.offset == reg_eip );
+			bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset );
+			if( is_current_ip )
+				ImGui::PushStyleColor( ImGuiCol_Text, green_bg_color );
+			else if( is_breakpoint )
+				ImGui::PushStyleColor( ImGuiCol_Text, red_bg_color );
+
+			// Make line selectable
+			bool isSelected = ( selectedIndex == i );
+			char id[11];
+			sprintf( id, "##%08X", dline.base_offset );
+			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+				selectedIndex = i;
+				codeViewData.cursorSeg = dline.address.segment;
+				codeViewData.cursorOfs = dline.address.offset;
+			}
+			if( isSelected && ImGui::IsItemFocused( ) ) {
+				selectedIndex = i;
+			}
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( segment_color, "%04X", dline.address.segment );
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( grey_color, ":" );
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( offset_color, "%04X", dline.address.offset );
+			ImGui::SameLine( );
+			ImGui::TextColored( grey_color, "%s", dline.szOpcode );
+			ImGui::SameLine( 0.0f, 0.0f );
+			auto lineIndex = 34;
+			if( dline.mnemonicMask & MM_CALL ) {
+				ImGui::TextColored( blue_color, "call" );
+				ImGui::SameLine( );
+				lineIndex += 5;
+			} else if( dline.mnemonicMask & MM_JMP ) {
+				ImGui::TextColored( jmp_color, "jmp" );
+				ImGui::SameLine( );
+				lineIndex += 4;
+			} else if( dline.mnemonicMask & MM_RET ) {
+				ImGui::TextColored( ret_color, "ret" );
+				ImGui::SameLine( 0.0f, 0.0f );
+				lineIndex += 3;
+			} else if( dline.mnemonicMask & MM_ConditionalJump ) {
+				while( dline.szFormatted[++lineIndex] != ' ' );
+				char jump[16];
+				strncpy( jump, &dline.szFormatted[34], lineIndex - 34 );
+				jump[lineIndex - 34] = 0;
+				ImGui::TextColored( yellow_color, "%s", jump );
+				ImGui::SameLine( 0.0f, 0.0f );
+			}
+			ImGui::Text( "%s", &dline.szFormatted[lineIndex] );
+
+			if( is_current_ip || is_breakpoint )
+				ImGui::PopStyleColor( );
+
+			if( dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET ) )
+				ImGui::Spacing( );
 		}
 	}
 	DBGUI_EndWindowWithStyledTitle( );

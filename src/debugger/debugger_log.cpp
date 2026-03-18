@@ -14,6 +14,7 @@
 #include "cpu/lazyflags.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"
+#include "debugger_disasm.h"
 #include "shell/shell.h"
 
 extern DBGBlock dbg;
@@ -160,7 +161,7 @@ uint32_t GetAddress( uint16_t seg, uint32_t offset ) {
 	return ( seg << 4 ) + offset;
 }
 
-char* AnalyzeInstruction( char* inst, bool saveSelector ) {
+char* AnalyzeInstruction( char* inst, bool saveSelector, const bool f32bit ) {
 	static char result[256];
 
 	char instu[256];
@@ -210,25 +211,14 @@ char* AnalyzeInstruction( char* inst, bool saveSelector ) {
 			if( cpu.pmode ) {
 				outmask[6] = '8';
 			}
-			switch( DasmLastOperandSize( ) ) {
-			case 8: {
-				uint8_t val = mem_readb<MemOpMode::SkipBreakpoints>(
-					address );
-				outmask[12] = '2';
-				sprintf( result, outmask, prefix, adr, val );
-			} break;
-			case 16: {
-				uint16_t val = mem_readw<MemOpMode::SkipBreakpoints>(
-					address );
-				outmask[12] = '4';
-				sprintf( result, outmask, prefix, adr, val );
-			} break;
-			case 32: {
-				uint32_t val = mem_readd<MemOpMode::SkipBreakpoints>(
-					address );
+			if( f32bit ) {
+				uint32_t val = mem_readd<MemOpMode::SkipBreakpoints>( address );
 				outmask[12] = '8';
 				sprintf( result, outmask, prefix, adr, val );
-			} break;
+			} else {
+				uint16_t val = mem_readw<MemOpMode::SkipBreakpoints>( address );
+				outmask[12] = '4';
+				sprintf( result, outmask, prefix, adr, val );
 			}
 		} else {
 			sprintf( result, "[illegal]" );
@@ -660,13 +650,12 @@ static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream&
 		return;
 	}
 
-	PhysPt start = GetAddress( segValue, eipValue );
 	char dline[200];
-	Bitu size;
-	size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
+	uint32_t start = GetAddress( segValue, eipValue );
+	uint32_t size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend && ( cpuLogType > 0 ) ) {
-		res = AnalyzeInstruction( dline, false );
+		res = AnalyzeInstruction( dline, false, cpu.code.big );
 		if( !res || !( *res ) ) {
 			res = empty;
 		}
@@ -892,12 +881,11 @@ void DEBUG_HeavyLogInstruction( ) {
 	static char empty[23] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 							 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
 
-	PhysPt start = GetAddress( SegValue( cs ), reg_eip );
 	char dline[200];
-	DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
+	DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend ) {
-		res = AnalyzeInstruction( dline, false );
+		res = AnalyzeInstruction( dline, false, cpu.code.big );
 		if( !res || !( *res ) ) {
 			res = empty;
 		}

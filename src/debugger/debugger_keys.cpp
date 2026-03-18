@@ -10,6 +10,7 @@
 #include "cpu/paging.h"
 #include "debugger.h"
 #include "debugger_inc.h"
+#include "debugger_disasm.h"
 #include "gui/common.h"
 #include "hardware/pic.h"
 #include "shell/shell.h"
@@ -37,7 +38,7 @@ extern std::list<std::string>::iterator histBuffPos;
 
 static bool SetRedirectBreakpoint( ) {
 	char dline[200];
-	Bitu size = DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
+	uint32_t size = DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
 
 	if( strstr( dline, "call" ) || strstr( dline, "int" ) ||
 		strstr( dline, "loop" ) || strstr( dline, "rep" ) ) {
