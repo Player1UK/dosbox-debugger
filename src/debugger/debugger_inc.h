@@ -48,8 +48,7 @@ namespace DBGUI {
 	constexpr size_t LogNameBufferSize = 64;
 
 	// Window dimensions (in characters/rows)
-	// +2 to account for padding
-	constexpr int DefaultWindowCols = 82;
+	constexpr int DefaultWindowCols = 80;
 
 	// ImGui style
 	constexpr float WindowRounding = 0.0f;
@@ -68,16 +67,17 @@ namespace DBGUI {
 	constexpr uint8_t ClearColorA = 255;
 
 } // namespace DBGUI
-const uint32_t NUM_WIN_DATA = 1;
+const uint8_t NUM_WIN_DATA = 2;
 
-enum WINDOW_ID :uint32_t {
+enum WINDOW_ID :uint16_t {
 	WIN_CODE = 0,
-	WIN_SEG,
 	WIN_REG,
-	WIN_DATA,
-	WIN_VAR,
+	WIN_SEG,
 	WIN_CON,
 	WIN_OUT,
+	WIN_DATA,
+	WIN_VAR,
+	WIN_STACK,
 	NUM_WINDOWS
 };
 
@@ -85,13 +85,14 @@ struct DBGBlock {
 	SDL_Window* win_main = nullptr;
 	SDL_GPUDevice* gpu_device = nullptr;
 	uint32_t active_win = 0;
-	uint32_t active_win_data = 0;    /* Current active data window */
-	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true };
-	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false };
+	uint8_t active_win_data = 0;    /* Current active data window */
+	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true, true, true };
+	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false };
+	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false };
 	uint32_t input_y = 0;
 	uint32_t global_mask = 0;
 	/* Window height values in rows */
-	uint16_t rows[NUM_WINDOWS] = { 52, 1U, 4U, 32U, 4U, 1U, 8U };
+	uint16_t rows[NUM_WINDOWS] = { 60U, 4U, 1U, 1U, 36U, 60U, 4U, 40U };
 
 	// Window dimensions (in characters)
 	int32_t window_cols = DBGUI::DefaultWindowCols;

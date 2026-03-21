@@ -46,10 +46,10 @@ Bitu DEBUG_Loop( void ) {
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
 		debugging = false;
 		DOSBOX_SetNormalLoop( );
-		return 0;
 	}
+	Bitu ret = 0;
 	// Check event queue
-	while( !debugger_event_queue.empty( ) ) {
+	while( debugging && !debugger_event_queue.empty( ) ) {
 		DebuggerInputEvent event = debugger_event_queue.front( );
 		debugger_event_queue.pop( );
 
@@ -58,20 +58,22 @@ Bitu DEBUG_Loop( void ) {
 
 		switch( event.ev.type ) {
 		case SDL_EVENT_KEY_DOWN:
-			DEBUG_ProcessKey( event.ev.key );
+			ret = DEBUG_ProcessKey( event.ev.key );
+			break;
+		case SDL_EVENT_WINDOW_MOVED:
 			break;
 		default:
 			break;
 		}
 	}
 	static auto tickCounter = GetTicks( );
-	if( GetTicksSince( tickCounter ) > frameInterval ) {
+	if( !debugging || GetTicksSince( tickCounter ) > frameInterval ) {
 		DBGUI_NewFrame( ); // Start a new ImGui frame
 		DEBUG_DrawScreen( ); // Draw debugger windows
 		DBGUI_Render( ); // Render ImGui
 		tickCounter += frameInterval;
 	}
-	return 0;
+	return ret;
 }
 
 void DEBUG_Enable( bool pressed ) {

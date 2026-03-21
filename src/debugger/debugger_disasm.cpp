@@ -7,18 +7,37 @@
 #include <unordered_set>
 #include <set>
 
-struct CompareFirst {
-    bool operator()( const std::pair<uint32_t, DecodedLine> &a,
-        const std::pair<uint32_t, DecodedLine> &b ) const {
-        return a.first < b.first;
+#include <fstream>
+
+// Generic struct template
+template <typename T1, typename T2>
+struct Pair {
+    T1 first; T2 second;
+    bool operator==( const Pair &other ) const noexcept { // Equality operator for comparisons
+        return first == other.first;
+    }
+    bool operator<( const Pair &other ) const noexcept { // Less than operator for comparisons
+        return first < other.first;
     }
 };
-static std::set<std::pair<uint32_t, DecodedLine>, CompareFirst> orderedCode;
+// Custom hash specialization for Pair<T1, T2>
+namespace std {
+    template <typename T1, typename T2>
+    struct hash<Pair<T1, T2>> {
+        std::size_t operator()( const Pair<T1, T2> &p ) const noexcept {
+            return std::hash<T1>{}( p.first );
+        }
+    };
+}
+
+static std::set<Pair<uint32_t, DecodedLine>> orderedCode;
 static std::set<uint16_t> orderedSegments;
 static std::vector<uint16_t> code_segments;
 static std::unordered_set<uint32_t> visited;
+static std::unordered_set<uint32_t> calls;
+static std::unordered_set<uint32_t> jumps;
 
-static std::set<std::pair<uint32_t, DecodedLine>, CompareFirst>::iterator currentLine = orderedCode.end( );
+static std::set<Pair<uint32_t, DecodedLine>>::iterator currentLine = orderedCode.end( );
 
 const DecodedLine & operator++( DecodedLine const &source ) { // Prefix increment
     if( currentLine != orderedCode.end( ) && ++currentLine != orderedCode.end( ) )
@@ -93,6 +112,8 @@ uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const boo
 }
 
 void DasmReset( ) {
+    calls.clear( );
+    jumps.clear( );
     orderedSegments.clear( );
     visited.clear( );
     orderedCode.clear( );
@@ -138,22 +159,17 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 break;
             DecodedLine &dline = const_cast<DecodedLine &>( entry.first->second );
             if( ZYAN_SUCCESS( ZydisDecoderDecodeFull( &decoder, &binary[base_offset], binarySize - base_offset, &dline.instruction, dline.operands ) ) ) {
-                char *pBuffer = dline.szFormatted;
-                pBuffer += sprintf( pBuffer, "%04X:%04X ", address.segment, address.offset );
-                char *pBufferEnd = &pBuffer[24];
                 char *pOpCode = dline.szOpcode;
-                for( auto i = 0; i < dline.instruction.length; ++i ) {
-                    pBuffer += sprintf( pBuffer, "%02X ", binary[base_offset + i] );
+                for( auto i = 0; i < dline.instruction.length; ++i )
                     pOpCode += sprintf( pOpCode, "%02X ", binary[base_offset + i] );
-                }
-                while( pBuffer < pBufferEnd ) {
-                    *pBuffer++ = ' ';
-                    *pOpCode++ = ' ';
-                }
-                *pOpCode = 0;
-                ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, pBuffer, 256, address.offset, ZYAN_NULL );
-                while( *pBuffer ) ++pBuffer;
 
+                ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, dline.szInstruction, sizeof( dline.szInstruction ), address.offset, ZYAN_NULL );
+                char *cptr = dline.szInstruction;
+                while( *cptr && *cptr != ' ' ) ++cptr;
+                if( cptr ) {
+                    *cptr++ = 0;
+                    dline.szOperands = cptr;
+                }
                 address.offset += dline.instruction.length;
                 base_offset += dline.instruction.length;
 
@@ -195,15 +211,49 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     dline.mnemonicMask = MM_MOV;
                     break;
                 case ZYDIS_MNEMONIC_RET:
+                case ZYDIS_MNEMONIC_IRET:
                     dline.mnemonicMask = MM_RET;
+                    break;
+                case ZYDIS_MNEMONIC_ENTER:
+                case ZYDIS_MNEMONIC_LEAVE:
+                case ZYDIS_MNEMONIC_POP:
+                case ZYDIS_MNEMONIC_POPA:
+                case ZYDIS_MNEMONIC_POPAD:
+                case ZYDIS_MNEMONIC_POPF:
+                case ZYDIS_MNEMONIC_POPFD:
+                case ZYDIS_MNEMONIC_POPFQ:
+                case ZYDIS_MNEMONIC_PUSH:
+                case ZYDIS_MNEMONIC_PUSHA:
+                case ZYDIS_MNEMONIC_PUSHAD:
+                case ZYDIS_MNEMONIC_PUSHF:
+                case ZYDIS_MNEMONIC_PUSHFD:
+                case ZYDIS_MNEMONIC_PUSHFQ:
+                    dline.mnemonicMask = MM_Stack;
+                    break;
+                case ZYDIS_MNEMONIC_CMP:
+                    dline.mnemonicMask = MM_CMP;
+                    break;
+                case ZYDIS_MNEMONIC_AND:
+                case ZYDIS_MNEMONIC_NOT:
+                case ZYDIS_MNEMONIC_OR:
+                case ZYDIS_MNEMONIC_TEST:
+                case ZYDIS_MNEMONIC_XOR:
+                    dline.mnemonicMask = MM_Logical;
+                    break;
+                case ZYDIS_MNEMONIC_ADD:
+                case ZYDIS_MNEMONIC_DEC:
+                case ZYDIS_MNEMONIC_DIV:
+                case ZYDIS_MNEMONIC_IDIV:
+                case ZYDIS_MNEMONIC_IMUL:
+                case ZYDIS_MNEMONIC_INC:
+                case ZYDIS_MNEMONIC_MUL:
+                case ZYDIS_MNEMONIC_SUB:
+                    dline.mnemonicMask = MM_Math;
                     break;
                 default:
                     break;
                 }
                 if( dline.mnemonicMask & MM_Branch ) {
-                    *pBuffer = '\n';
-                    *++pBuffer = 0;
-
                     ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
                     for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
                         auto& op = dline.operands[i];
@@ -229,6 +279,10 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                         if( !added.count( addr ) && !visited.count( addr ) ) {
                             added.insert( addr );
                             toVisit.push_back( ptr );
+                            if( dline.mnemonicMask & MM_CALL )
+                                calls.insert( addr );
+                            else
+                                jumps.insert( addr );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -246,19 +300,10 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                 } else if( dline.mnemonicMask & MM_INT ) {
                     if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && dline.operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
-                        pBufferEnd = &pBuffer[24];
-                        --pBuffer;
-                        while( pBuffer < pBufferEnd )
-                            *pBuffer++ = ' ';
-                        pBuffer += sprintf( pBuffer, "; DOS - Exit\n" );
-                        ++pBuffer;
+                        sprintf( dline.szComment, "; DOS - Exit" );
                         break;
                     }
-                    *pBuffer = '\n';
-                    *++pBuffer = 0;
                 } else if( dline.mnemonicMask & MM_RET ) {
-                    *pBuffer = '\n';
-                    *++pBuffer = 0;
                     break;
                 }
             } else { // Treat as data; step forward 1 byte
@@ -270,5 +315,65 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
     DEBUG_ShowMsg( "Disassembly finished. Processed %d instruction offsets.", (unsigned) visited.size( ) );
     code_segments.clear( );
     std::copy( orderedSegments.begin( ), orderedSegments.end( ), std::back_inserter( code_segments ) );
+}
+
+struct Proc {
+    uint32_t base_offset;
+    char szProc[13];
+};
+struct Label {
+    uint32_t base_offset;
+    char szLabel[13];
+};
+
+static std::unordered_set<Pair<uint32_t, Proc>> procs;
+static std::unordered_set<Pair<uint32_t, Label>> labels;
+
+void Dasm_WriteFile( ) {
+    DEBUG_ShowMsg( "DEBUG: Creating asm file Code.asm\n" );
+
+    std::ofstream out( "Code.asm" );
+    if( !out.is_open( ) ) {
+        DEBUG_ShowMsg( "DEBUG: Failed.\n" );
+        return;
+    }
+    char indent[] = "                ";
+    out << indent << ".model large" << std::endl << indent << ".486p" << std::endl << std::endl;
+
+    ZydisFormatter formatter;
+    ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL_MASM );
+
+    uint16_t currentSegment = -1;
+    char szSegment[8] = "";
+    using std::setw;
+    for( const auto &entry : orderedCode ) {
+        const auto &dline = entry.second;
+        if( dline.address.segment != currentSegment ) {
+            if( currentSegment != static_cast<uint16_t>( -1 ) )
+                out << setw( sizeof( indent ) ) << szSegment << "ends" << std::endl << std::endl;
+            currentSegment = dline.address.segment;
+            sprintf( szSegment, "seg%04X", currentSegment );
+            out << setw( sizeof( indent ) ) << szSegment << "segment para public 'CODE' use16" << std::endl \
+                << indent << "assume cs:seg000, ds:@DATA" << std::endl << std::endl;
+        }
+        char szFormattedInstruction[128];
+        char const *szOperator = szFormattedInstruction;
+        char const *szOperands = nullptr;
+        ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, szFormattedInstruction, sizeof( szFormattedInstruction ), dline.address.offset, ZYAN_NULL );
+        char *cptr = szFormattedInstruction;
+        while( *cptr && *cptr != ' ' ) ++cptr;
+        if( cptr ) {
+            *cptr++ = 0;
+            szOperands = cptr;
+        }
+        if( calls.count( dline.base_offset ) ) {
+            auto entry = procs.insert( { dline.base_offset, Proc( dline.base_offset ) } );
+            Proc &sub = const_cast<Proc &>( entry.first->second );
+            sprintf( sub.szProc, "sub_%08X", dline.base_offset );
+        }
+        out << indent << setw( 8 ) << szOperator << szOperands << std::endl;
+    }
+    out.close( );
+    DEBUG_ShowMsg( "DEBUG: Done.\n" );
 }
 #endif // C_DEBUGGER

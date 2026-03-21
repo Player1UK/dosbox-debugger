@@ -6,14 +6,18 @@
 #if C_DEBUGGER
 #include "Zydis/Zydis.h"
 
-typedef enum Mnemonic_Mask : uint8_t {
-	MM_NONE	            = 0x00,
-	MM_ConditionalJump  = 0x01,
-	MM_JMP		        = 0x02,
-	MM_CALL		        = 0x04,
-	MM_INT		        = 0x08,
-	MM_MOV		        = 0x10,
-	MM_RET		        = 0x20,
+typedef enum Mnemonic_Mask : uint16_t {
+	MM_NONE	            = 0x0000,
+	MM_ConditionalJump  = 0x0001,
+	MM_JMP		        = 0x0002,
+	MM_CALL		        = 0x0004,
+	MM_INT		        = 0x0008,
+	MM_MOV		        = 0x0010,
+	MM_RET		        = 0x0020,
+	MM_CMP		        = 0x0040,
+	MM_Logical	        = 0x0080,
+	MM_Math				= 0x0100,
+	MM_Stack	        = 0x0200,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
 } MNEMONIC_MASK;
 
@@ -23,8 +27,10 @@ struct DecodedLine {
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
-	char szFormatted[128];
 	char szOpcode[25];
+	char szInstruction[128];
+	char szComment[64] = "";
+	char const *szOperands = nullptr;
 
 	static const DecodedLine &first( );
 	static const DecodedLine &last( );

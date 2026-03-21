@@ -40,6 +40,7 @@ extern void DrawCode( void );
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern void SetCodeWinToEIP( );
+extern void SetCodeWinToAddress( uint16_t, uint32_t );
 
 extern SCodeViewData codeViewData;
 
@@ -627,9 +628,7 @@ bool ParseCommand( char* str ) {
 		++found;
 		uint32_t codeOfs = GetHexValue( found, found );
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", codeSeg, codeOfs );
-		codeViewData.useCS = codeSeg;
-		codeViewData.useEIP = codeOfs;
-		dbg.update_win_scroll[WIN_CODE] = true;
+		SetCodeWinToAddress( codeSeg, codeOfs );
 		return true;
 	}
 
@@ -637,10 +636,8 @@ bool ParseCommand( char* str ) {
 		dataSeg[dbg.active_win_data] = (uint16_t) GetHexValue( found, found );
 		++found;
 		dataOfs[dbg.active_win_data] = GetHexValue( found, found );
-		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n",
-			dataSeg[dbg.active_win_data],
-			dataOfs[dbg.active_win_data] );
-		dbg.update_win[WIN_DATA] = true;
+		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_win_data], dataOfs[dbg.active_win_data] );
+		dbg.update_win_scroll[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
 		return true;
 	}
 
