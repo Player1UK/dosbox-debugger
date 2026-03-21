@@ -784,6 +784,9 @@ static void add_dosbox_config_section(const ConfigPtr& conf)
 	auto section = conf->AddSection("dosbox");
 	section->AddUpdateHandler(notify_dosbox_setting_updated);
 
+	auto pbool = section->AddBool( "console", OnlyAtStart, true );
+	pbool->SetHelp( "Console ('enabled' by default)." );
+
 	auto pstring = section->AddString("language", Always, "auto");
 
 	pstring->SetHelp(
@@ -967,7 +970,7 @@ static void add_dosbox_config_section(const ConfigPtr& conf)
 	        "               modes available in this mode are often required by late '90s\n"
 	        "               demoscene productions.");
 
-	auto pbool = section->AddBool("vga_8dot_font", OnlyAtStart, false);
+	pbool = section->AddBool("vga_8dot_font", OnlyAtStart, false);
 	pbool->SetHelp("Use 8-pixel-wide fonts on VGA adapters ('off' by default).");
 
 	pbool = section->AddBool("vga_render_per_scanline", OnlyAtStart, true);

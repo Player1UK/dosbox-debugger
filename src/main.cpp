@@ -465,7 +465,7 @@ static void handle_cli_set_commands(const std::vector<std::string>& set_args)
 	}
 }
 
-#if defined(WIN32) && !(C_DEBUGGER)
+#if defined(WIN32) && !defined(_DEBUG)
 static void apply_windows_debugger_workaround(const bool is_console_disabled)
 {
 	// Can't disable the console with debugger enabled
@@ -676,6 +676,17 @@ int main(int argc, char* argv[])
 #endif
 
 #if defined(WIN32)
+#if !defined(_DEBUG)
+		{
+			const auto conf = control->GetSection( "dosbox" );
+			const auto section = static_cast<SectionProp *>( conf );
+			assert( section );
+			bool consoleEnabled = section->GetBool( "console" );
+			if( !consoleEnabled ) {
+				apply_windows_debugger_workaround( true );
+			}
+		}
+#endif
 		SetConsoleCtrlHandler((PHANDLER_ROUTINE)console_event_handler, TRUE);
 #endif
 

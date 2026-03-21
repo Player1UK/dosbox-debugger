@@ -11,6 +11,8 @@ make.log
 .current_build
 *.defines
 missed.txt
+stderr.txt
+stdout.txt
 
 # Common names for build dirs
 build
