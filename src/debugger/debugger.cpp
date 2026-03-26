@@ -25,14 +25,15 @@ extern void SetCodeWinToEIP( );
 
 DBGBlock dbg = {};
 bool debugging = false;
-bool exitLoop = false;
+bool forceDraw = false;
+bool exitNormalLoop = false;
+bool exitDebugLoop = false;
 
 // Event queue
 std::queue<DebuggerInputEvent> debugger_event_queue = {};
 const int64_t frameInterval = 1000 / 60;
 
 Bitu DEBUG_Loop( void ) {
-	// TODO Disable sound
 	if( !GFX_PollAndHandleEvents( ) )
 		return -1;
 
@@ -60,18 +61,28 @@ Bitu DEBUG_Loop( void ) {
 		case SDL_EVENT_KEY_DOWN:
 			ret = DEBUG_ProcessKey( event.ev.key );
 			break;
-		case SDL_EVENT_WINDOW_MOVED:
+		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+			DEBUG_Close( );
+			return ret;
 			break;
 		default:
 			break;
 		}
 	}
 	static auto tickCounter = GetTicks( );
-	if( !debugging || GetTicksSince( tickCounter ) > frameInterval ) {
+	if( forceDraw || ( debugging && GetTicksSince( tickCounter ) > frameInterval ) ) {
+		forceDraw = false;
 		DBGUI_NewFrame( ); // Start a new ImGui frame
-		DEBUG_DrawScreen( ); // Draw debugger windows
+		DBGUI_DrawScreen( ); // Draw debugger windows
 		DBGUI_Render( ); // Render ImGui
 		tickCounter += frameInterval;
+	}
+	if( exitDebugLoop ) {
+		exitDebugLoop = false;
+		exitNormalLoop = true;
+		DBGUI_Reset( );
+		DBGUI_SaveCPUstate( );
+		return -1;
 	}
 	return ret;
 }
@@ -81,12 +92,10 @@ void DEBUG_Enable( bool pressed ) {
 		return;
 
 	static bool was_ui_started = false;
-	if( !was_ui_started ) {
-		DBGUI_StartUp( );
-		was_ui_started = DBGUI_IsInitialized( );
-	} else {
-		//SDL_ShowWindow(pdc_window);
-	}
+	if( !was_ui_started )
+		was_ui_started = DBGUI_StartUp( );
+	else
+		SDL_ShowWindow( dbg.win_main );
 
 	if( !was_ui_started ) { // The debugger is run in release mode so cannot use asserts
 		LOG_ERR( "DEBUG: Failed to start up the debug window" );
@@ -110,80 +119,70 @@ void DEBUG_Enable( bool pressed ) {
 }
 
 void DEBUG_Close( ) {
-	//SDL_HideWindow(pdc_window);
+	SDL_HideWindow( dbg.win_main );
 	debugging = false;
 	DOSBOX_SetNormalLoop( );
 }
 
-class DEBUG;
 DEBUG* pDebugcom = nullptr;
-
 // DEBUG.COM stuff
-class DEBUG final : public Program {
-public:
-	DEBUG( ) : active( false ) {
-		pDebugcom = this;
+DEBUG::DEBUG( ) : active( false ) {
+	pDebugcom = this;
+}
+DEBUG::~DEBUG( ) {
+	pDebugcom = nullptr;
+}
+
+bool DEBUG::IsActive( ) const {
+	return active;
+}
+
+void DEBUG::Run( ) {
+	if( cmd->FindExist( "/NOMOUSE", false ) ) {
+		real_writed( 0, 0x33 << 2, 0 );
+		return;
 	}
 
-	~DEBUG( ) override {
-		pDebugcom = nullptr;
+	uint16_t commandNr = 1;
+	if( !cmd->FindCommand( commandNr++, temp_line ) ) {
+		return;
+	}
+	// Get filename
+	safe_strcpy( filename, temp_line.c_str( ) );
+	// Setup commandline
+	char args[256 + 1];
+	args[0] = 0;
+	bool found = cmd->FindCommand( commandNr++, temp_line );
+	while( found ) {
+		if( safe_strlen( args ) + temp_line.length( ) + 1 > 256 ) {
+			break;
+		}
+		strcat( args, temp_line.c_str( ) );
+		found = cmd->FindCommand( commandNr++, temp_line );
+		if( found ) {
+			strcat( args, " " );
+		}
+	}
+	// Start new shell and execute prog
+	active = true;
+	// Save cpu state....
+	uint16_t oldcs = SegValue( cs );
+	uint32_t oldeip = reg_eip;
+	uint16_t oldss = SegValue( ss );
+	uint32_t oldesp = reg_esp;
+
+	// Start shell
+	DOS_Shell shell;
+	if( !shell.ExecuteProgram( filename, args ) ) {
+		WriteOut( MSG_Get( "PROGRAM_EXECUTABLE_MISSING" ), filename );
 	}
 
-	bool IsActive( ) const {
-		return active;
-	}
-
-	void Run( ) override {
-		if( cmd->FindExist( "/NOMOUSE", false ) ) {
-			real_writed( 0, 0x33 << 2, 0 );
-			return;
-		}
-
-		uint16_t commandNr = 1;
-		if( !cmd->FindCommand( commandNr++, temp_line ) ) {
-			return;
-		}
-		// Get filename
-		char filename[128];
-		safe_strcpy( filename, temp_line.c_str( ) );
-		// Setup commandline
-		char args[256 + 1];
-		args[0] = 0;
-		bool found = cmd->FindCommand( commandNr++, temp_line );
-		while( found ) {
-			if( safe_strlen( args ) + temp_line.length( ) + 1 > 256 ) {
-				break;
-			}
-			strcat( args, temp_line.c_str( ) );
-			found = cmd->FindCommand( commandNr++, temp_line );
-			if( found ) {
-				strcat( args, " " );
-			}
-		}
-		// Start new shell and execute prog
-		active = true;
-		// Save cpu state....
-		uint16_t oldcs = SegValue( cs );
-		uint32_t oldeip = reg_eip;
-		uint16_t oldss = SegValue( ss );
-		uint32_t oldesp = reg_esp;
-
-		// Start shell
-		DOS_Shell shell;
-		if( !shell.ExecuteProgram( filename, args ) ) {
-			WriteOut( MSG_Get( "PROGRAM_EXECUTABLE_MISSING" ), filename );
-		}
-
-		// set old reg values
-		SegSet16( ss, oldss );
-		reg_esp = oldesp;
-		SegSet16( cs, oldcs );
-		reg_eip = oldeip;
-	}
-
-private:
-	bool active;
-};
+	// set old reg values
+	SegSet16( ss, oldss );
+	reg_esp = oldesp;
+	SegSet16( cs, oldcs );
+	reg_eip = oldeip;
+}
 
 void DEBUG_CheckExecuteBreakpoint( uint16_t seg, uint32_t off ) {
 	if( pDebugcom && pDebugcom->IsActive( ) ) {
@@ -194,7 +193,7 @@ void DEBUG_CheckExecuteBreakpoint( uint16_t seg, uint32_t off ) {
 }
 
 Bitu DEBUG_EnableDebugger( ) {
-	exitLoop = true;
+	exitNormalLoop = true;
 	DEBUG_Enable( true );
 	CPU_Cycles = CPU_CycleLeft = 0;
 	return 0;
@@ -235,9 +234,9 @@ void DEBUG_AddConfigSection( const ConfigPtr& conf ) {
 	conf->AddSection( "debug" );
 }
 
-bool DEBUG_ExitLoop( void ) {
-	if( exitLoop ) {
-		exitLoop = false;
+bool DEBUG_ExitNormalLoop( void ) {
+	if( exitNormalLoop ) {
+		exitNormalLoop = false;
 		return true;
 	}
 	return false;

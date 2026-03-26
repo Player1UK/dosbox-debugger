@@ -10,6 +10,7 @@
 
 #if C_DEBUGGER
 
+#include "dos/programs.h"
 #include "hardware/memory.h"
 #include <SDL3/SDL.h>
 #include <queue>
@@ -23,15 +24,25 @@ enum DebugColorPairs {
 	PAIR_BLACK_GREEN = 6,
 };
 
-void DBGUI_StartUp( );
+typedef enum Window_ID :uint8_t {
+	WIN_CODE = 0U,
+	WIN_REG,
+	WIN_SEG,
+	WIN_CON,
+	WIN_OUT,
+	WIN_VAR,
+	WIN_DATA,
+	WIN_STACK,
+	NUM_WINDOWS
+} WINDOW_ID;
+WINDOW_ID &operator++( WINDOW_ID &id );
+
+bool DBGUI_StartUp( );
 void DBGUI_Shutdown( );
 void DBGUI_NewFrame( );
 void DBGUI_Render( );
-bool DBGUI_IsInitialized( );
-void DBGUI_DrawOutputWindow( );
-float DBGUI_GetWindowY( uint32_t window_index );
-float DBGUI_GetTotalHeight( );
-float DBGUI_GetWindowWidth( );
+void DBGUI_Reset( );
+void DBGUI_SaveCPUstate( );
 
 // Window title styling helpers (cyan background, black text)
 bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags );
@@ -48,7 +59,7 @@ namespace DBGUI {
 	constexpr size_t LogNameBufferSize = 64;
 
 	// Window dimensions (in characters/rows)
-	constexpr int DefaultWindowCols = 80;
+	constexpr uint8_t DefaultWindowCols = 80;
 
 	// ImGui style
 	constexpr float WindowRounding = 0.0f;
@@ -69,17 +80,10 @@ namespace DBGUI {
 } // namespace DBGUI
 const uint8_t NUM_WIN_DATA = 2;
 
-enum WINDOW_ID :uint16_t {
-	WIN_CODE = 0,
-	WIN_REG,
-	WIN_SEG,
-	WIN_CON,
-	WIN_OUT,
-	WIN_DATA,
-	WIN_VAR,
-	WIN_STACK,
-	NUM_WINDOWS
-};
+typedef struct ColumnRows {
+	uint8_t		column;
+	uint8_t		rows;
+} COLUMNROWS;
 
 struct DBGBlock {
 	SDL_Window* win_main = nullptr;
@@ -92,10 +96,10 @@ struct DBGBlock {
 	uint32_t input_y = 0;
 	uint32_t global_mask = 0;
 	/* Window height values in rows */
-	uint16_t rows[NUM_WINDOWS] = { 60U, 4U, 1U, 1U, 36U, 60U, 4U, 40U };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 1U }, { 1U, 1U }, { 1U, 36U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
-	int32_t window_cols = DBGUI::DefaultWindowCols;
+	const uint8_t window_cols[3] = { ( DBGUI::DefaultWindowCols >> 1 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;
@@ -129,13 +133,26 @@ struct SCodeViewData {
 	char suspInputStr[MAXCMDLEN + 1] = {};
 };
 
-
 // Event queue for debugger input
 struct DebuggerInputEvent {
 	SDL_Event ev = {};
 	std::string text = {};
 };
 extern std::queue<DebuggerInputEvent> debugger_event_queue;
+
+class DEBUG final : public Program {
+public:
+	DEBUG( );
+	~DEBUG( ) override;
+
+	bool IsActive( ) const;
+	void Run( ) override;
+
+	char filename[128] = "";
+private:
+	bool active;
+};
+extern DEBUG *pDebugcom;
 
 #endif // C_DEBUGGER
 

@@ -13,6 +13,7 @@
 #include "cbreakpoint.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"
+#include "dos/dos.h"
 #include "gui/common.h"
 #include "hardware/pic.h"
 
@@ -36,15 +37,15 @@ extern void LogPages( char* );
 extern void LogCPUInfo( void );
 extern void OutputVecTable( char* );
 
-extern void DrawCode( void );
-
 extern uint32_t GetAddress( uint16_t, uint32_t );
+extern uint16_t RealSegValue( const SegNames index );
 extern void SetCodeWinToEIP( );
 extern void SetCodeWinToAddress( uint16_t, uint32_t );
 
 extern SCodeViewData codeViewData;
 
 extern bool debugging;
+extern bool exitDebugLoop;
 
 extern bool showExtend;
 
@@ -633,11 +634,16 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "D" ) { // Set data overview
-		dataSeg[dbg.active_win_data] = (uint16_t) GetHexValue( found, found );
+		uint16_t segment = GetHexValue( found, found );
 		++found;
-		dataOfs[dbg.active_win_data] = GetHexValue( found, found );
+		uint16_t offset = GetHexValue( found, found );
+		if( segment != dataSeg[dbg.active_win_data] || offset > 0xFFFF )
+			dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		else
+			dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dataSeg[dbg.active_win_data] = segment;
+		dataOfs[dbg.active_win_data] = offset;
 		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_win_data], dataOfs[dbg.active_win_data] );
-		dbg.update_win_scroll[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
 		return true;
 	}
 
@@ -699,7 +705,6 @@ bool ParseCommand( char* str ) {
 		CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip, true );
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip - 1 );
 		debugging = false;
-		DrawCode( );
 		DOSBOX_SetNormalLoop( );
 		CPU_HW_Interrupt( intNr );
 		return true;
@@ -793,7 +798,24 @@ bool ParseCommand( char* str ) {
 	}
 
 #endif
-	if( command == "HELP" || command == "?" ) {
+	if( command == "X" || command == "TERMINATE" ) {
+		auto psp_seg = dos.psp( );
+		uint32_t *dwPSP = reinterpret_cast<uint32_t *>( &MemBase[psp_seg << 4] );
+		uint32_t *dwEnd = reinterpret_cast<uint32_t *>( &MemBase[RealSegValue( ss ) << 4] );
+		for( uint32_t *dw = &dwPSP[0x40]; dw < dwEnd; ++dw ) // clear program memory
+			*dw = 0U;
+		DBGUI_Reset( );
+		DBGUI_SaveCPUstate( );
+		DOS_Terminate( psp_seg, false, 2 );
+		dwEnd = &dwPSP[0x40];
+		for( uint32_t *dw = dwPSP; dw < dwEnd; ++dw ) // clear PSP
+			*dw = 0U;
+		reg_ip = 0;
+		SegSet16( cs, dos.psp( ) + 0x10 );
+		exitDebugLoop = true;
+	}
+
+	if( command == "?" || command == "HELP" ) {
 		//DEBUG_ShowMsg("Debugger commands (enter all values in hex or as register):\n");
 		DEBUG_ShowMsg( "Commands ----------------------------------------------------------------------\n" );
 		DEBUG_ShowMsg( "BP     [segment]:[offset] - Set breakpoint.\n" );
@@ -840,6 +862,8 @@ bool ParseCommand( char* str ) {
 		DEBUG_ShowMsg( "PAGING [page]             - Display content of page table.\n" );
 		DEBUG_ShowMsg( "EXTEND                    - Toggle additional info.\n" );
 		DEBUG_ShowMsg( "TIMERIRQ                  - Run the system timer.\n" );
+		
+		DEBUG_ShowMsg( "TERMINATE / X             - Terminate the current executable.\n" );
 
 		//DEBUG_ShowMsg("HELP                      - Help\n");
 		DEBUG_ShowMsg( "Keys --------------------------------------------------------------------------\n" );

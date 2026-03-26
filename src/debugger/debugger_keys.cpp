@@ -16,17 +16,16 @@
 #include "shell/shell.h"
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
+extern uint16_t RealSegValue( const SegNames index );
 extern void SetCodeWinToEIP( );
-extern void SaveCPUstate( );
 
-extern bool exitLoop;
+extern bool exitNormalLoop;
 
 extern DBGBlock dbg;
 extern bool debugging;
+extern bool forceDraw;
 
 extern SCodeViewData codeViewData;
-
-extern bool showPrintable;
 
 uint16_t dataSeg[NUM_WIN_DATA] = { 0, 0 };//, 0, 0 };
 uint32_t dataOfs[NUM_WIN_DATA] = { 0, 0 };//, 0, 0 };
@@ -52,7 +51,7 @@ static bool SetRedirectBreakpoint( ) {
 }
 
 static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
-	SaveCPUstate( );
+	DBGUI_SaveCPUstate( );
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
@@ -78,68 +77,68 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 	case SDLK_C: // ALT - C: CS:IP
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( cs );
+		dataSeg[dbg.active_win_data] = RealSegValue( cs );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_eip;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_ip;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_D: // ALT - D: DS:SI
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( ds );
+		dataSeg[dbg.active_win_data] = RealSegValue( ds );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_esi;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_si;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_E: // ALT - E: es:di
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( es );
+		dataSeg[dbg.active_win_data] = RealSegValue( es );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_edi;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_di;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_X: // ALT - X: ds:dx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( ds );
+		dataSeg[dbg.active_win_data] = RealSegValue( ds );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_edx;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_dx;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_B: // ALT -B: es:bx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( es );
+		dataSeg[dbg.active_win_data] = RealSegValue( es );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_ebx;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_bx;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_S: // ALT - S: ss:sp
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = SegValue( ss );
+		dataSeg[dbg.active_win_data] = RealSegValue( ss );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 			dataOfs[dbg.active_win_data] = reg_esp;
 		} else {
 			dataOfs[dbg.active_win_data] = reg_sp;
 		}
-		dbg.update_win[dbg.active_win_data ? WIN_STACK : WIN_DATA] = true;
+		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_F6: // previous command (f1-f4 generate rubbish at my place)
 	case SDLK_F3: // previous command
@@ -169,10 +168,8 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		break;
 	case SDLK_F5: // Run Program
 		debugging = false;
+		forceDraw = true;
 		ret = DEBUG_Run( 1, false );
-		break;
-	case SDLK_F8: // Toggle printable characters
-		showPrintable = !showPrintable;
 		break;
 	case SDLK_F9: // Set/Remove Breakpoint
 		if( CBreakpoint::IsBreakpoint( codeViewData.cursorSeg,
@@ -199,7 +196,6 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			break;
 		}
 	case SDLK_F10: // Step over instruction
-		exitLoop = false;
 		if( SetRedirectBreakpoint( ) && key.key == SDLK_F10 ) {
 			debugging = false;
 			ret = DEBUG_Run( 1, false );
@@ -209,22 +205,16 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 	default:
 		break;
 	}
-	if( ret < 0 ) {
-		return ret;
-	}
 	if( ret > 0 ) {
-		if( ret >= CB_MAX ) {
+		if( ret >= CB_MAX )
 			ret = 0;
-		} else {
+		else
 			ret = ( *Callback_Handlers[ret] )( );
-		}
 		if( ret ) {
-			exitLoop = true;
+			exitNormalLoop = true;
 			CPU_Cycles = CPU_CycleLeft = 0;
-			return ret;
 		}
 	}
-	ret = 0;
 	return ret;
 }
 #endif // C_DEBUGGER

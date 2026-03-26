@@ -2,6 +2,8 @@
 #if C_DEBUGGER
 #include "debugger_disasm.h"
 
+#include "cpu/callback.h"
+#include "cpu/cpu.h"
 #include "hardware/memory.h"
 #include <vector>
 #include <unordered_set>
@@ -79,6 +81,9 @@ bool DecodedLine::isStart( ) {
 bool DecodedLine::isEnd( ) {
     return currentLine == orderedCode.end( );
 }
+bool DecodedLine::isEmpty( ) {
+    return orderedCode.empty( );
+}
 
 uint16_t NumCodeSegments( ) {
     return code_segments.size( );
@@ -105,20 +110,57 @@ uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const boo
 		ip, MemBase + pc, ZYDIS_MAX_OPERAND_COUNT + 1, &instruction ) ) ) {
 		sprintf( buffer, "%s", instruction.text );
 	} else { // invalid instruction, use db xx
-		sprintf( buffer, "db %02X", (unsigned) MemBase[pc] );
+		sprintf( buffer, "db %02X", MemBase[pc] );
 		return 1U;
 	}
 	return instruction.info.length;
 }
 
+static uint32_t lastProcessedCount = 0U;
+
 void DasmReset( ) {
     calls.clear( );
     jumps.clear( );
+    code_segments.clear( );
     orderedSegments.clear( );
     visited.clear( );
     orderedCode.clear( );
     currentLine = orderedCode.end( );
+    lastProcessedCount = 0U;
 }
+
+static ZydisDecodedInstruction callback_instruction = {
+    ZYDIS_MACHINE_MODE_REAL_16,         // machine_mode
+    ZYDIS_MNEMONIC_INVALID,             // mnemonic
+    4U,                                 // length
+    ZYDIS_INSTRUCTION_ENCODING_LEGACY,  // encoding
+    ZYDIS_OPCODE_MAP_DEFAULT,           // opcode_map
+    0xFE,                               // opcode
+    0U,                                 // stack_width
+    2U,                                 // operand_width
+    4U,                                 // address_width
+    1U,                                 // operand_count
+    1U,                                 // operand_count_visible
+    0U,                                 // attributes
+    nullptr,                            // cpu_flags
+    nullptr,                            // fpu_flags
+    { },                                // avx
+    { },                                // meta
+    { }                                 // raw
+};
+static ZydisDecodedOperand callback_operand = {
+    0U,                                 // id
+    ZYDIS_OPERAND_VISIBILITY_EXPLICIT,  // visibility
+    0U,                                 // actions
+    ZYDIS_OPERAND_ENCODING_UIMM16,      // encoding
+    16U,                                // size
+    ZYDIS_ELEMENT_TYPE_UINT,            // element_type
+    2U,                                 // element_size
+    1U,                                 // element_count
+    0U,                                 // attributes
+    ZYDIS_OPERAND_TYPE_IMMEDIATE,       // type
+    { }
+};
 
 // Recursive disassembly function (credit: CoPilot)
 void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
@@ -274,8 +316,13 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                     if( ptr.segment != static_cast<ZyanU16>( -1 ) && ptr.offset != static_cast<ZyanU32>( -1 ) ) {
                         uint32_t addr = ptr.offset + ( ptr.segment << 4 );
-                        if( addr < segment0 || addr >= binarySize ) // Skip invalid
-                            continue;
+                        if( addr < segment0 || addr >= binarySize ) { // Skip invalid
+                            Descriptor desc;
+                            if( cpu.gdt.GetDescriptor( ptr.segment, desc ) )
+                                addr = ptr.offset + ( desc.GetBase( ) << 4 );
+                            if( addr < segment0 || addr >= binarySize ) // Still invalid, skip
+                                continue;
+                        }
                         if( !added.count( addr ) && !visited.count( addr ) ) {
                             added.insert( addr );
                             toVisit.push_back( ptr );
@@ -300,19 +347,35 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                 } else if( dline.mnemonicMask & MM_INT ) {
                     if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && dline.operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
-                        sprintf( dline.szComment, "; DOS - Exit" );
+                        sprintf( dline.szComment, "DOS Exit" );
                         break;
                     }
                 } else if( dline.mnemonicMask & MM_RET ) {
                     break;
                 }
-            } else { // Treat as data; step forward 1 byte
-                ++base_offset;
-                ++address.offset;
+            } else { // Decode failed...
+                if( binary[base_offset] == 0xFE && ( ( binary[base_offset + 1] >> 3 ) == 0x07 ) ) { // DOSBox internal callback
+                    const uint16_t &dw = *reinterpret_cast<uint16_t *>( &binary[base_offset + 2] );
+                    dline.instruction = callback_instruction;
+                    dline.operands[0] = callback_operand;
+                    dline.operands[0].imm = { false, false, { dw } };
+                    char *pOpCode = dline.szOpcode;
+                    for( auto i = 0; i < dline.instruction.length; ++i )
+                        pOpCode += sprintf( pOpCode, "%02X ", binary[base_offset + i] );
+                    sprintf_s( dline.szInstruction, sizeof( dline.szInstruction ), "callback 0x%02X", dw );
+                    strcat( dline.szComment, CALLBACK_GetDescription( dw ) );
+                    address.offset += dline.instruction.length;
+                    base_offset += dline.instruction.length;
+                } else { // Treat as data; step forward 1 byte
+                    sprintf( dline.szOpcode, "%02X", binary[base_offset] );
+                    ++base_offset;
+                    ++address.offset;
+                }
             }
         }
     }
-    DEBUG_ShowMsg( "Disassembly finished. Processed %d instruction offsets.", (unsigned) visited.size( ) );
+    DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", visited.size( ) - lastProcessedCount );
+    lastProcessedCount = visited.size( );
     code_segments.clear( );
     std::copy( orderedSegments.begin( ), orderedSegments.end( ), std::back_inserter( code_segments ) );
 }

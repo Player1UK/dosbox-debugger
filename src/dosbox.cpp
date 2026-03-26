@@ -132,7 +132,7 @@ static Bitu normal_loop()
 				}
 			}
 #if C_DEBUGGER
-			if (DEBUG_ExitLoop()) {
+			if (DEBUG_ExitNormalLoop()) {
 				return 0;
 			}
 #endif

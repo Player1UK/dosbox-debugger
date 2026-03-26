@@ -36,6 +36,7 @@ struct DecodedLine {
 	static const DecodedLine &last( );
 	static bool isStart( );
 	static bool isEnd( );
+	static bool isEmpty( );
 };
 const DecodedLine & operator++( DecodedLine const & ); // Prefix increment
 const DecodedLine operator++( DecodedLine const &, int ); // Postfix increment
