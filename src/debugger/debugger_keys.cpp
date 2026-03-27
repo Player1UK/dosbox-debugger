@@ -84,6 +84,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_ip;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_D: // ALT - D: DS:SI
 		if( !( key.mod & SDL_KMOD_ALT ) )
@@ -95,6 +96,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_si;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_E: // ALT - E: es:di
 		if( !( key.mod & SDL_KMOD_ALT ) )
@@ -106,6 +108,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_di;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_X: // ALT - X: ds:dx
 		if( !( key.mod & SDL_KMOD_ALT ) )
@@ -117,6 +120,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_dx;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_B: // ALT -B: es:bx
 		if( !( key.mod & SDL_KMOD_ALT ) )
@@ -128,6 +132,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_bx;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_S: // ALT - S: ss:sp
 		if( !( key.mod & SDL_KMOD_ALT ) )
@@ -139,6 +144,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 			dataOfs[dbg.active_win_data] = reg_sp;
 		}
 		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		break;
 	case SDLK_F6: // previous command (f1-f4 generate rubbish at my place)
 	case SDLK_F3: // previous command

@@ -639,8 +639,7 @@ bool ParseCommand( char* str ) {
 		uint16_t offset = GetHexValue( found, found );
 		if( segment != dataSeg[dbg.active_win_data] || offset > 0xFFFF )
 			dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		else
-			dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
 		dataSeg[dbg.active_win_data] = segment;
 		dataOfs[dbg.active_win_data] = offset;
 		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_win_data], dataOfs[dbg.active_win_data] );

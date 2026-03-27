@@ -170,12 +170,28 @@ void DEBUG::Run( ) {
 	uint32_t oldeip = reg_eip;
 	uint16_t oldss = SegValue( ss );
 	uint32_t oldesp = reg_esp;
+	// Save interrupt vectors required by Debug
+	RealPt   int_00 = RealGetVec( 0x00 ); // Program terminate
+	RealPt   int_08 = RealGetVec( 0x08 ); // Console input without echo
+	RealPt   int_09 = RealGetVec( 0x09 ); // Display string
+	RealPt   int_0F = RealGetVec( 0x0F ); // Open file
+	RealPt   int_21 = RealGetVec( 0x21 ); // Random read
+	RealPt   int_3F = RealGetVec( 0x3F ); // Read file or device
+	RealPt   int_66 = RealGetVec( 0x66 ); // Get or set code page
 
 	// Start shell
 	DOS_Shell shell;
 	if( !shell.ExecuteProgram( filename, args ) ) {
 		WriteOut( MSG_Get( "PROGRAM_EXECUTABLE_MISSING" ), filename );
 	}
+	// Restore saved interrupt vectors required by Debug
+	RealSetVec( 0x66, int_66 );
+	RealSetVec( 0x3F, int_3F );
+	RealSetVec( 0x21, int_21 );
+	RealSetVec( 0x0F, int_0F );
+	RealSetVec( 0x09, int_09 );
+	RealSetVec( 0x08, int_08 );
+	RealSetVec( 0x00, int_00 );
 
 	// set old reg values
 	SegSet16( ss, oldss );
