@@ -58,6 +58,7 @@ static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
 	int32_t ret = ( *cpudecoder )( );
 	if( quickexit ) {
 		SetCodeWinToEIP( );
+		DBGUI_UpdateOrderedSegments( );
 	} else {
 		// ensure all breakpoints are activated
 		CBreakpoint::ActivateBreakpoints( );

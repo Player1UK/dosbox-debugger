@@ -5,6 +5,18 @@
 
 #if C_DEBUGGER
 #include "Zydis/Zydis.h"
+#include <set>
+
+template <typename T1, typename T2>
+struct Pair {
+	T1 first; T2 second;
+	bool operator==( const Pair &other ) const noexcept { // Equality operator for comparisons
+		return first == other.first;
+	}
+	bool operator<( const Pair &other ) const noexcept { // Less than operator for comparisons
+		return first < other.first;
+	}
+};
 
 typedef enum Mnemonic_Mask : uint16_t {
 	MM_NONE	            = 0x0000,
@@ -18,8 +30,18 @@ typedef enum Mnemonic_Mask : uint16_t {
 	MM_Logical	        = 0x0080,
 	MM_Math				= 0x0100,
 	MM_Stack	        = 0x0200,
+	MM_Proc				= 0x0400,
+	MM_Label			= 0x0800,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
 } MNEMONIC_MASK;
+constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
+	return static_cast<MNEMONIC_MASK>( static_cast<Underlying>( lhs ) | static_cast<Underlying>( rhs ) );
+}
+inline MNEMONIC_MASK &operator|=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexcept {
+	lhs = lhs | rhs;
+	return lhs;
+}
 
 struct DecodedLine {
     ZydisDecodedOperandPtr address;
@@ -43,9 +65,6 @@ const DecodedLine operator++( DecodedLine const &, int ); // Postfix increment
 const DecodedLine & operator--( DecodedLine const & ); // Prefix decrement
 const DecodedLine operator--( DecodedLine const &, int ); // Postfix decrement
 
-extern uint16_t NumCodeSegments( );
-extern uint16_t CodeSegment( uint16_t index );
-
 extern bool AddressVisited( uint32_t address );
 extern bool AddressVisited( uint16_t segment, uint32_t offset );
 
@@ -53,6 +72,10 @@ extern uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, co
 
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected );
+
+extern std::set<uint16_t> ordered_segments;
+extern std::set<Pair<uint32_t, uint16_t>> calls;
+extern std::set<Pair<uint32_t, uint16_t>> jumps;
 
 #endif // C_DEBUGGER
 

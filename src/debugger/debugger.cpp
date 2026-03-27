@@ -105,6 +105,7 @@ void DEBUG_Enable( bool pressed ) {
 	GFX_LosingFocus( );					// Defocus the graphical UI...
 	SDL_RaiseWindow( dbg.win_main );	// ...and bring the debugger UI into focus
 	SetCodeWinToEIP( );
+	DBGUI_UpdateOrderedSegments( );
 
 	static bool was_help_shown = false;
 	if( !was_help_shown ) { // Show first time help
