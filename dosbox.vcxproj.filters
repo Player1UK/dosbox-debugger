@@ -115,7 +115,7 @@
     <ClCompile Include="src\dos\cdrom_win32.cpp">
       <Filter>Source Files\dos</Filter>
     </ClCompile>
-    <ClCompile Include="src\debugger\cbreakpoint.cpp">
+    <ClCompile Include="src\debugger\breakpoint.cpp">
       <Filter>Source Files\debugger</Filter>
     </ClCompile>
     <ClCompile Include="src\debugger\debugger.cpp">
@@ -1129,7 +1129,7 @@
     <ClInclude Include="src\cpu\string_ops.h">
       <Filter>Source Files\cpu</Filter>
     </ClInclude>
-    <ClInclude Include="src\debugger\cbreakpoint.h">
+    <ClInclude Include="src\debugger\breakpoint.h">
       <Filter>Source Files\debugger</Filter>
     </ClInclude>
     <ClInclude Include="src\debugger\debugger.h">

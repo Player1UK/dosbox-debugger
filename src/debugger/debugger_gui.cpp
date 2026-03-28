@@ -11,7 +11,7 @@
 #include <imgui_impl_sdlgpu3.h>
 #include <imgui_internal.h>
 
-#include "cbreakpoint.h"
+#include "breakpoint.h"
 #include "cpu/cpu.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"

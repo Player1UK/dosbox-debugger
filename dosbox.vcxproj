@@ -250,7 +250,7 @@
     <ClCompile Include="src\dos\cdrom_image.cpp" />
     <ClCompile Include="src\dos\cdrom_ioctl_linux.cpp" />
     <ClCompile Include="src\dos\cdrom_win32.cpp" />
-    <ClCompile Include="src\debugger\cbreakpoint.cpp" />
+    <ClCompile Include="src\debugger\breakpoint.cpp" />
     <ClCompile Include="src\debugger\debugger.cpp" />
     <ClCompile Include="src\debugger\debugger_command.cpp" />
     <ClCompile Include="src\debugger\debugger_disasm.cpp" />
@@ -611,7 +611,7 @@
     <ClInclude Include="src\cpu\paging.h" />
     <ClInclude Include="src\cpu\registers.h" />
     <ClInclude Include="src\cpu\string_ops.h" />
-    <ClInclude Include="src\debugger\cbreakpoint.h" />
+    <ClInclude Include="src\debugger\breakpoint.h" />
     <ClInclude Include="src\debugger\debug.h" />
     <ClInclude Include="src\debugger\debugger.h" />
     <ClInclude Include="src\debugger\debugger_disasm.h" />

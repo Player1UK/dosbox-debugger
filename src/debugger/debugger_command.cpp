@@ -10,7 +10,7 @@
 #include <fstream>
 #endif
 
-#include "cbreakpoint.h"
+#include "breakpoint.h"
 #include "cpu/paging.h"
 #include "debugger_inc.h"
 #include "dos/dos.h"

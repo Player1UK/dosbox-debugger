@@ -6,7 +6,7 @@
 
 #if C_DEBUGGER
 
-#include "cbreakpoint.h"
+#include "breakpoint.h"
 #include "cpu/paging.h"
 #include "debug.h"
 #include "debugger.h"
