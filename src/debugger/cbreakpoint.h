@@ -1,6 +1,6 @@
 
-#ifndef DOSBOX_CBREAKPOINT_H
-#define DOSBOX_CBREAKPOINT_H
+#ifndef DOSBOX_BREAKPOINT_H
+#define DOSBOX_BREAKPOINT_H
 
 #include "dosbox.h"
 
@@ -131,4 +131,4 @@ private:
 };
 #endif // C_DEBUGGER
 
-#endif // DOSBOX_CBREAKPOINT_H
+#endif // DOSBOX_BREAKPOINT_H

@@ -742,6 +742,9 @@
     <ClCompile Include="src\webserver\dos.cpp">
       <Filter>Source Files\webserver</Filter>
     </ClCompile>
+    <ClCompile Include="src\debugger\debug.cpp">
+      <Filter>Source Files\debugger</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -1739,6 +1742,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\debugger\debugger_disasm.h">
+      <Filter>Source Files\debugger</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debug.h">
       <Filter>Source Files\debugger</Filter>
     </ClInclude>
   </ItemGroup>

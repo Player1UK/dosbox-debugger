@@ -102,7 +102,7 @@ struct DBGBlock {
 	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 1U }, { 1U, 1U }, { 1U, 36U }, { 0U, 41U }, { 0U, 64U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
-	const uint8_t window_cols[3] = { ( DBGUI::DefaultWindowCols >> 1 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols };
+	const uint8_t window_cols[3] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;
@@ -142,20 +142,6 @@ struct DebuggerInputEvent {
 	std::string text = {};
 };
 extern std::queue<DebuggerInputEvent> debugger_event_queue;
-
-class DEBUG final : public Program {
-public:
-	DEBUG( );
-	~DEBUG( ) override;
-
-	bool IsActive( ) const;
-	void Run( ) override;
-
-	char filename[128] = "";
-private:
-	bool active;
-};
-extern DEBUG *pDebugcom;
 
 #endif // C_DEBUGGER
 

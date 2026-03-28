@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText:  2002-2025 The DOSBox Team
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#ifndef DOSBOX_DEBUG_H
-#define DOSBOX_DEBUG_H
+#ifndef DOSBOX_DEBUGGER_H
+#define DOSBOX_DEBUGGER_H
 
 #include "dosbox.h"
 
@@ -90,4 +90,4 @@ constexpr void DEBUG_UpdateMemoryReadBreakpoints(const PhysPt)
 }
 #endif // C_DEBUGGER && C_HEAVY_DEBUGGER
 
-#endif // DOSBOX_DEBUG_H
+#endif // DOSBOX_DEBUGGER_H

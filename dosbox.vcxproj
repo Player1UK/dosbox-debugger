@@ -207,6 +207,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\debugger\debug.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\dosbox.cpp" />
     <ClCompile Include="src\audio\clap\event_list.cpp" />
@@ -611,6 +612,7 @@
     <ClInclude Include="src\cpu\registers.h" />
     <ClInclude Include="src\cpu\string_ops.h" />
     <ClInclude Include="src\debugger\cbreakpoint.h" />
+    <ClInclude Include="src\debugger\debug.h" />
     <ClInclude Include="src\debugger\debugger.h" />
     <ClInclude Include="src\debugger\debugger_disasm.h" />
     <ClInclude Include="src\debugger\debugger_inc.h" />
