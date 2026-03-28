@@ -208,6 +208,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\debugger\debug.cpp" />
+    <ClCompile Include="src\debugger\debugvar.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\dosbox.cpp" />
     <ClCompile Include="src\audio\clap\event_list.cpp" />
@@ -616,6 +617,7 @@
     <ClInclude Include="src\debugger\debugger.h" />
     <ClInclude Include="src\debugger\debugger_disasm.h" />
     <ClInclude Include="src\debugger\debugger_inc.h" />
+    <ClInclude Include="src\debugger\debugvar.h" />
     <ClInclude Include="src\debugger\IBM_VGA_8x16.h" />
     <ClInclude Include="src\dosbox.h" />
     <ClInclude Include="src\dos\cdrom.h" />

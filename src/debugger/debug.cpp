@@ -2,12 +2,11 @@
 // SPDX-FileCopyrightText:  2002-2021 The DOSBox Team
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "dosbox.h"
+#include "debug.h"
 
 #if C_DEBUGGER
 
 #include "cpu/registers.h"
-#include "debug.h"
 #include "shell/shell.h"
 
 DEBUG* pDebugcom = nullptr;

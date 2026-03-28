@@ -9,9 +9,6 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
-
-#include "dos/programs.h"
-#include "hardware/memory.h"
 #include <SDL3/SDL.h>
 #include <queue>
 
@@ -111,14 +108,6 @@ struct DBGBlock {
 
 extern uint16_t dataSeg[NUM_WIN_DATA];
 extern uint32_t dataOfs[NUM_WIN_DATA];
-
-struct DASMLine {
-	uint32_t pc = 0;
-	char dasm[80] = { 0 };
-	PhysPt ea = 0;
-	uint16_t easeg = 0;
-	uint32_t eaoff = 0;
-};
 
 extern DBGBlock dbg;
 

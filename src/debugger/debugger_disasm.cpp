@@ -1,7 +1,6 @@
-#include "dosbox.h"
-#if C_DEBUGGER
 #include "debugger_disasm.h"
 
+#if C_DEBUGGER
 #include "cpu/callback.h"
 #include "cpu/cpu.h"
 #include "hardware/memory.h"

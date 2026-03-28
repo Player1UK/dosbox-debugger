@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText:  2002-2021 The DOSBox Team
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "dosbox.h"
+#include "debugger_inc.h"
 
 #if C_DEBUGGER
 
@@ -12,7 +12,7 @@
 
 #include "breakpoint.h"
 #include "cpu/paging.h"
-#include "debugger_inc.h"
+#include "debugvar.h"
 #include "dos/dos.h"
 #include "gui/common.h"
 #include "hardware/pic.h"
