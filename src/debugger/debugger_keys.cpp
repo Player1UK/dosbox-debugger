@@ -16,7 +16,6 @@
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern uint16_t RealSegValue( const SegNames index );
-extern void SetCodeWinToEIP( );
 
 extern bool exitNormalLoop;
 
@@ -25,9 +24,6 @@ extern bool debugging;
 extern bool forceDraw;
 
 extern SCodeViewData codeViewData;
-
-uint16_t dataSeg[NUM_WIN_DATA] = { 0, 0 };//, 0, 0 };
-uint32_t dataOfs[NUM_WIN_DATA] = { 0, 0 };//, 0, 0 };
 
 bool skipFirstInstruction = false;
 
@@ -41,9 +37,8 @@ static bool SetRedirectBreakpoint( ) {
 	if( strstr( dline, "call" ) || strstr( dline, "int" ) ||
 		strstr( dline, "loop" ) || strstr( dline, "rep" ) ) {
 		// Don't add a temporary breakpoint if there's already one here
-		if( !CBreakpoint::FindPhysBreakpoint( SegValue( cs ), reg_eip + size, true ) ) {
+		if( !CBreakpoint::FindPhysBreakpoint( SegValue( cs ), reg_eip + size, true ) )
 			CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip + size, true );
-		}
 		return true;
 	}
 	return false;
@@ -51,12 +46,14 @@ static bool SetRedirectBreakpoint( ) {
 
 static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
 	DBGUI_SaveCPUstate( );
+	DBGUI_SaveMemoryState( );
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
 	int32_t ret = ( *cpudecoder )( );
 	if( quickexit ) {
-		SetCodeWinToEIP( );
+		DBGUI_SetCodeWinToEIP( );
+		DBGUI_UpdateMemoryViews( );
 		DBGUI_UpdateOrderedSegments( );
 	} else {
 		// ensure all breakpoints are activated
@@ -77,74 +74,74 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 	case SDLK_C: // ALT - C: CS:IP
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( cs );
+		dataSeg[dbg.active_data_view] = RealSegValue( cs );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_eip;
+			dataOfs[dbg.active_data_view] = reg_eip;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_ip;
+			dataOfs[dbg.active_data_view] = reg_ip;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_D: // ALT - D: DS:SI
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( ds );
+		dataSeg[dbg.active_data_view] = RealSegValue( ds );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_esi;
+			dataOfs[dbg.active_data_view] = reg_esi;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_si;
+			dataOfs[dbg.active_data_view] = reg_si;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_E: // ALT - E: es:di
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( es );
+		dataSeg[dbg.active_data_view] = RealSegValue( es );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_edi;
+			dataOfs[dbg.active_data_view] = reg_edi;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_di;
+			dataOfs[dbg.active_data_view] = reg_di;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_X: // ALT - X: ds:dx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( ds );
+		dataSeg[dbg.active_data_view] = RealSegValue( ds );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_edx;
+			dataOfs[dbg.active_data_view] = reg_edx;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_dx;
+			dataOfs[dbg.active_data_view] = reg_dx;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_B: // ALT -B: es:bx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( es );
+		dataSeg[dbg.active_data_view] = RealSegValue( es );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_ebx;
+			dataOfs[dbg.active_data_view] = reg_ebx;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_bx;
+			dataOfs[dbg.active_data_view] = reg_bx;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_S: // ALT - S: ss:sp
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_win_data] = RealSegValue( ss );
+		dataSeg[dbg.active_data_view] = RealSegValue( ss );
 		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_win_data] = reg_esp;
+			dataOfs[dbg.active_data_view] = reg_esp;
 		} else {
-			dataOfs[dbg.active_win_data] = reg_sp;
+			dataOfs[dbg.active_data_view] = reg_sp;
 		}
-		dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
+		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_F6: // previous command (f1-f4 generate rubbish at my place)
 	case SDLK_F3: // previous command

@@ -5,9 +5,8 @@
 #include "debugger.h"
 
 #if C_DEBUGGER
-
 #include "breakpoint.h"
-#include "cpu/paging.h"
+#include "cpu/callback.h"
 #include "debug.h"
 #include "debugger_inc.h"
 #include "debugvar.h"
@@ -16,13 +15,10 @@
 #include "hardware/input/keyboard.h"
 #include "hardware/pic.h"
 #include "hardware/timer.h"
-#include "shell/shell.h"
 
-#include <imgui.h>
 #include <imgui_impl_sdl3.h>
 
 extern uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent );
-extern void SetCodeWinToEIP( );
 
 DBGBlock dbg = {};
 bool debugging = false;
@@ -66,6 +62,9 @@ Bitu DEBUG_Loop( void ) {
 			DEBUG_Close( );
 			return ret;
 			break;
+		case SDL_EVENT_WINDOW_RESIZED:
+			DBGUI_Resize( );
+			break;
 		default:
 			break;
 		}
@@ -83,6 +82,7 @@ Bitu DEBUG_Loop( void ) {
 		exitNormalLoop = true;
 		DBGUI_Reset( );
 		DBGUI_SaveCPUstate( );
+		DBGUI_SaveMemoryState( );
 		return -1;
 	}
 	return ret;
@@ -105,7 +105,8 @@ void DEBUG_Enable( bool pressed ) {
 
 	GFX_LosingFocus( );					// Defocus the graphical UI...
 	SDL_RaiseWindow( dbg.win_main );	// ...and bring the debugger UI into focus
-	SetCodeWinToEIP( );
+	DBGUI_SetCodeWinToEIP( );
+	DBGUI_UpdateMemoryViews( );
 	DBGUI_UpdateOrderedSegments( );
 
 	static bool was_help_shown = false;

@@ -359,8 +359,8 @@ static void LogMCBChain( uint16_t mcb_segment ) {
 	DOS_MCB mcb( mcb_segment );
 	char filename[9]; // 8 characters plus a terminating NUL
 	const char* psp_seg_note;
-	auto DOS_dataOfs = static_cast<uint16_t>( dataOfs[dbg.active_win_data] ); // Realmode addressing only
-	PhysPt dataAddr = PhysicalMake( dataSeg[dbg.active_win_data], DOS_dataOfs ); // location being viewed in the "Data Overview"
+	auto DOS_dataOfs = static_cast<uint16_t>( dataOfs[dbg.active_data_view] ); // Realmode addressing only
+	PhysPt dataAddr = PhysicalMake( dataSeg[dbg.active_data_view], DOS_dataOfs ); // location being viewed in the "Data Overview"
 
 	// loop forever, breaking out of the loop once we've processed the last MCB
 	while( true ) {
@@ -394,7 +394,7 @@ static void LogMCBChain( uint16_t mcb_segment ) {
 		if( dataAddr >= mcbStartAddr && dataAddr < mcbEndAddr ) {
 			LOG( LOG_MISC, LOG_ERROR )
 				( "   (data addr %04hX:%04X is %u bytes past this MCB)",
-					dataSeg[dbg.active_win_data],
+					dataSeg[dbg.active_data_view],
 					DOS_dataOfs,
 					dataAddr - mcbStartAddr );
 		}

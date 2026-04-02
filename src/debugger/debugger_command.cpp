@@ -39,8 +39,6 @@ extern void OutputVecTable( char* );
 
 extern uint32_t GetAddress( uint16_t, uint32_t );
 extern uint16_t RealSegValue( const SegNames index );
-extern void SetCodeWinToEIP( );
-extern void SetCodeWinToAddress( uint16_t, uint32_t );
 
 extern SCodeViewData codeViewData;
 
@@ -629,20 +627,20 @@ bool ParseCommand( char* str ) {
 		++found;
 		uint32_t codeOfs = GetHexValue( found, found );
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", codeSeg, codeOfs );
-		SetCodeWinToAddress( codeSeg, codeOfs );
+		DBGUI_SetCodeWinToAddress( codeSeg, codeOfs );
 		return true;
 	}
 
 	if( command == "D" ) { // Set data overview
 		uint16_t segment = GetHexValue( found, found );
 		++found;
-		uint16_t offset = GetHexValue( found, found );
-		if( segment != dataSeg[dbg.active_win_data] || offset > 0xFFFF )
-			dbg.update_win[dbg.active_win_data + WIN_DATA] = true;
-		dbg.update_win_scroll[dbg.active_win_data + WIN_DATA] = true;
-		dataSeg[dbg.active_win_data] = segment;
-		dataOfs[dbg.active_win_data] = offset;
-		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_win_data], dataOfs[dbg.active_win_data] );
+		uint32_t offset = GetHexValue( found, found );
+		if( segment != dataSeg[dbg.active_data_view] || offset > 0xFFFF )
+			dbg.update_win[win_data_view[dbg.active_data_view]] = true;
+		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataSeg[dbg.active_data_view] = segment;
+		dataOfs[dbg.active_data_view] = offset;
+		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_data_view], dataOfs[dbg.active_data_view] );
 		return true;
 	}
 
@@ -694,7 +692,7 @@ bool ParseCommand( char* str ) {
 		auto intNr = (uint8_t) GetHexValue( found, found );
 		DEBUG_ShowMsg( "DEBUG: Tracing INT %02X\n", intNr );
 		CPU_HW_Interrupt( intNr );
-		SetCodeWinToEIP( );
+		DBGUI_SetCodeWinToEIP( );
 		return true;
 	}
 

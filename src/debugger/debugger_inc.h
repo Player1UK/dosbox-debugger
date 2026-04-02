@@ -29,6 +29,8 @@ typedef enum Window_ID :uint8_t {
 	WIN_OUT,
 	WIN_CALLS,
 	WIN_JUMPS,
+	WIN_DDIFF,
+	WIN_SDIFF,
 	WIN_VAR,
 	WIN_DATA,
 	WIN_STACK,
@@ -36,13 +38,25 @@ typedef enum Window_ID :uint8_t {
 } WINDOW_ID;
 WINDOW_ID &operator++( WINDOW_ID &id );
 
+typedef enum Data_ID :uint8_t {
+	DATA_VIEW = 0U,
+	STACK_VIEW,
+	NUM_DATA_VIEWS
+} DATA_ID;
+DATA_ID &operator++( DATA_ID &id );
+
 bool DBGUI_StartUp( );
 void DBGUI_Shutdown( );
 void DBGUI_NewFrame( );
 void DBGUI_Render( );
 void DBGUI_Reset( );
+void DBGUI_Resize( );
 void DBGUI_SaveCPUstate( );
-void DBGUI_UpdateOrderedSegments( bool refresh = true );
+void DBGUI_SaveMemoryState( );
+void DBGUI_SetCodeWinToEIP( );
+void DBGUI_SetCodeWinToAddress( uint16_t, uint32_t );
+void DBGUI_UpdateMemoryViews( );
+void DBGUI_UpdateOrderedSegments( );
 
 // Window title styling helpers (cyan background, black text)
 bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags );
@@ -78,36 +92,39 @@ namespace DBGUI {
 	constexpr uint8_t ClearColorA = 255;
 
 } // namespace DBGUI
-const uint8_t NUM_WIN_DATA = 2;
 
 typedef struct ColumnRows {
 	uint8_t		column;
 	uint8_t		rows;
 } COLUMNROWS;
 
+static const uint8_t NUM_COLUMNS = 4U;
+
 struct DBGBlock {
 	SDL_Window* win_main = nullptr;
 	SDL_GPUDevice* gpu_device = nullptr;
-	uint32_t active_win = 0;
-	uint8_t active_win_data = 0;    /* Current active data window */
-	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true, true, true, true, true };
-	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false };
-	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false };
-	uint32_t input_y = 0;
-	uint32_t global_mask = 0;
-	/* Window height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 1U }, { 1U, 1U }, { 1U, 36U }, { 0U, 41U }, { 0U, 64U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
+	DATA_ID active_data_view = DATA_VIEW;    /* Current active data window */
+	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true, true, true, true, true, true, true };
+	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false, false, false };
+	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false, false, false };
+	uint32_t input_y = 0U;
+	uint32_t global_mask = 0U;
+	/* Window column selection and height values in rows */
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 3U }, { 1U, 1U }, { 1U, 34U }, { 0U, 41U }, { 0U, 64U }, { 3U, 63U }, { 3U, 42U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
-	const uint8_t window_cols[3] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols };
+	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
+	const int8_t height_ratio[NUM_WINDOWS] = { 57, -4, -3, -1, 0, 39, 0, 60, 0, -4, 57, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;
 	int window_height = 0;
 };
 
-extern uint16_t dataSeg[NUM_WIN_DATA];
-extern uint32_t dataOfs[NUM_WIN_DATA];
+extern uint16_t dataSeg[NUM_DATA_VIEWS];
+extern uint32_t dataOfs[NUM_DATA_VIEWS];
+extern WINDOW_ID win_data_view[NUM_DATA_VIEWS];
+extern WINDOW_ID win_diff_view[NUM_DATA_VIEWS];
 
 extern DBGBlock dbg;
 
