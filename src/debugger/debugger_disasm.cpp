@@ -14,14 +14,14 @@ namespace std {
     template <typename T1, typename T2>
     struct hash<Pair<T1, T2>> {
         std::size_t operator()( const Pair<T1, T2> &p ) const noexcept {
-            return std::hash<T1>{}( p.first );
+            return std::hash<T1>{}( p.value );
         }
     };
 }
 
-std::set<uint16_t> ordered_segments = { 0U, static_cast<uint16_t>( -1 ) };
+std::set<Pair<uint16_t, SegmentInfo>> ordered_segments = { { 0U, { SEG_NONE, 0U } }, { static_cast<uint16_t>( -1 ), { SEG_NONE, 0U } } };
 std::set<Pair<uint32_t, LabelInfo>> calls;
-std::set<Pair<uint32_t, uint16_t>> jumps;
+std::set<Pair<uint32_t, LabelInfo>> jumps;
 
 static std::set<Pair<uint32_t, DecodedLine>> ordered_code;
 static std::unordered_set<uint32_t> visited;
@@ -30,9 +30,9 @@ static std::set<Pair<uint32_t, DecodedLine>>::iterator currentLine = ordered_cod
 
 const DecodedLine & operator++( DecodedLine const &source ) { // Prefix increment
     if( currentLine != ordered_code.end( ) && ++currentLine != ordered_code.end( ) )
-        const_cast<DecodedLine &>( source ) = currentLine->second;
+        const_cast<DecodedLine &>( source ) = currentLine->extra;
     else
-        const_cast<DecodedLine &>( source ) = ordered_code.begin( )->second;
+        const_cast<DecodedLine &>( source ) = ordered_code.begin( )->extra;
     return source;
 }
 const DecodedLine operator++( DecodedLine const &source, int ) { // Postfix increment
@@ -43,7 +43,7 @@ const DecodedLine operator++( DecodedLine const &source, int ) { // Postfix incr
 
 const DecodedLine &operator--( DecodedLine const &source ) { // Prefix decrement
     if( currentLine != ordered_code.begin( ) )
-        const_cast<DecodedLine &>( source ) = (--currentLine)->second;
+        const_cast<DecodedLine &>( source ) = (--currentLine)->extra;
     return source;
 }
 const DecodedLine operator--( DecodedLine const &source, int ) { // Postfix decrement
@@ -54,12 +54,12 @@ const DecodedLine operator--( DecodedLine const &source, int ) { // Postfix decr
 
 const DecodedLine & DecodedLine::first( ) {
     currentLine = ordered_code.begin( );
-    return currentLine->second;
+    return currentLine->extra;
 }
 const DecodedLine &DecodedLine::last( ) {
     currentLine = ordered_code.end( );
     --currentLine;
-    return currentLine->second;
+    return currentLine->extra;
 }
 
 bool DecodedLine::isStart( ) {
@@ -99,7 +99,7 @@ void DasmReset( ) {
     calls.clear( );
     jumps.clear( );
     ordered_segments.clear( );
-    ordered_segments = { 0U, static_cast<uint16_t>( -1 ) };
+    ordered_segments = { { 0U, { SEG_NONE, 0U } }, { static_cast<uint16_t>( -1 ), { SEG_NONE, 0U } } };
     visited.clear( );
     ordered_code.clear( );
     currentLine = ordered_code.end( );
@@ -161,8 +161,8 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
         ZydisDecodedOperandPtr address = toVisit.back( );
         toVisit.pop_back( );
 
-        if( !ordered_segments.count( address.segment ) )
-            ordered_segments.insert( address.segment );
+        if( !ordered_segments.count( { address.segment, {} } ) )
+            ordered_segments.insert( { address.segment, { SEG_CODE, 0U } } );
 
         auto base_offset = address.offset + ( address.segment << 4 );
         while( base_offset < binarySize ) {
@@ -174,9 +174,9 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 break;
 
             auto entry = ordered_code.insert( { base_offset, DecodedLine( address, base_offset ) } );
-            if( !entry.second )
+            if( !entry.second ) // insert failed
                 break;
-            DecodedLine &dline = const_cast<DecodedLine &>( entry.first->second );
+            DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
             if( ZYAN_SUCCESS( ZydisDecoderDecodeFull( &decoder, &binary[base_offset], binarySize - base_offset, &dline.instruction, dline.operands ) ) ) {
                 char *pOpCode = dline.szOpcode;
                 for( auto i = 0; i < dline.instruction.length; ++i )
@@ -306,16 +306,23 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                                 toVisit.push_back( ptr );
                             if( dline.mnemonicMask & MM_CALL ) {
                                 auto call = calls.insert( { addr, LabelInfo( ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
-                                call.first->second.callers.insert( { dline.base_offset, dline.address.segment } );
-                            } else
-                                jumps.insert( { addr, ptr.segment } );
-                        } else {
-                            if( dline.mnemonicMask & MM_CALL ) {
-                                std::set<Pair<uint32_t, uint16_t>> callers;
-                                auto call = calls.find( { addr, { ptr.segment, callers } } );
-                                if( call != calls.end( ) )
-                                    call->second.callers.insert( { dline.base_offset, dline.address.segment } );
+                                if( call.second ) // insert success
+                                    call.first->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                            } else {
+                                auto jump = jumps.insert( { addr, LabelInfo( ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+                                if( jump.second ) // insert success
+                                    jump.first->extra.callers.insert( { dline.base_offset, dline.address.segment } );
                             }
+                        } else if( dline.mnemonicMask & MM_CALL ) {
+                            std::set<Pair<uint32_t, uint16_t>> callers;
+                            auto call = calls.find( { addr, { ptr.segment, callers } } );
+                            if( call != calls.end( ) )
+                                call->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                        } else {
+                            std::set<Pair<uint32_t, uint16_t>> callers;
+                            auto jump = jumps.find( { addr, { ptr.segment, callers } } );
+                            if( jump != jumps.end( ) )
+                                jump->extra.callers.insert( { dline.base_offset, dline.address.segment } );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -363,14 +370,14 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
     for( const auto &[address, info] : calls ) {
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
-            auto &dline = it->second;
+            auto &dline = it->extra;
             const_cast<DecodedLine &>( dline ).mnemonicMask |= MM_Proc;
         }
     }
     for( const auto &[address, segment] : jumps ) {
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
-            auto &dline = it->second;
+            auto &dline = it->extra;
             const_cast<DecodedLine &>( dline ).mnemonicMask |= MM_Label;
         }
     }
@@ -408,7 +415,7 @@ void Dasm_WriteFile( ) {
     char szSegment[8] = "";
     using std::setw;
     for( const auto &entry : ordered_code ) {
-        const auto &dline = entry.second;
+        const auto &dline = entry.extra;
         if( dline.address.segment != currentSegment ) {
             if( currentSegment != static_cast<uint16_t>( -1 ) )
                 out << setw( sizeof( indent ) ) << szSegment << "ends" << std::endl << std::endl;

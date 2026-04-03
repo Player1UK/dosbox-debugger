@@ -54,9 +54,9 @@ void DBGUI_Resize( );
 void DBGUI_SaveCPUstate( );
 void DBGUI_SaveMemoryState( );
 void DBGUI_SetCodeWinToEIP( );
-void DBGUI_SetCodeWinToAddress( uint16_t, uint32_t );
+void DBGUI_SetCodeWinToAddress( const uint16_t, const uint32_t );
 void DBGUI_UpdateMemoryViews( );
-void DBGUI_UpdateOrderedSegments( );
+void DBGUI_UpdateOrderedSegments( const bool = false );
 
 // Window title styling helpers (cyan background, black text)
 bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags );
@@ -110,11 +110,11 @@ struct DBGBlock {
 	uint32_t input_y = 0U;
 	uint32_t global_mask = 0U;
 	/* Window column selection and height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 3U }, { 1U, 1U }, { 1U, 34U }, { 0U, 41U }, { 0U, 64U }, { 3U, 63U }, { 3U, 42U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 60U }, { 1U, 4U }, { 1U, 4U }, { 1U, 1U }, { 1U, 33U }, { 0U, 41U }, { 0U, 64U }, { 3U, 63U }, { 3U, 42U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
 	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
-	const int8_t height_ratio[NUM_WINDOWS] = { 57, -4, -3, -1, 0, 39, 0, 61, 0, -4, 57, 0 };
+	const int8_t height_ratio[NUM_WINDOWS] = { 57, -4, -4, -1, 0, 39, 0, 61, 0, -4, 57, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;

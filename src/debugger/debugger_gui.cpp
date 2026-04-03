@@ -69,6 +69,18 @@ uint32_t dataOfs[NUM_DATA_VIEWS] = { 0, 0 };
 WINDOW_ID win_data_view[NUM_DATA_VIEWS] = { WIN_DATA, WIN_STACK };
 WINDOW_ID win_diff_view[NUM_DATA_VIEWS] = { WIN_DDIFF, WIN_SDIFF };
 
+const ImVec4 address_colors[][2] = {
+{ ImVec4( 0.73f, 0.48f, 0.34f, 1.0f ), ImVec4( 0.94f, 0.53f, 0.31f, 1.0f ) }, // orange
+{ ImVec4( 0.19f, 0.51f, 0.97f, 1.0f ), ImVec4( 0.41f, 0.63f, 0.97f, 1.0f ) }, // blue
+{ ImVec4( 0.97f, 0.69f, 0.17f, 1.0f ), ImVec4( 0.97f, 0.77f, 0.37f, 1.0f ) }, // gold
+{ ImVec4( 0.32f, 0.59f, 0.23f, 1.0f ), ImVec4( 0.39f, 0.75f, 0.28f, 1.0f ) }, // green
+{ ImVec4( 0.68f, 0.25f, 0.97f, 1.0f ), ImVec4( 0.78f, 0.39f, 0.97f, 1.0f ) }, // purple
+{ ImVec4( 0.8f, 0.29f, 0.32f, 1.0f ), ImVec4( 0.83f, 0.43f, 0.44f, 1.0f ) },  // red
+{ ImVec4( 0.97f, 0.19f, 0.53f, 1.0f ), ImVec4( 0.97f, 0.38f, 0.64f, 1.0f ) }, // violet
+{ ImVec4( 0.18f, 0.62f, 0.77f, 1.0f ), ImVec4( 0.18f, 0.82f, 0.97f, 1.0f ) }, // torquoise
+};
+const uint8_t MAX_ADDRESS_COLORS = static_cast<uint8_t>( sizeof( address_colors ) / sizeof( address_colors[0] ) );
+
 #define MAX_LOG_BUFFER 500
 static std::list<std::string> logBuff = {};
 static std::list<std::string>::iterator logBuffPos = logBuff.end( );
@@ -123,7 +135,7 @@ void DBGUI_SetCodeWinToEIP( ) {
 	codeViewData.useEIP = reg_eip;
 }
 
-void DBGUI_SetCodeWinToAddress( uint16_t segment, uint32_t offset ) {
+void DBGUI_SetCodeWinToAddress( const uint16_t segment, const uint32_t offset ) {
 	if( AddressVisited( segment, offset ) )
 		dbg.update_win_scroll[WIN_CODE] = true;
 	else // address not already disassembled
@@ -133,18 +145,24 @@ void DBGUI_SetCodeWinToAddress( uint16_t segment, uint32_t offset ) {
 }
 
 void DBGUI_UpdateMemoryViews( ) {
-	for( uint8_t i = 0U; i < NUM_DATA_VIEWS; ++i )
-		dbg.update_win[WIN_DATA + i] = true;
+	for( DATA_ID data_i = static_cast<DATA_ID>( 0U ); data_i < NUM_DATA_VIEWS; ++data_i )
+		dbg.update_win[win_data_view[data_i]] = true;
 }
 
-void DBGUI_UpdateOrderedSegments( ) {
+void DBGUI_UpdateOrderedSegments( const bool refresh_memory_views ) {
 	uint16_t num_segments = ordered_segments.size( );
-	for( uint8_t i = 0U; i <= SegNames::gs; ++i ) {
-		uint16_t seg_val = RealSegValue( static_cast<SegNames>( i ) );
-		if( !ordered_segments.count( seg_val ) )
-			ordered_segments.insert( seg_val );
+	for( SegNames seg_name = static_cast<SegNames>( 0 ); seg_name <= SegNames::gs; seg_name = static_cast<SegNames>( seg_name + 1 ) ) {
+		uint16_t seg_val = RealSegValue( seg_name );
+		if( !ordered_segments.count( { seg_val, {} } ) )
+			ordered_segments.insert( { seg_val, { ( seg_name == cs ? SEG_CODE : seg_name == ss ? SEG_STACK : SEG_DATA ), 0U } } );
 	}
-	if( ordered_segments.size( ) != num_segments )
+	uint16_t seg_index = 0U;
+	for( const auto &[segment, info] : ordered_segments ) {
+		if( info.type == SEG_NONE )
+			continue;
+		const_cast<uint8_t &>( info.index ) = seg_index++;
+	}
+	if( refresh_memory_views || ordered_segments.size( ) != num_segments )
 		DBGUI_UpdateMemoryViews( );
 }
 
@@ -196,18 +214,6 @@ const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
 //const ImVec4 light_torquoise_color = ImVec4( 0.37f, 0.86f, 0.97f, 1.0f );
 //const ImVec4 dark_brown_color = ImVec4( 0.47f, 0.26f, 0.08f, 1.0f );
 
-const ImVec4 address_colors[][2] = {
-{ ImVec4( 0.97f, 0.69f, 0.17f, 1.0f ), ImVec4( 0.97f, 0.77f, 0.37f, 1.0f ) }, // gold
-{ ImVec4( 0.32f, 0.59f, 0.23f, 1.0f ), ImVec4( 0.39f, 0.75f, 0.28f, 1.0f ) }, // green
-{ ImVec4( 0.68f, 0.25f, 0.97f, 1.0f ), ImVec4( 0.78f, 0.39f, 0.97f, 1.0f ) }, // purple
-{ ImVec4( 0.8f, 0.29f, 0.32f, 1.0f ), ImVec4( 0.83f, 0.43f, 0.44f, 1.0f ) },  // red
-{ ImVec4( 0.19f, 0.51f, 0.97f, 1.0f ), ImVec4( 0.41f, 0.63f, 0.97f, 1.0f ) }, // blue
-{ ImVec4( 0.73f, 0.48f, 0.34f, 1.0f ), ImVec4( 0.94f, 0.53f, 0.31f, 1.0f ) }, // orange
-{ ImVec4( 0.97f, 0.19f, 0.53f, 1.0f ), ImVec4( 0.97f, 0.38f, 0.64f, 1.0f ) }, // violet
-{ ImVec4( 0.18f, 0.62f, 0.77f, 1.0f ), ImVec4( 0.18f, 0.82f, 0.97f, 1.0f ) }, // torquoise
-};
-const uint8_t MAX_ADDRESS_COLORS = static_cast<uint8_t>( sizeof( address_colors ) / sizeof( address_colors[0] ) );
-
 static void DrawCode( ) {
 	static auto window_width = window_size[WIN_CODE].x;
 	ImGui::SetNextWindowPos( window_pos[WIN_CODE], ImGuiCond_FirstUseEver );
@@ -224,19 +230,17 @@ static void DrawCode( ) {
 		uint16_t num_segments = ordered_segments.size( );
 		auto startOffset = GetAddress( codeViewData.useCS, codeViewData.useEIP );
 		DasmRecursiveDisassemble( startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
-		if( ordered_segments.size( ) != num_segments ) {
-			for( uint8_t i = 0U; i < NUM_DATA_VIEWS; ++i )
-				dbg.update_win[WIN_DATA + i] = true;
-		}
+		if( ordered_segments.size( ) != num_segments )
+			DBGUI_UpdateOrderedSegments( true );
 		dbg.update_win_scroll[WIN_CODE] = true;
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( "Code" , ImGuiWindowFlags_HorizontalScrollbar ) && !DecodedLine::isEmpty( ) ) {
 		static uint32_t selectedIndex = -1;
 		static bool setFocus = false;
 		uint32_t i = 0;
-		uint8_t addressColorIndex = MAX_ADDRESS_COLORS;
 		uint16_t currentSegment = 0U;
 		for( auto dline = DecodedLine::first( ); !DecodedLine::isEnd( ); ++dline, ++i ) {
+			static uint8_t addressColorIndex = 0U;
 			if( dbg.update_win_scroll[WIN_CODE] && dline.address.segment >= codeViewData.useCS && dline.address.offset >= codeViewData.useEIP ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
 				ImGui::SetScrollHereY( );
@@ -246,8 +250,9 @@ static void DrawCode( ) {
 			}
 			if( currentSegment != dline.address.segment ) { // match segment to defined segments
 				currentSegment = dline.address.segment;
-				if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
-					addressColorIndex = 0U;
+				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			if( dline.mnemonicMask & MM_Proc ) {
 				ImGui::SetCursorPosX( window_width * 0.20f );
@@ -331,6 +336,7 @@ static void DrawCode( ) {
 }
 
 static uint16_t code_seg = 0U;
+static uint16_t psp_seg = 0U;
 static uint16_t stack_seg = 0U;
 static uint16_t stack_end = 0U;
 
@@ -377,7 +383,7 @@ static void DrawData( ) {
 			uint16_t segment = data_segment = dataSeg[DATA_VIEW];
 			auto ordered_segment = ordered_segments.begin( );
 			for( ; ordered_segment != ordered_segments.end( ); ++ordered_segment ) {
-				if( segment < *ordered_segment )
+				if( segment < ordered_segment->value )
 					break;
 			}
 			uint32_t count = ( dataOfs[DATA_VIEW] + 1U ) >> 4;
@@ -406,8 +412,8 @@ static void DrawData( ) {
 			char *line = data_text_buffer;
 			float yPos = 0.0f;
 			for( ; count; --count, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
-				if( line_segment >= *ordered_segment ) {
-					segment = *ordered_segment;
+				if( line_segment >= ordered_segment->value ) {
+					segment = ordered_segment->value;
 					++ordered_segment;
 					offset = 0U;
 					*line++ = '\n';
@@ -491,15 +497,15 @@ static void DrawStack( ) {
 			auto ordered_segment = ordered_segments.end( );
 			--ordered_segment;
 			for( ; ordered_segment != ordered_segments.begin( ); --ordered_segment ) {
-				if( line_segment > *ordered_segment )
+				if( line_segment > ordered_segment->value )
 					break;
 			}
-			if( segment < *ordered_segment ) {
-				segment = *ordered_segment;
+			if( segment < ordered_segment->value ) {
+				segment = ordered_segment->value;
 				offset = ( ( line_segment - segment ) << 4 ) + 0xF;
 			} else {
-				offset = ( ( *std::next( ordered_segment, 1 ) - segment ) << 4 ) - 1U;
-				line_segment = *std::next( ordered_segment, 1 );
+				offset = ( ( std::next( ordered_segment, 1 )->value - segment ) << 4 ) - 1U;
+				line_segment = std::next( ordered_segment, 1 )->value;
 			}
 			const uint32_t mem_base = segment << 4;
 			auto mem = &MemBase[mem_base + offset];
@@ -514,9 +520,9 @@ static void DrawStack( ) {
 			stack_lines = line_segment - stack_segment;
 			float yPos = 0.0f;
 			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
-				if( line_segment < *ordered_segment ) {
+				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;
-					segment = *ordered_segment;
+					segment = ordered_segment->value;
 					offset = ( ( line_segment - segment ) << 4 ) + 0xF;
 				}
 				bool f32bit = false;
@@ -582,14 +588,15 @@ static void DrawDiff( ) {
 		}
 		if( DBGUI_BeginWindowWithStyledTitle( ( data_i == DATA_VIEW ? "Data changes" : "Stack changes" ), ImGuiWindowFlags_None ) ) {
 			static uint32_t selectedIndex = -1;
-			uint8_t addressColorIndex = MAX_ADDRESS_COLORS;
 			uint16_t currentSegment = 0U;
 			for( const auto &diff : data_diff[data_i] ) {
+				static uint8_t addressColorIndex = 0U;
 				const uint32_t offset = diff.address - ( diff.segment << 4 );
 				if( currentSegment != diff.segment ) { // match segment to defined segments
 					currentSegment = diff.segment;
-					if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
-						addressColorIndex = 0U;
+					const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+					if( ordered_segment != ordered_segments.end( ) )
+						addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 				}
 				const bool isSelected = ( selectedIndex == diff.address );
 				char id[11];
@@ -846,8 +853,9 @@ static void DrawRegisters( ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
+const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "PS", "En" };
+
 static void DrawSegments( ) {
-	static const float SEG_LABEL_WIDTH = digit_width * 4.0f;
 	ImGui::SetNextWindowPos( window_pos[WIN_SEG], ImGuiCond_FirstUseEver );
 	ImGui::SetNextWindowSize( window_size[WIN_SEG], ImGuiCond_FirstUseEver );
 
@@ -857,29 +865,32 @@ static void DrawSegments( ) {
 		ImGui::SetNextWindowSize( window_size[WIN_SEG], ImGuiCond_Always );
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( "Segments", ImGuiWindowFlags_NoNav ) ) {
-		uint16_t addressColorIndex = 0U;
-		for( const auto &segment : ordered_segments ) {
-			if( segment == 0U || segment == static_cast<uint16_t>( -1 ) )
+		for( const auto &[segment, info] : ordered_segments ) {
+			if( info.type == SEG_NONE )
 				continue;
-			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", segment );
+			float text_start_x = ImGui::GetCursorPosX( );
+			ImGui::TextColored( grey_color, "%s:", seg_label[info.type] );
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::SetCursorPosX( ImGui::GetCursorPosX( ) - SEG_LABEL_WIDTH );
+			ImGui::TextColored( address_colors[info.index % MAX_ADDRESS_COLORS][1], "%04X", segment );
+			ImGui::SameLine( 0.0f, 0.0f );
+			float text_width = ImGui::GetCursorPosX( ) - text_start_x;
+			ImGui::SetCursorPosX( text_start_x );
 			const bool isSelected = ( codeViewData.useCS == segment );
 			char id[11];
 			sprintf( id, "##%04X", segment );
-			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { SEG_LABEL_WIDTH, 0.0f } ) ) {
-				codeViewData.useCS = segment;
-				codeViewData.useEIP = 0U;
-				dbg.update_win_scroll[WIN_CODE] = true;
+			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { text_width, 0.0f } ) ) {
+				if( info.type == SEG_CODE ) {
+					codeViewData.useCS = segment;
+					codeViewData.useEIP = 0U;
+					dbg.update_win_scroll[WIN_CODE] = true;
+				}
 				dataSeg[DATA_VIEW] = segment;
 				dataOfs[DATA_VIEW] = 0U;
 				dbg.update_win[WIN_DATA] = data_segment != segment;
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
-			if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
-				addressColorIndex = 0U;
 			ImGui::SameLine( );
-			if( ImGui::GetCursorPosX( ) + ( SEG_LABEL_WIDTH + space_width ) > window_size[WIN_SEG].x )
+			if( ImGui::GetCursorPosX( ) + ( text_width + space_width ) > window_size[WIN_SEG].x )
 				ImGui::NewLine( );
 		}
 	}
@@ -901,14 +912,15 @@ static void DrawCalls( ) {
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( "Call labels", ImGuiWindowFlags_None ) ) {
 		static uint32_t selectedIndex = -1;
-		uint8_t addressColorIndex = MAX_ADDRESS_COLORS;
 		uint16_t currentSegment = 0U;
 		for( const auto &[address, info] : calls ) {
+			static uint8_t addressColorIndex = 0U;
 			const uint32_t offset = address - ( info.segment << 4 );
 			if( currentSegment != info.segment ) { // match segment to defined segments
 				currentSegment = info.segment;
-				if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
-					addressColorIndex = 0U;
+				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			const bool isSelected = ( selectedIndex == address );
 			char id[11];
@@ -936,12 +948,16 @@ static void DrawCalls( ) {
 					codeViewData.useEIP = offset;
 					dbg.update_win_scroll[WIN_CODE] = true;
 				}
+				uint8_t color_index = addressColorIndex;
+				const auto &ordered_segment = ordered_segments.find( { segment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					color_index = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 				ImGui::SameLine( address_width );
-				ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", segment );
+				ImGui::TextColored( address_colors[color_index][0], "%04X", segment );
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( grey_color, ":" );
 				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+				ImGui::TextColored( address_colors[color_index][1], "%04X", offset );
 			}
 		}
 	}
@@ -963,30 +979,53 @@ static void DrawLabels( ) {
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( "Labels", ImGuiWindowFlags_None ) ) {
 		static uint32_t selectedIndex = -1;
-		uint8_t addressColorIndex = MAX_ADDRESS_COLORS;
 		uint16_t currentSegment = 0U;
-		for( const auto &[address, segment] : jumps ) {
-			const uint32_t offset = address - ( segment << 4 );
-			if( currentSegment != segment ) { // match segment to defined segments
-				currentSegment = segment;
-				if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
-					addressColorIndex = 0U;
+		for( const auto &[address, info] : jumps ) {
+			static uint8_t addressColorIndex = 0U;
+			const uint32_t offset = address - ( info.segment << 4 );
+			if( currentSegment != info.segment ) { // match segment to defined segments
+				currentSegment = info.segment;
+				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			const bool isSelected = ( selectedIndex == address );
 			char id[11];
 			sprintf( id, "##%08X", address );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = address;
-				codeViewData.useCS = segment;
+				codeViewData.useCS = info.segment;
 				codeViewData.useEIP = offset;
 				dbg.update_win_scroll[WIN_CODE] = true;
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", segment );
+			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", info.segment );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( grey_color, ":" );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			for( const auto &[caller_address, segment] : info.callers ) {
+				const uint32_t offset = caller_address - ( segment << 4 );
+				const bool isSelected = ( selectedIndex == caller_address );
+				char id[12];
+				sprintf( id, "##c%08X", caller_address );
+				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+					selectedIndex = caller_address;
+					codeViewData.useCS = segment;
+					codeViewData.useEIP = offset;
+					dbg.update_win_scroll[WIN_CODE] = true;
+				}
+				uint8_t color_index = addressColorIndex;
+				const auto &ordered_segment = ordered_segments.find( { segment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					color_index = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
+				ImGui::SameLine( address_width );
+				ImGui::TextColored( address_colors[color_index][0], "%04X", segment );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( grey_color, ":" );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( address_colors[color_index][1], "%04X", offset );
+			}
 		}
 	}
 	SnapToGrid( WIN_JUMPS );
@@ -1338,18 +1377,20 @@ bool DBGUI_StartUp( ) {
 	cycle_count = 0;
 
 	code_seg = RealSegValue( cs );
+	psp_seg = RealSegValue( es ); // could also use es or ds segments, or dos.psp( )
 	stack_seg = RealSegValue( ss );
 	stack_end = GetAddress( SegValue( ss ), reg_sp ) >> 4;
 	// Add known segments to ordered segments
-	const auto psp = &MemBase[reg_dx << 4]; // could also use es or ds segments, or dos.psp( )
-	const uint16_t segs[] = {
-		static_cast<uint16_t>( stack_end ), // Segment after the end of the stack
-		reinterpret_cast<uint16_t &>( psp[0x2] ), // Segment of the first byte beyond the memory allocated to the program
-		reinterpret_cast<uint16_t &>( psp[0x2C] ) // Environment segment
+	const auto psp = &MemBase[psp_seg << 4];
+	const Pair<uint16_t, SEGTYPE> segs[] = {
+		{ code_seg, SEG_CODE }, { psp_seg, SEG_PSP }, { stack_seg, SEG_STACK },
+		{ static_cast<uint16_t>( stack_end ), SEG_DATA }, // Segment after the end of the stack
+		{ reinterpret_cast<uint16_t &>( psp[0x2] ), SEG_DATA }, // Segment of the first byte beyond the memory allocated to the program
+		{ reinterpret_cast<uint16_t &>( psp[0x2C] ), SEG_ENV } // Environment segment
 	};
-	for( const auto &seg: segs )
-		if( !ordered_segments.count( seg ) )
-			ordered_segments.insert( seg );
+	for( const auto &[seg, type]: segs )
+		if( !ordered_segments.count( { seg, {} } ) )
+			ordered_segments.insert( { seg, { type, 0U } } );
 	// Point stack view to top of stack
 	dataSeg[STACK_VIEW] = RealSegValue( ss );
 	dataOfs[STACK_VIEW] = reg_sp;

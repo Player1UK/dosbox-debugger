@@ -9,12 +9,12 @@
 
 template <typename T1, typename T2>
 struct Pair {
-	T1 first; T2 second;
+	T1 value; T2 extra;
 	bool operator==( const Pair &other ) const noexcept { // Equality operator for comparisons
-		return first == other.first;
+		return value == other.value;
 	}
 	bool operator<( const Pair &other ) const noexcept { // Less than operator for comparisons
-		return first < other.first;
+		return value < other.value;
 	}
 };
 
@@ -73,14 +73,29 @@ extern uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, co
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected );
 
+typedef enum SegType : uint8_t {
+	SEG_NONE = 0U,
+	SEG_CODE,
+	SEG_DATA,
+	SEG_STACK,
+	SEG_PSP,
+	SEG_ENV,
+	NUM_SEG_TYPES
+} SEGTYPE;
+
+struct SegmentInfo {
+	SEGTYPE type;
+	uint8_t	index;
+};
+
 struct LabelInfo {
 	uint16_t segment;
 	std::set<Pair<uint32_t, uint16_t>> &callers;
 };
 
-extern std::set<uint16_t> ordered_segments;
+extern std::set<Pair<uint16_t, SegmentInfo>> ordered_segments;
 extern std::set<Pair<uint32_t, LabelInfo>> calls;
-extern std::set<Pair<uint32_t, uint16_t>> jumps;
+extern std::set<Pair<uint32_t, LabelInfo>> jumps;
 
 #endif // C_DEBUGGER
 
