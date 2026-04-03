@@ -6,7 +6,7 @@ Code is disassembled recursively, so that data entries embedded within the code 
 
 Labels and call labels are identified and shown, along with callers.
 
-New disassembled code entries are added when their address is referenced, either manually or via indirect jumps.
+Disassembled code entries are added recursively when their address is referenced, either manually or via indirect jumps.
 
 The whole code section is shown, split into segments.
 
