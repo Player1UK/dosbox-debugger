@@ -20,7 +20,7 @@ namespace std {
 }
 
 std::set<uint16_t> ordered_segments = { 0U, static_cast<uint16_t>( -1 ) };
-std::set<Pair<uint32_t, uint16_t>> calls;
+std::set<Pair<uint32_t, LabelInfo>> calls;
 std::set<Pair<uint32_t, uint16_t>> jumps;
 
 static std::set<Pair<uint32_t, DecodedLine>> ordered_code;
@@ -300,13 +300,22 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                             if( addr < segment0 || addr >= binarySize ) // Still invalid, skip
                                 continue;
                         }
-                        if( !added.count( addr ) && !visited.count( addr ) ) {
+                        if( !added.count( addr ) ) {
                             added.insert( addr );
-                            toVisit.push_back( ptr );
-                            if( dline.mnemonicMask & MM_CALL )
-                                calls.insert( { addr, ptr.segment } );
-                            else
+                            if( !visited.count( addr ) )
+                                toVisit.push_back( ptr );
+                            if( dline.mnemonicMask & MM_CALL ) {
+                                auto call = calls.insert( { addr, LabelInfo( ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+                                call.first->second.callers.insert( { dline.base_offset, dline.address.segment } );
+                            } else
                                 jumps.insert( { addr, ptr.segment } );
+                        } else {
+                            if( dline.mnemonicMask & MM_CALL ) {
+                                std::set<Pair<uint32_t, uint16_t>> callers;
+                                auto call = calls.find( { addr, { ptr.segment, callers } } );
+                                if( call != calls.end( ) )
+                                    call->second.callers.insert( { dline.base_offset, dline.address.segment } );
+                            }
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -351,7 +360,7 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
             }
         }
     }
-    for( const auto &[address, segment] : calls ) {
+    for( const auto &[address, info] : calls ) {
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
             auto &dline = it->second;
@@ -418,11 +427,11 @@ void Dasm_WriteFile( ) {
             *cptr++ = 0;
             szOperands = cptr;
         }
-        if( calls.count( { dline.base_offset, dline.address.segment } ) ) {
+        /*if( calls.count( { dline.base_offset, { dline.address.segment, { } } } ) ) {
             auto entry = procs.insert( { dline.base_offset, Proc( dline.base_offset ) } );
             Proc &sub = const_cast<Proc &>( entry.first->second );
             sprintf( sub.szProc, "sub_%08X", dline.base_offset );
-        }
+        }*/
         out << indent << setw( 8 ) << szOperator << szOperands << std::endl;
     }
     out.close( );

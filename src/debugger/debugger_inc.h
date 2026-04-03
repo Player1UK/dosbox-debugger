@@ -114,7 +114,7 @@ struct DBGBlock {
 
 	// Window dimensions (in characters)
 	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
-	const int8_t height_ratio[NUM_WINDOWS] = { 57, -4, -3, -1, 0, 39, 0, 60, 0, -4, 57, 0 };
+	const int8_t height_ratio[NUM_WINDOWS] = { 57, -4, -3, -1, 0, 39, 0, 61, 0, -4, 57, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;

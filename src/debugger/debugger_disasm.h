@@ -73,8 +73,13 @@ extern uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, co
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected );
 
+struct LabelInfo {
+	uint16_t segment;
+	std::set<Pair<uint32_t, uint16_t>> &callers;
+};
+
 extern std::set<uint16_t> ordered_segments;
-extern std::set<Pair<uint32_t, uint16_t>> calls;
+extern std::set<Pair<uint32_t, LabelInfo>> calls;
 extern std::set<Pair<uint32_t, uint16_t>> jumps;
 
 #endif // C_DEBUGGER

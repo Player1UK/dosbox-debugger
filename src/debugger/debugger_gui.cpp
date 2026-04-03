@@ -41,7 +41,7 @@ char curSelectorName[3] = { 0, 0, 0 };
 static bool imgui_initialized = false;
 static float display_scale = 1.0f;
 
-static float char_width, digit_width, space_width;
+static float char_width, digit_width, space_width, address_width;
 static float line_height;
 static float line_height_no_spacing;
 static ImVec2 padding;
@@ -251,7 +251,7 @@ static void DrawCode( ) {
 			}
 			if( dline.mnemonicMask & MM_Proc ) {
 				ImGui::SetCursorPosX( window_width * 0.20f );
-				ImGui::TextColored( blue_color, "Proc label:" );
+				ImGui::TextColored( blue_color, "Call label:" );
 			} else if( dline.mnemonicMask & MM_Label ) {
 				ImGui::SetCursorPosX( window_width * 0.26f );
 				ImGui::TextColored( yellow_color, "label:" );
@@ -357,6 +357,7 @@ typedef struct Diff {
 static char data_text_buffer[24 * 4096 * 128];
 static std::vector<DIFF> data_diff[NUM_DATA_VIEWS];
 static ImU32 diff_col = IM_COL32( 0, 96, 0, 255 );
+static uint16_t data_segment = static_cast<uint16_t>( -1 );
 
 static void DrawData( ) {
 	ImGui::SetNextWindowPos( window_pos[WIN_DATA], ImGuiCond_FirstUseEver );
@@ -371,7 +372,6 @@ static void DrawData( ) {
 		if( ImGui::IsWindowFocused( ImGuiHoveredFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
 			dbg.active_data_view = DATA_VIEW;
 		bool scroll_to_diff = false;
-		static uint16_t data_segment = static_cast<uint16_t>( -1 );
 		if( dbg.update_win[WIN_DATA] ) {
 			dbg.update_win[WIN_DATA] = false;
 			uint16_t segment = data_segment = dataSeg[DATA_VIEW];
@@ -466,6 +466,7 @@ static void DrawData( ) {
 
 static char stack_text_buffer[24 * 4096 * 128];
 static uint32_t stack_lines = 0U;
+static uint16_t stack_segment = static_cast<uint16_t>( -1 );
 
 static void DrawStack( ) {
 	ImGui::SetNextWindowPos( window_pos[WIN_STACK], ImGuiCond_FirstUseEver );
@@ -480,7 +481,6 @@ static void DrawStack( ) {
 		if( ImGui::IsWindowFocused( ImGuiHoveredFlags_ChildWindows ) && dbg.active_data_view != STACK_VIEW )
 			dbg.active_data_view = STACK_VIEW;
 		bool scroll_to_diff = false;
-		static uint16_t stack_segment = static_cast<uint16_t>( -1 );
 		if( dbg.update_win[WIN_STACK] ) {
 			dbg.update_win[WIN_STACK] = false;
 			char *line = stack_text_buffer;
@@ -562,10 +562,8 @@ static void DrawStack( ) {
 			dbg.update_win_scroll[WIN_STACK] = false;
 			if( scroll_to_diff && !data_diff[STACK_VIEW].empty( ) )
 				ImGui::SetScrollY( data_diff[STACK_VIEW][0].pos.y );
-			else {
-				const uint32_t offset = dataOfs[STACK_VIEW] - stack_segment;
-				ImGui::SetScrollY( ( stack_lines - ( ( offset >> 4 ) + ( offset & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
-			}
+			else
+				ImGui::SetScrollY( ( stack_lines - ( ( dataSeg[STACK_VIEW] - stack_segment ) + ( dataOfs[STACK_VIEW] >> 4 ) + ( dataOfs[STACK_VIEW] & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
 		}
 	}
 	SnapToGrid( WIN_STACK );
@@ -678,7 +676,9 @@ static void DrawRegisters( ) {
 
 		Bitu changed_flags = reg_flags ^ oldflags;
 		for( ENTRY e : layout ) {
+			float label_x = 0.0f, entry_width = 1.0f;
 			if( e.label[0] ) {
+				label_x = ImGui::GetCursorPosX( );
 				ImGui::Text( "%s", e.label );
 				if( e.separator ) {
 					ImGui::SameLine( 0.0f, 0.0f );
@@ -692,6 +692,35 @@ static void DrawRegisters( ) {
 					ImGui::TextColored( highlight_color, "%04X %04X", ( cpu_regs.regs[e.x].dword[DW_INDEX] >> 16 ) & 0xFFFF, cpu_regs.regs[e.x].dword[DW_INDEX] & 0xFFFF );
 				else
 					ImGui::Text( "%04X %04X", ( cpu_regs.regs[e.x].dword[DW_INDEX] >> 16 ) & 0xFFFF, cpu_regs.regs[e.x].dword[DW_INDEX] & 0xFFFF );
+				if( e.x != REGI_AX && e.x != REGI_CX ) {
+					ImGui::SameLine( 0.0f, 0.0f );
+					entry_width = ImGui::GetCursorPosX( ) - label_x;
+					ImGui::SetCursorPosX( label_x );
+					char id[10];
+					sprintf( id, "##reg_%s", e.label );
+					if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
+						switch( e.x ) {
+						case REGI_SP:
+						case REGI_BP:
+							dataSeg[STACK_VIEW] = RealSegValue( ss );
+							dataOfs[STACK_VIEW] = cpu_regs.regs[e.x].dword[DW_INDEX];
+							dbg.update_win[WIN_STACK] = stack_segment != dataSeg[STACK_VIEW];
+							dbg.update_win_scroll[WIN_STACK] = true;
+							break;
+						case REGI_DX:
+						case REGI_SI:
+							dataSeg[DATA_VIEW] = RealSegValue( ds );
+						case REGI_BX:
+						case REGI_DI:
+							if( e.x == REGI_DI || e.x == REGI_BX )
+								dataSeg[DATA_VIEW] = RealSegValue( es );
+							dataOfs[DATA_VIEW] = cpu_regs.regs[e.x].dword[DW_INDEX];
+							dbg.update_win[WIN_DATA] = data_segment != dataSeg[DATA_VIEW];
+							dbg.update_win_scroll[WIN_DATA] = true;
+							break;
+						}
+					}
+				}
 				break;
 			case tSEG: {
 				const auto segVal = RealSegValue( static_cast<SegNames>( e.x ) );
@@ -699,6 +728,34 @@ static void DrawRegisters( ) {
 					ImGui::TextColored( highlight_color, "%04X", segVal );
 				else
 					ImGui::Text( "%04X", segVal );
+				if( segVal ) {
+					ImGui::SameLine( 0.0f, 0.0f );
+					entry_width = ImGui::GetCursorPosX( ) - label_x;
+					ImGui::SetCursorPosX( label_x );
+					char id[9];
+					sprintf( id, "##seg_%s", e.label );
+					if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
+						switch( e.x ) {
+						case cs:
+							codeViewData.useCS = segVal;
+							codeViewData.useEIP = 0U;
+							dbg.update_win_scroll[WIN_CODE] = true;
+							break;
+						case ss:
+							dataSeg[STACK_VIEW] = segVal;
+							dataOfs[STACK_VIEW] = reg_esp;
+							dbg.update_win[WIN_STACK] = stack_segment != segVal;
+							dbg.update_win_scroll[WIN_STACK] = true;
+							break;
+						default:
+							dataSeg[DATA_VIEW] = segVal;
+							dataOfs[DATA_VIEW] = 0U;
+							dbg.update_win[WIN_DATA] = data_segment != segVal;
+							dbg.update_win_scroll[WIN_DATA] = true;
+							break;
+						}
+					}
+				}
 			}
 				break;
 			case tIP:
@@ -706,6 +763,14 @@ static void DrawRegisters( ) {
 					ImGui::TextColored( highlight_color, "%04X %04X", ( reg_eip >> 16 ) & 0xFFFF, reg_eip & 0xFFFF );
 				else
 					ImGui::Text( "%04X %04X", ( reg_eip >> 16 ) & 0xFFFF, reg_eip & 0xFFFF );
+				ImGui::SameLine( 0.0f, 0.0f );
+				entry_width = ImGui::GetCursorPosX( ) - label_x;
+				ImGui::SetCursorPosX( label_x );
+				if( ImGui::Selectable( "##reg_ip", false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
+					codeViewData.useCS = RealSegValue( cs );
+					codeViewData.useEIP = reg_eip;
+					dbg.update_win_scroll[WIN_CODE] = true;
+				}
 				break;
 			case tMODE: {
 				const char* mode_str = "Real";
@@ -806,9 +871,9 @@ static void DrawSegments( ) {
 				codeViewData.useCS = segment;
 				codeViewData.useEIP = 0U;
 				dbg.update_win_scroll[WIN_CODE] = true;
-				dataSeg[0] = segment;
-				dataOfs[0] = 0U;
-				dbg.update_win[WIN_DATA] = true;
+				dataSeg[DATA_VIEW] = segment;
+				dataOfs[DATA_VIEW] = 0U;
+				dbg.update_win[WIN_DATA] = data_segment != segment;
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
 			if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
@@ -834,14 +899,14 @@ static void DrawCalls( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_CALLS], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_CALLS], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Proc labels", ImGuiWindowFlags_None ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( "Call labels", ImGuiWindowFlags_None ) ) {
 		static uint32_t selectedIndex = -1;
 		uint8_t addressColorIndex = MAX_ADDRESS_COLORS;
 		uint16_t currentSegment = 0U;
-		for( const auto &[address, segment] : calls ) {
-			const uint32_t offset = address - ( segment << 4 );
-			if( currentSegment != segment ) { // match segment to defined segments
-				currentSegment = segment;
+		for( const auto &[address, info] : calls ) {
+			const uint32_t offset = address - ( info.segment << 4 );
+			if( currentSegment != info.segment ) { // match segment to defined segments
+				currentSegment = info.segment;
 				if( ++addressColorIndex >= MAX_ADDRESS_COLORS )
 					addressColorIndex = 0U;
 			}
@@ -850,16 +915,34 @@ static void DrawCalls( ) {
 			sprintf( id, "##%08X", address );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = address;
-				codeViewData.useCS = segment;
+				codeViewData.useCS = info.segment;
 				codeViewData.useEIP = offset;
 				dbg.update_win_scroll[WIN_CODE] = true;
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", segment );
+			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", info.segment );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( grey_color, ":" );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			for( const auto &[caller_address, segment] : info.callers ) {
+				const uint32_t offset = caller_address - ( segment << 4 );
+				const bool isSelected = ( selectedIndex == caller_address );
+				char id[12];
+				sprintf( id, "##c%08X", caller_address );
+				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+					selectedIndex = caller_address;
+					codeViewData.useCS = segment;
+					codeViewData.useEIP = offset;
+					dbg.update_win_scroll[WIN_CODE] = true;
+				}
+				ImGui::SameLine( address_width );
+				ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", segment );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( grey_color, ":" );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			}
 		}
 	}
 	SnapToGrid( WIN_CALLS );
@@ -1282,6 +1365,7 @@ bool DBGUI_StartUp( ) {
 	char_width = ImGui::CalcTextSize( "X" ).x; // Use a representative character to get monospace font width
 	digit_width = ImGui::CalcTextSize( "00000000000000000000000000000000", NULL, false, 0.0f ).x * 0.03125f;
 	space_width = ImGui::CalcTextSize( "                                ", NULL, false, 0.0f ).x * 0.03125f;
+	address_width = char_width * 10.0f;
 	line_height = ImGui::GetTextLineHeightWithSpacing( );
 	line_height_no_spacing = ImGui::GetTextLineHeight( );
 	title_bar_height = ImGui::GetFrameHeight( );
