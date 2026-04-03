@@ -1,6 +1,8 @@
 ![debugger](https://github.com/user-attachments/assets/aa50f915-1056-43e2-9798-c3db85e04361)
 
-Windows can be re-arranged, and snap to grid of titlebar height and character width.
+Window can be re-sized, automatically adjusting the layout of sub-windows according to set ratios and fixed values.
+
+Windows can be re-arranged, snapping to a grid of titlebar height and character width.
 
 Code is disassembled recursively, so that data entries embedded within the code don't appear.
 
