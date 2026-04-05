@@ -1753,5 +1753,8 @@
     <ClInclude Include="src\debugger\debugvar.h">
       <Filter>Source Files\debugger</Filter>
     </ClInclude>
+    <ClInclude Include="src\debugger\debugtypes.h">
+      <Filter>Source Files\debugger</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

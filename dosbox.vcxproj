@@ -617,6 +617,7 @@
     <ClInclude Include="src\debugger\debugger.h" />
     <ClInclude Include="src\debugger\debugger_disasm.h" />
     <ClInclude Include="src\debugger\debugger_inc.h" />
+    <ClInclude Include="src\debugger\debugtypes.h" />
     <ClInclude Include="src\debugger\debugvar.h" />
     <ClInclude Include="src\debugger\IBM_VGA_8x16.h" />
     <ClInclude Include="src\dosbox.h" />

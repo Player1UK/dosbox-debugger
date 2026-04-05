@@ -9,6 +9,7 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
+#include "debugtypes.h"
 #include <SDL3/SDL.h>
 #include <queue>
 
@@ -36,14 +37,14 @@ typedef enum Window_ID :uint8_t {
 	WIN_STACK,
 	NUM_WINDOWS
 } WINDOW_ID;
-WINDOW_ID &operator++( WINDOW_ID &id );
+WINDOW_ID &operator++( WINDOW_ID & );
 
 typedef enum Data_ID :uint8_t {
 	DATA_VIEW = 0U,
 	STACK_VIEW,
 	NUM_DATA_VIEWS
 } DATA_ID;
-DATA_ID &operator++( DATA_ID &id );
+DATA_ID &operator++( DATA_ID & );
 
 bool DBGUI_StartUp( );
 void DBGUI_Shutdown( );
@@ -119,6 +120,7 @@ struct DBGBlock {
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	int window_width = 0;
 	int window_height = 0;
+	uint16_t segment[NUM_SEG_TYPES];
 };
 
 extern uint16_t dataSeg[NUM_DATA_VIEWS];

@@ -56,12 +56,21 @@ static ImGuiWindowFlags_ ADDITIONAL_FLAGS = STATIC_LAYOUT;
 static float CalcWindowHeight( uint8_t rows, bool fTitle = true );
 static float CalcWindowWidth( uint8_t cols );
 
+SEGTYPE &operator++( SEGTYPE &type ) {
+	type = static_cast<SEGTYPE>( ++reinterpret_cast<uint8_t &>( type ) );
+	return type;
+}
+SEGTYPE operator++( SEGTYPE &source, int ) { // Postfix increment
+	const SEGTYPE original = source;
+	++source;
+	return original;
+}
 WINDOW_ID &operator++( WINDOW_ID &id ) {
-	id = static_cast<WINDOW_ID>( id + 1 );
+	id = static_cast<WINDOW_ID>( ++reinterpret_cast<uint8_t &>( id ) );
 	return id;
 }
 DATA_ID &operator++( DATA_ID &id ) {
-	id = static_cast<DATA_ID>( id + 1 );
+	id = static_cast<DATA_ID>( ++reinterpret_cast<uint8_t &>( id ) );
 	return id;
 }
 uint16_t dataSeg[NUM_DATA_VIEWS] = { 0, 0 };
@@ -69,7 +78,26 @@ uint32_t dataOfs[NUM_DATA_VIEWS] = { 0, 0 };
 WINDOW_ID win_data_view[NUM_DATA_VIEWS] = { WIN_DATA, WIN_STACK };
 WINDOW_ID win_diff_view[NUM_DATA_VIEWS] = { WIN_DDIFF, WIN_SDIFF };
 
+const ImVec4 white_color = ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
+const ImVec4 light_grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
+const ImVec4 grey_color = ImVec4( 0.5f, 0.5f, 0.5f, 1.0f );
+const ImVec4 red_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
+const ImVec4 dark_red_color = ImVec4( 0.76f, 0.11f, 0.12f, 1.0f );
+const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
+const ImVec4 dark_green_color = ImVec4( 0.11f, 0.76f, 0.11f, 1.0f );
+const ImVec4 blue_color = ImVec4( 0.0f, 0.64f, 0.91f, 1.0f );
+const ImVec4 yellow_color = ImVec4( 1.0f, 0.99f, 0.33f, 1.0f );
+const ImVec4 gold_color = ImVec4( 0.97f, 0.69f, 0.17f, 1.0f );
+const ImVec4 purple_color = ImVec4( 0.75f, 0.72f, 1.0f, 1.0f );
+const ImVec4 dark_purple_color = ImVec4( 0.74f, 0.38f, 0.97f, 1.0f );
+const ImVec4 violet_color = ImVec4( 0.97f, 0.38f, 0.64f, 1.0f );
+const ImVec4 jmp_color = ImVec4( 1.0f, 1.0f, 0.57f, 1.0f );
+const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
+//const ImVec4 light_torquoise_color = ImVec4( 0.37f, 0.86f, 0.97f, 1.0f );
+//const ImVec4 dark_brown_color = ImVec4( 0.47f, 0.26f, 0.08f, 1.0f );
+
 const ImVec4 address_colors[][2] = {
+{ grey_color, light_grey_color }, // grey
 { ImVec4( 0.73f, 0.48f, 0.34f, 1.0f ), ImVec4( 0.94f, 0.53f, 0.31f, 1.0f ) }, // orange
 { ImVec4( 0.19f, 0.51f, 0.97f, 1.0f ), ImVec4( 0.41f, 0.63f, 0.97f, 1.0f ) }, // blue
 { ImVec4( 0.97f, 0.69f, 0.17f, 1.0f ), ImVec4( 0.97f, 0.77f, 0.37f, 1.0f ) }, // gold
@@ -118,12 +146,13 @@ void DEBUG_ShowMsg( const char* format, ... ) {
 }
 
 uint16_t RealSegValue( const SegNames index ) {
-	if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
+	uint16_t seg_value = SegValue( index );
+	if( ( cpu.pmode || seg_value < 32U ) && !( reg_flags & FLAG_VM ) ) {
 		Descriptor desc;
-		if( cpu.gdt.GetDescriptor( SegValue( index ), desc ) )
+		if( cpu.gdt.GetDescriptor( seg_value, desc ) )
 			return desc.GetBase( ) >> 4;
 	}
-	return SegValue( index );
+	return seg_value;
 }
 
 void DBGUI_SetCodeWinToEIP( ) {
@@ -154,13 +183,13 @@ void DBGUI_UpdateOrderedSegments( const bool refresh_memory_views ) {
 	for( SegNames seg_name = static_cast<SegNames>( 0 ); seg_name <= SegNames::gs; seg_name = static_cast<SegNames>( seg_name + 1 ) ) {
 		uint16_t seg_val = RealSegValue( seg_name );
 		if( !ordered_segments.count( { seg_val, {} } ) )
-			ordered_segments.insert( { seg_val, { ( seg_name == cs ? SEG_CODE : seg_name == ss ? SEG_STACK : SEG_DATA ), 0U } } );
+			ordered_segments.insert( { seg_val, { ( seg_val < dbg.segment[SEG_PSP] ? SEG_BASE : seg_name == cs ? SEG_CODE : seg_name == ss ? SEG_STACK : SEG_DATA ), 0U } } );
 	}
 	uint16_t seg_index = 0U;
 	for( const auto &[segment, info] : ordered_segments ) {
-		if( info.type == SEG_NONE )
+		if( info.type == SEG_BASE || info.type == SEG_MAX )
 			continue;
-		const_cast<uint8_t &>( info.index ) = seg_index++;
+		const_cast<uint8_t &>( info.index ) = ( seg_index++ % ( MAX_ADDRESS_COLORS - 1U ) ) + 1U;
 	}
 	if( refresh_memory_views || ordered_segments.size( ) != num_segments )
 		DBGUI_UpdateMemoryViews( );
@@ -196,23 +225,6 @@ static void SnapToGrid( WINDOW_ID winID ) { // Detect movement and snap
 		}
 	}
 }
-const ImVec4 white_color = ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
-const ImVec4 light_grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
-const ImVec4 grey_color = ImVec4( 0.5f, 0.5f, 0.5f, 1.0f );
-const ImVec4 red_color = ImVec4( 1.0f, 0.0f, 0.0f, 1.0f );
-const ImVec4 dark_red_color = ImVec4( 0.76f, 0.11f, 0.12f, 1.0f );
-const ImVec4 green_color = ImVec4( 0.0f, 1.0f, 0.0f, 1.0f );
-const ImVec4 dark_green_color = ImVec4( 0.11f, 0.76f, 0.11f, 1.0f );
-const ImVec4 blue_color = ImVec4( 0.0f, 0.64f, 0.91f, 1.0f );
-const ImVec4 yellow_color = ImVec4( 1.0f, 0.99f, 0.33f, 1.0f );
-const ImVec4 gold_color = ImVec4( 0.97f, 0.69f, 0.17f, 1.0f );
-const ImVec4 purple_color = ImVec4( 0.75f, 0.72f, 1.0f, 1.0f );
-const ImVec4 dark_purple_color = ImVec4( 0.74f, 0.38f, 0.97f, 1.0f );
-const ImVec4 violet_color = ImVec4( 0.97f, 0.38f, 0.64f, 1.0f );
-const ImVec4 jmp_color = ImVec4( 1.0f, 1.0f, 0.57f, 1.0f );
-const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
-//const ImVec4 light_torquoise_color = ImVec4( 0.37f, 0.86f, 0.97f, 1.0f );
-//const ImVec4 dark_brown_color = ImVec4( 0.47f, 0.26f, 0.08f, 1.0f );
 
 static void DrawCode( ) {
 	static auto window_width = window_size[WIN_CODE].x;
@@ -227,10 +239,10 @@ static void DrawCode( ) {
 	}
 	if( dbg.update_win[WIN_CODE] ) {
 		dbg.update_win[WIN_CODE] = false;
-		uint16_t num_segments = ordered_segments.size( );
+		uint16_t previous_num_segments = ordered_segments.size( );
 		auto startOffset = GetAddress( codeViewData.useCS, codeViewData.useEIP );
 		DasmRecursiveDisassemble( startOffset, codeViewData.useEIP, cpu.code.big, cpu.pmode );
-		if( ordered_segments.size( ) != num_segments )
+		if( ordered_segments.size( ) != previous_num_segments )
 			DBGUI_UpdateOrderedSegments( true );
 		dbg.update_win_scroll[WIN_CODE] = true;
 	}
@@ -335,21 +347,12 @@ static void DrawCode( ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
-static uint16_t code_seg = 0U;
-static uint16_t psp_seg = 0U;
-static uint16_t stack_seg = 0U;
-static uint16_t stack_end = 0U;
-
 static std::vector<uint8_t> data_buffer;
-static uint32_t data_base = 0U;
 
 void DBGUI_SaveMemoryState( ) {
-	const uint32_t size = ( stack_end - code_seg ) << 4;
-	data_buffer.resize( size );
-	data_base = code_seg << 4;
-	uint32_t *mem32 = reinterpret_cast<uint32_t *>( &MemBase[data_base] );
+	uint32_t *mem32 = reinterpret_cast<uint32_t *>( MemBase );
 	uint32_t *data32 = reinterpret_cast<uint32_t *>( &data_buffer[0] );
-	for( uint32_t count = size >> 2; count; --count )
+	for( uint32_t count = data_buffer.size( ) >> 2; count; --count )
 		*data32++ = *mem32++;
 }
 
@@ -360,7 +363,7 @@ typedef struct Diff {
 	ImVec2		pos;
 } DIFF;
 
-static char data_text_buffer[24 * 4096 * 128];
+static std::vector<char> data_text_buffer;
 static std::vector<DIFF> data_diff[NUM_DATA_VIEWS];
 static ImU32 diff_col = IM_COL32( 0, 96, 0, 255 );
 static uint16_t data_segment = static_cast<uint16_t>( -1 );
@@ -390,28 +393,30 @@ static void DrawData( ) {
 			if( ( count << 4 ) < dataOfs[DATA_VIEW] + 1U )
 				++count;
 			count += segment;
-			if( count >= stack_end ) {
+			if( count >= dbg.segment[SEG_STACK_END] ) {
 				count -= segment;
 				count = ( count < 0x1000 ? 0x1000 : count );
 			}
-			else if( count >= stack_seg )
-				count = stack_end - segment;
+			else if( count >= dbg.segment[SEG_STACK] )
+				count = dbg.segment[SEG_STACK_END] - segment;
 			else
-				count = stack_seg - segment;
+				count = dbg.segment[SEG_STACK] - segment;
 			uint32_t offset = 0U;
 			uint32_t line_segment = segment;
-			const uint32_t mem_base = segment << 4;
-			auto mem = &MemBase[mem_base];
-			const uint32_t data_offset = mem_base > data_base ? mem_base - data_base : 0U;
-			const auto mem_begin = &MemBase[data_base + data_offset];
-			const auto mem_end = &MemBase[data_base + data_buffer.size( )];
-			if( data_offset >= data_buffer.size( ) )
-				const_cast<uint32_t &>( data_offset ) = 0U;
-			auto data = &data_buffer[data_offset];
+			const uint32_t data_base = segment << 4;
+			auto mem = &MemBase[data_base];
+			const auto mem_compare_end = &MemBase[data_buffer.size( )];
+			if( data_base >= data_buffer.size( ) )
+				const_cast<uint32_t &>( data_base ) = 0U;
+			auto data = &data_buffer[data_base];
 			data_diff[DATA_VIEW].clear( );
-			char *line = data_text_buffer;
+			if( ( count << 7U ) > data_text_buffer.size( ) ) {
+				data_text_buffer.clear( );
+				data_text_buffer.resize( count << 7U );
+			}
+			char *line = &data_text_buffer[0];
 			float yPos = 0.0f;
-			for( ; count; --count, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
+			for( ; count; --count, offset += 16U, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment >= ordered_segment->value ) {
 					segment = ordered_segment->value;
 					++ordered_segment;
@@ -430,13 +435,13 @@ static void DrawData( ) {
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, ++mem, ++offset ) {
+				for( uint8_t x = 0U; x < 16U; ++x, ++mem ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
 					sprintf( &line[char_pos], " %02X ", *mem );
 					line[65U + x] = ( *mem < 32 || !isprint( *mem ) ? '.' : *mem ); // Ascii representation
-					if( mem >= mem_begin && mem < mem_end ) {
+					if( mem < mem_compare_end ) {
 						if( *data != *mem )
 							data_diff[DATA_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						++data;
@@ -457,7 +462,7 @@ static void DrawData( ) {
 			ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
 			drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
 		}
-		ImGui::TextUnformatted( data_text_buffer );
+		ImGui::TextUnformatted( &data_text_buffer[0] );
 		if( dbg.update_win_scroll[WIN_DATA] ) {
 			dbg.update_win_scroll[WIN_DATA] = false;
 			if( scroll_to_diff && !data_diff[DATA_VIEW].empty( ) )
@@ -470,7 +475,7 @@ static void DrawData( ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
-static char stack_text_buffer[24 * 4096 * 128];
+static std::vector<char> stack_text_buffer;
 static uint32_t stack_lines = 0U;
 static uint16_t stack_segment = static_cast<uint16_t>( -1 );
 
@@ -489,7 +494,6 @@ static void DrawStack( ) {
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_STACK] ) {
 			dbg.update_win[WIN_STACK] = false;
-			char *line = stack_text_buffer;
 			uint16_t segment = stack_segment = dataSeg[STACK_VIEW];
 			uint32_t offset = dataOfs[STACK_VIEW];
 			offset = ( offset & 0x0000000F ? 16U : 0U ) + ( ( offset >> 4 ) << 4 );
@@ -507,19 +511,22 @@ static void DrawStack( ) {
 				offset = ( ( std::next( ordered_segment, 1 )->value - segment ) << 4 ) - 1U;
 				line_segment = std::next( ordered_segment, 1 )->value;
 			}
-			const uint32_t mem_base = segment << 4;
-			auto mem = &MemBase[mem_base + offset];
-			const uint32_t stack_offset = mem_base > data_base ? mem_base - data_base : 0U;
-			const auto mem_begin = &MemBase[data_base + stack_offset];
-			const auto mem_end = &MemBase[data_base + data_buffer.size( )];
-			const_cast<uint32_t &>( stack_offset ) += offset;
-			if( stack_offset >= data_buffer.size( ) )
-				const_cast<uint32_t &>( stack_offset ) = data_buffer.size( ) - 1U;
-			auto data = &data_buffer[stack_offset];
+			const uint32_t data_base = segment << 4;
+			auto mem = &MemBase[data_base + offset];
+			const auto mem_compare_end = &MemBase[data_buffer.size( )];
+			const_cast<uint32_t &>( data_base ) += offset;
+			if( data_base >= data_buffer.size( ) )
+				const_cast<uint32_t &>( data_base ) = data_buffer.size( ) - 1U;
+			auto data = &data_buffer[data_base];
 			data_diff[STACK_VIEW].clear( );
 			stack_lines = line_segment - stack_segment;
+			if( ( stack_lines << 7U ) > stack_text_buffer.size( ) ) {
+				stack_text_buffer.clear( );
+				stack_text_buffer.resize( stack_lines << 7U );
+			}
+			char *line = &stack_text_buffer[0];
 			float yPos = 0.0f;
-			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
+			for( uint32_t count = stack_lines; count; --count, offset -= 16U, line += 82, --line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;
 					segment = ordered_segment->value;
@@ -536,13 +543,13 @@ static void DrawStack( ) {
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, --mem, --offset ) {
+				for( uint8_t x = 0U; x < 16U; ++x, --mem ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
 					sprintf( &line[char_pos], " %02X ", *mem );
 					line[65U + x] = ( *mem < 32 || !isprint( *mem ) ? '.' : *mem ); // Ascii representation
-					if( mem >= mem_begin && mem < mem_end ) {
+					if( mem < mem_compare_end ) {
 						if( *data != *mem )
 							data_diff[STACK_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						--data;
@@ -563,7 +570,7 @@ static void DrawStack( ) {
 			ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
 			drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
 		}
-		ImGui::TextUnformatted( stack_text_buffer );
+		ImGui::TextUnformatted( &stack_text_buffer[0] );
 		if( dbg.update_win_scroll[WIN_STACK] ) {
 			dbg.update_win_scroll[WIN_STACK] = false;
 			if( scroll_to_diff && !data_diff[STACK_VIEW].empty( ) )
@@ -853,7 +860,7 @@ static void DrawRegisters( ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
-const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "PS", "En" };
+const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "SE", "HP", "PS", "En", "" };
 
 static void DrawSegments( ) {
 	ImGui::SetNextWindowPos( window_pos[WIN_SEG], ImGuiCond_FirstUseEver );
@@ -866,7 +873,7 @@ static void DrawSegments( ) {
 	}
 	if( DBGUI_BeginWindowWithStyledTitle( "Segments", ImGuiWindowFlags_NoNav ) ) {
 		for( const auto &[segment, info] : ordered_segments ) {
-			if( info.type == SEG_NONE )
+			if( info.type == SEG_BASE || info.type == SEG_MAX )
 				continue;
 			float text_start_x = ImGui::GetCursorPosX( );
 			ImGui::TextColored( grey_color, "%s:", seg_label[info.type] );
@@ -1376,25 +1383,27 @@ bool DBGUI_StartUp( ) {
 	imgui_initialized = true;
 	cycle_count = 0;
 
-	code_seg = RealSegValue( cs );
-	psp_seg = RealSegValue( es ); // could also use es or ds segments, or dos.psp( )
-	stack_seg = RealSegValue( ss );
-	stack_end = GetAddress( SegValue( ss ), reg_sp ) >> 4;
 	// Add known segments to ordered segments
-	const auto psp = &MemBase[psp_seg << 4];
-	const Pair<uint16_t, SEGTYPE> segs[] = {
-		{ code_seg, SEG_CODE }, { psp_seg, SEG_PSP }, { stack_seg, SEG_STACK },
-		{ static_cast<uint16_t>( stack_end ), SEG_DATA }, // Segment after the end of the stack
-		{ reinterpret_cast<uint16_t &>( psp[0x2] ), SEG_DATA }, // Segment of the first byte beyond the memory allocated to the program
-		{ reinterpret_cast<uint16_t &>( psp[0x2C] ), SEG_ENV } // Environment segment
-	};
-	for( const auto &[seg, type]: segs )
+	dbg.segment[SEG_BASE] = 0U;
+	dbg.segment[SEG_MAX] = static_cast<uint16_t>( -1 );
+	dbg.segment[SEG_CODE] = RealSegValue( cs );
+	dbg.segment[SEG_PSP] = RealSegValue( es ); // could also use es or ds segments, or dos.psp( )
+	dbg.segment[SEG_STACK] = RealSegValue( ss );
+	dbg.segment[SEG_STACK_END] = GetAddress( SegValue( ss ), reg_sp ) >> 4;
+	const auto psp = &MemBase[dbg.segment[SEG_PSP] << 4];
+	dbg.segment[SEG_HEAP] = reinterpret_cast<uint16_t &>( psp[0x2] ); // Segment of the first byte beyond the memory allocated to the program
+	dbg.segment[SEG_ENV] = reinterpret_cast<uint16_t &>( psp[0x2C] ); // Environment segment
+	SEGTYPE seg_type = SEG_BASE;
+	for( const auto &seg : dbg.segment ) {
 		if( !ordered_segments.count( { seg, {} } ) )
-			ordered_segments.insert( { seg, { type, 0U } } );
+			ordered_segments.insert( { seg, { seg_type } } );
+		++seg_type;
+	}
 	// Point stack view to top of stack
 	dataSeg[STACK_VIEW] = RealSegValue( ss );
 	dataOfs[STACK_VIEW] = reg_sp;
 
+	data_buffer.resize( dbg.segment[SEG_HEAP] << 4 );
 	DBGUI_SaveMemoryState( );
 
 	// Now that ImGui is initialized, resize the window to fit all child

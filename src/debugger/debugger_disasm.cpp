@@ -19,7 +19,7 @@ namespace std {
     };
 }
 
-std::set<Pair<uint16_t, SegmentInfo>> ordered_segments = { { 0U, { SEG_NONE, 0U } }, { static_cast<uint16_t>( -1 ), { SEG_NONE, 0U } } };
+std::set<Pair<uint16_t, SegmentInfo>> ordered_segments;
 std::set<Pair<uint32_t, LabelInfo>> calls;
 std::set<Pair<uint32_t, LabelInfo>> jumps;
 
@@ -99,7 +99,6 @@ void DasmReset( ) {
     calls.clear( );
     jumps.clear( );
     ordered_segments.clear( );
-    ordered_segments = { { 0U, { SEG_NONE, 0U } }, { static_cast<uint16_t>( -1 ), { SEG_NONE, 0U } } };
     visited.clear( );
     ordered_code.clear( );
     currentLine = ordered_code.end( );

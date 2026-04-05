@@ -4,6 +4,7 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
+#include "debugtypes.h"
 #include "Zydis/Zydis.h"
 #include <set>
 
@@ -73,23 +74,13 @@ extern uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, co
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected );
 
-typedef enum SegType : uint8_t {
-	SEG_NONE = 0U,
-	SEG_CODE,
-	SEG_DATA,
-	SEG_STACK,
-	SEG_PSP,
-	SEG_ENV,
-	NUM_SEG_TYPES
-} SEGTYPE;
-
 struct SegmentInfo {
-	SEGTYPE type;
-	uint8_t	index;
+	const SEGTYPE type;
+	uint8_t	index = 0U;
 };
 
 struct LabelInfo {
-	uint16_t segment;
+	const uint16_t segment;
 	std::set<Pair<uint32_t, uint16_t>> &callers;
 };
 
