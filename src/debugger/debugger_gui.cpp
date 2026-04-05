@@ -1286,6 +1286,9 @@ void DBGUI_Resize( ) {
 	}
 }
 
+static const char debugger_title[] = "DOSBox Debugger";
+static const uint8_t debugger_title_length = sizeof( debugger_title );
+
 bool DBGUI_StartUp( ) {
 	if( imgui_initialized )
 		return imgui_initialized;
@@ -1305,7 +1308,7 @@ bool DBGUI_StartUp( ) {
 		SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
 	dbg.win_main = SDL_CreateWindow(
-		"DOSBox Staging Debugger",
+		debugger_title,
 		static_cast<int>( InitialWindowWidth * display_scale ),
 		static_cast<int>( InitialWindowHeight * display_scale ),
 		window_flags );
@@ -1405,6 +1408,14 @@ bool DBGUI_StartUp( ) {
 
 	data_buffer.resize( dbg.segment[SEG_HEAP] << 4 );
 	DBGUI_SaveMemoryState( );
+
+	char program_name[debugger_title_length + 10U] = "";
+	strcat( program_name, debugger_title );
+	program_name[debugger_title_length - 1] = ':';
+	program_name[debugger_title_length] = ' ';
+	strncpy( &program_name[debugger_title_length + 1U], reinterpret_cast<char *>( &MemBase[( dbg.segment[SEG_ENV] << 4 ) + 0xB8] ), 8 );
+	program_name[debugger_title_length + 9U] = 0U;
+	SDL_SetWindowTitle( dbg.win_main, program_name );
 
 	// Now that ImGui is initialized, resize the window to fit all child
 	// windows. Need to do a dummy frame to get accurate font metrics.
