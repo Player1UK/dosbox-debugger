@@ -314,12 +314,12 @@ CBreakpoint* CBreakpoint::FindOtherActiveBreakpoint( PhysPt adr, CBreakpoint* sk
 }
 
 // is there a permanent breakpoint at address ?
-bool CBreakpoint::IsBreakpoint( uint16_t seg, uint32_t off ) {
-	return FindPhysBreakpoint( seg, off, false ) != nullptr;
+bool CBreakpoint::IsBreakpoint( uint16_t seg, uint32_t off, const bool temporary ) {
+	return FindPhysBreakpoint( seg, off, temporary ) != nullptr;
 }
 
-bool CBreakpoint::DeleteBreakpoint( uint16_t seg, uint32_t off ) {
-	CBreakpoint* bp = FindPhysBreakpoint( seg, off, false );
+bool CBreakpoint::DeleteBreakpoint( uint16_t seg, uint32_t off, const bool temporary ) {
+	CBreakpoint* bp = FindPhysBreakpoint( seg, off, temporary );
 	if( bp ) {
 		BPoints.remove( bp );
 		delete bp;

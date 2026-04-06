@@ -83,6 +83,7 @@ Bitu DEBUG_Loop( void ) {
 		DBGUI_Reset( );
 		DBGUI_SaveCPUstate( );
 		DBGUI_SaveMemoryState( );
+		SDL_ShowWindow( GFX_GetWindow( ) );
 		return -1;
 	}
 	return ret;
@@ -104,6 +105,7 @@ void DEBUG_Enable( bool pressed ) {
 	}
 
 	GFX_LosingFocus( );					// Defocus the graphical UI...
+	SDL_HideWindow( GFX_GetWindow( ) );
 	SDL_RaiseWindow( dbg.win_main );	// ...and bring the debugger UI into focus
 	DBGUI_SetCodeWinToEIP( );
 	DBGUI_UpdateMemoryViews( );
@@ -125,6 +127,7 @@ void DEBUG_Close( ) {
 	SDL_HideWindow( dbg.win_main );
 	debugging = false;
 	DOSBOX_SetNormalLoop( );
+	DOSBOX_RequestShutdown( );
 }
 
 Bitu DEBUG_EnableDebugger( ) {

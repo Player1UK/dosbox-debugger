@@ -27,9 +27,6 @@ extern SCodeViewData codeViewData;
 
 bool skipFirstInstruction = false;
 
-extern std::list<std::string> histBuff;
-extern std::list<std::string>::iterator histBuffPos;
-
 static bool SetRedirectBreakpoint( ) {
 	char dline[200];
 	uint32_t size = DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
@@ -60,6 +57,7 @@ static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
 		CBreakpoint::ActivateBreakpoints( );
 
 		const auto graphics_window = GFX_GetWindow( );
+		SDL_ShowWindow( graphics_window );
 		SDL_RaiseWindow( graphics_window );
 
 		DOSBOX_SetNormalLoop( );
@@ -143,54 +141,28 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
-	case SDLK_F6: // previous command (f1-f4 generate rubbish at my place)
-	case SDLK_F3: // previous command
-		if( histBuffPos == histBuff.begin( ) ) {
-			break;
-		}
-		if( histBuffPos == histBuff.end( ) ) {
-			// copy inputStr to suspInputStr so we can restore it
-			safe_strcpy( codeViewData.suspInputStr,
-				codeViewData.inputStr );
-		}
-		safe_strcpy( codeViewData.inputStr, ( --histBuffPos )->c_str( ) );
-		break;
-	case SDLK_F7: // next command (f1-f4 generate rubbish at my place)
-	case SDLK_F4: // next command
-		if( histBuffPos == histBuff.end( ) ) {
-			break;
-		}
-		if( ++histBuffPos != histBuff.end( ) ) {
-			safe_strcpy( codeViewData.inputStr,
-				histBuffPos->c_str( ) );
-		} else {
-			// copy suspInputStr back into inputStr
-			safe_strcpy( codeViewData.inputStr,
-				codeViewData.suspInputStr );
-		}
-		break;
 	case SDLK_F5: // Run Program
 		debugging = false;
 		forceDraw = true;
 		ret = DEBUG_Run( 1, false );
 		break;
-	case SDLK_F9: // Set/Remove Breakpoint
-		if( CBreakpoint::IsBreakpoint( codeViewData.cursorSeg,
-			codeViewData.cursorOfs ) ) {
-			if( CBreakpoint::DeleteBreakpoint( codeViewData.cursorSeg,
-				codeViewData.cursorOfs ) ) {
-				DEBUG_ShowMsg( "DEBUG: Breakpoint deletion success.\n" );
-			} else {
-				DEBUG_ShowMsg( "DEBUG: Failed to delete breakpoint.\n" );
-			}
+	case SDLK_F9: { // Set/Remove Breakpoint. Hold SHIFT for permanent breakpoint
+		const bool ftemp = ( key.mod & SDL_KMOD_SHIFT ) ? false : true;
+		if( CBreakpoint::IsBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp ) ) {
+			if( CBreakpoint::DeleteBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp ) )
+				DEBUG_ShowMsg( "DEBUG: %sreakpoint deletion success.\n",
+					ftemp ? "Temporary b" : "B" );
+			else
+				DEBUG_ShowMsg( "DEBUG: Failed to delete%sbreakpoint.\n",
+					ftemp ? " temporary " : " " );
 		} else {
-			CBreakpoint::AddBreakpoint( codeViewData.cursorSeg,
-				codeViewData.cursorOfs,
-				false );
-			DEBUG_ShowMsg( "DEBUG: Set breakpoint at %04X:%04X\n",
+			CBreakpoint::AddBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp );
+			DEBUG_ShowMsg( "DEBUG: Set%sbreakpoint at %04X:%04X\n",
+				ftemp ? " temporary " : " ",
 				codeViewData.cursorSeg,
 				codeViewData.cursorOfs );
 		}
+	}
 		break;
 	case SDLK_F11: // trace into
 		if( ( key.mod & SDL_KMOD_SHIFT ) ) { // exit trace into

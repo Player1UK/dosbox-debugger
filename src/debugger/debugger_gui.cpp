@@ -53,7 +53,6 @@ static ImVec2 window_size[NUM_WINDOWS];
 static const ImGuiWindowFlags_ STATIC_LAYOUT = static_cast<ImGuiWindowFlags_>( ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoFocusOnAppearing );
 static ImGuiWindowFlags_ ADDITIONAL_FLAGS = STATIC_LAYOUT;
 
-static float CalcWindowHeight( uint8_t rows, bool fTitle = true );
 static float CalcWindowWidth( uint8_t cols );
 
 SEGTYPE &operator++( SEGTYPE &type ) {
@@ -275,6 +274,7 @@ static void DrawCode( ) {
 			}
 			const bool is_current_ip = ( dline.address.segment == RealSegValue( cs ) ) && ( dline.address.offset == reg_eip );
 			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset );
+			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset, true );
 			const bool isSelected = ( selectedIndex == i );
 			char id[11];
 			sprintf( id, "##%08X", dline.base_offset );
@@ -288,11 +288,14 @@ static void DrawCode( ) {
 				ImGui::SetKeyboardFocusHere( -1 );
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color : address_colors[addressColorIndex][0] ) ), "%04X", dline.address.segment );
+			ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color : 
+				( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.address.segment );
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( is_breakpoint || is_current_ip ? white_color : grey_color, ":" );
+			ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( ( is_current_ip ? green_color : ( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ), "%04X%c", dline.address.offset, is_breakpoint ? '*' : ' ' );
+			ImGui::TextColored( ( is_current_ip ? green_color : ( is_temporary_breakpoint ? light_grey_color :
+				( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.address.offset,
+				is_breakpoint && is_temporary_breakpoint ? '+' : is_breakpoint ? '*' : is_temporary_breakpoint ? '-' : ' ' );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( is_current_ip ? light_grey_color : grey_color, "%s", dline.szOpcode );
 			if( is_current_ip ) {
@@ -335,9 +338,14 @@ static void DrawCode( ) {
 				ImGui::SameLine( window_width * 0.955f );
 				ImGui::TextColored( green_color, "<" );
 			}
-			if( is_breakpoint ) {
+			if( is_breakpoint || is_temporary_breakpoint ) {
 				ImGui::SameLine( window_width * 0.965f );
-				ImGui::TextColored( red_color, "*" );
+				if( is_breakpoint && is_temporary_breakpoint )
+					ImGui::TextColored( violet_color, "+" );
+				else if( is_breakpoint )
+					ImGui::TextColored( red_color, "*" );
+				else
+					ImGui::TextColored( light_grey_color, "-" );
 			}
 			if( dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET ) )
 				ImGui::Spacing( );
@@ -377,9 +385,10 @@ static void DrawData( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_DATA], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_DATA], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Data", ImGuiWindowFlags_HorizontalScrollbar ) ) {
-		if( ImGui::IsWindowFocused( ImGuiHoveredFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
+	if( DBGUI_BeginWindowWithStyledTitle( "Data", ImGuiWindowFlags_None ) ) {
+		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
 			dbg.active_data_view = DATA_VIEW;
+		static char szAddressStart[5], szAddressEnd[5];
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_DATA] ) {
 			dbg.update_win[WIN_DATA] = false;
@@ -396,8 +405,7 @@ static void DrawData( ) {
 			if( count >= dbg.segment[SEG_STACK_END] ) {
 				count -= segment;
 				count = ( count < 0x1000 ? 0x1000 : count );
-			}
-			else if( count >= dbg.segment[SEG_STACK] )
+			} else if( count >= dbg.segment[SEG_STACK] )
 				count = dbg.segment[SEG_STACK_END] - segment;
 			else
 				count = dbg.segment[SEG_STACK] - segment;
@@ -455,21 +463,35 @@ static void DrawData( ) {
 				scroll_to_diff = true;
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
+			sprintf( szAddressStart, "%04X", data_segment );
+			sprintf( szAddressEnd, "%04X", line_segment );
 		}
-		ImVec2 top_left = ImGui::GetCursorScreenPos( ); // Top-left corner;
-		auto drawList = ImGui::GetWindowDrawList( );
-		for( const auto &diff: data_diff[DATA_VIEW] ) {
-			ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
-			drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
+		ImGui::PushStyleColor( ImGuiCol_NavHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent highlight
+		ImGui::PushStyleColor( ImGuiCol_NavWindowingHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent window highlight
+		ImGui::PushItemWidth( digit_width * 5.0f );
+		ImGui::InputText( "##StartAddress", szAddressStart, 5U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
+		ImGui::SameLine( );
+		ImGui::InputText( "##EndAddress", szAddressEnd, 5U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
+		ImGui::PopItemWidth( );
+		ImGui::Separator( );
+		if( ImGui::BeginChild( "ScrollRegion", { 0.0f, 0.0f }, false, ImGuiWindowFlags_HorizontalScrollbar ) ) {
+			ImVec2 top_left = ImGui::GetCursorScreenPos( ); // Top-left corner;
+			auto drawList = ImGui::GetWindowDrawList( );
+			for( const auto &diff : data_diff[DATA_VIEW] ) {
+				ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
+				drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
+			}
+			ImGui::TextUnformatted( &data_text_buffer[0] );
+			if( dbg.update_win_scroll[WIN_DATA] ) {
+				dbg.update_win_scroll[WIN_DATA] = false;
+				if( scroll_to_diff && !data_diff[DATA_VIEW].empty( ) )
+					ImGui::SetScrollY( data_diff[DATA_VIEW][0].pos.y );
+				else
+					ImGui::SetScrollY( ( ( dataSeg[DATA_VIEW] - data_segment ) + ( dataOfs[DATA_VIEW] >> 4 ) ) * line_height_no_spacing );
+			}
 		}
-		ImGui::TextUnformatted( &data_text_buffer[0] );
-		if( dbg.update_win_scroll[WIN_DATA] ) {
-			dbg.update_win_scroll[WIN_DATA] = false;
-			if( scroll_to_diff && !data_diff[DATA_VIEW].empty( ) )
-				ImGui::SetScrollY( data_diff[DATA_VIEW][0].pos.y );
-			else
-				ImGui::SetScrollY( ( ( dataSeg[DATA_VIEW] - data_segment) + ( dataOfs[DATA_VIEW] >> 4 ) ) * line_height_no_spacing );
-		}
+		ImGui::EndChild( );
+		ImGui::PopStyleColor( 2 );
 	}
 	SnapToGrid( WIN_DATA );
 	DBGUI_EndWindowWithStyledTitle( );
@@ -488,8 +510,8 @@ static void DrawStack( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_STACK], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_STACK], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Stack", ImGuiWindowFlags_HorizontalScrollbar ) ) {
-		if( ImGui::IsWindowFocused( ImGuiHoveredFlags_ChildWindows ) && dbg.active_data_view != STACK_VIEW )
+	if( DBGUI_BeginWindowWithStyledTitle( "Stack", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNavFocus ) ) {
+		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != STACK_VIEW )
 			dbg.active_data_view = STACK_VIEW;
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_STACK] ) {
@@ -593,7 +615,7 @@ static void DrawDiff( ) {
 			ImGui::SetNextWindowPos( window_pos[win_diff_view[data_i]], ImGuiCond_Always );
 			ImGui::SetNextWindowSize( window_size[win_diff_view[data_i]], ImGuiCond_Always );
 		}
-		if( DBGUI_BeginWindowWithStyledTitle( ( data_i == DATA_VIEW ? "Data changes" : "Stack changes" ), ImGuiWindowFlags_None ) ) {
+		if( DBGUI_BeginWindowWithStyledTitle( ( data_i == DATA_VIEW ? "Data changes" : "Stack changes" ), ImGuiWindowFlags_NoNavFocus ) ) {
 			static uint32_t selectedIndex = -1;
 			uint16_t currentSegment = 0U;
 			for( const auto &diff : data_diff[data_i] ) {
@@ -604,6 +626,7 @@ static void DrawDiff( ) {
 					const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
 					if( ordered_segment != ordered_segments.end( ) )
 						addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
+					ImGui::Separator( );
 				}
 				const bool isSelected = ( selectedIndex == diff.address );
 				char id[11];
@@ -860,7 +883,7 @@ static void DrawRegisters( ) {
 	DBGUI_EndWindowWithStyledTitle( );
 }
 
-const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "SE", "HP", "PS", "En", "" };
+const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "SP", "HP", "PS", "En", "" };
 
 static void DrawSegments( ) {
 	ImGui::SetNextWindowPos( window_pos[WIN_SEG], ImGuiCond_FirstUseEver );
@@ -917,7 +940,7 @@ static void DrawCalls( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_CALLS], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_CALLS], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Call labels", ImGuiWindowFlags_None ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( "Call labels", ImGuiWindowFlags_NoNavFocus ) ) {
 		static uint32_t selectedIndex = -1;
 		uint16_t currentSegment = 0U;
 		for( const auto &[address, info] : calls ) {
@@ -984,7 +1007,7 @@ static void DrawLabels( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_JUMPS], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_JUMPS], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Labels", ImGuiWindowFlags_None ) ) {
+	if( DBGUI_BeginWindowWithStyledTitle( "Labels", ImGuiWindowFlags_NoNavFocus ) ) {
 		static uint32_t selectedIndex = -1;
 		uint16_t currentSegment = 0U;
 		for( const auto &[address, info] : jumps ) {
@@ -1044,6 +1067,8 @@ static void DrawLabels( ) {
 
 #define DEBUG_VAR_BUF_LEN 16
 static void DrawVariables( ) {
+	if( !dbg.visible[WIN_VAR] )
+		return;
 	ImGui::SetNextWindowPos( window_pos[WIN_VAR], ImGuiCond_FirstUseEver );
 	ImGui::SetNextWindowSize( window_size[WIN_VAR], ImGuiCond_FirstUseEver );
 
@@ -1093,49 +1118,34 @@ static void DrawVariables( ) {
 
 // History stuff
 #define MAX_HIST_BUFFER 50
-std::list<std::string> histBuff = {};
-std::list<std::string>::iterator histBuffPos = histBuff.end( );
+static std::list<std::string> histBuff = {};
+static std::list<std::string>::iterator histBuffPos = histBuff.end( );
 
-static void DrawConsole( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_CON], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_CON], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_CON] ) {
-		dbg.update_win_frame[WIN_CON] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_CON], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_CON], ImGuiCond_Always );
-	}
-	ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( padding.x, 0.0f ) );
-	if( DBGUI_BeginWindowWithStyledTitle( "Console", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoResize ) ) {
-		if( !debugging ) {
-			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-			ImGui::Text( "(Running)" );
-			ImGui::PopStyleColor( );
-		} else {
-			ImGui::Text( "%c", ( codeViewData.ovrMode ? 'O' : 'I' ) );
-			ImGui::SameLine( );
-			ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-			if( ImGui::InputText( "##con", codeViewData.inputStr, IM_ARRAYSIZE( codeViewData.inputStr ), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_ElideLeft ) ) {
-				codeViewData.inputStr[MAXCMDLEN] = '\0';
-				if( ParseCommand( codeViewData.inputStr ) ) {
-					char *cmd = ltrim( codeViewData.inputStr );
-					if( histBuff.empty( ) || *--histBuff.end( ) != cmd ) {
-						histBuff.emplace_back( cmd );
-					}
-					if( histBuff.size( ) > MAX_HIST_BUFFER ) {
-						histBuff.pop_front( );
-					}
-					histBuffPos = histBuff.end( );
-					codeViewData.inputStr[0] = 0;
-				}
-			}
-			ImGui::PopStyleColor( );
+static int ConsoleEditCallback( ImGuiInputTextCallbackData *data ) {
+	switch( data->EventFlag ) {
+	case ImGuiInputTextFlags_CallbackHistory:
+		if( data->EventKey == ImGuiKey_UpArrow ) {
+			if( histBuffPos == histBuff.begin( ) )
+				break;
+			data->DeleteChars( 0, data->BufTextLen );
+			if( histBuffPos == histBuff.end( ) ) // copy inputStr to suspInputStr so we can restore it
+				safe_strcpy( codeViewData.suspInputStr, codeViewData.inputStr );
+			data->InsertChars( 0, ( --histBuffPos )->c_str( ) );
+		} else if( data->EventKey == ImGuiKey_DownArrow ) {
+			if( histBuffPos == histBuff.end( ) )
+				break;
+			data->DeleteChars( 0, data->BufTextLen );
+			if( ++histBuffPos != histBuff.end( ) )
+				data->InsertChars( 0, histBuffPos->c_str( ) );
+			else // copy suspInputStr back into inputStr
+				data->InsertChars( 0, codeViewData.suspInputStr );
 		}
+		break;
 	}
-	SnapToGrid( WIN_CON );
-	DBGUI_EndWindowWithStyledTitle( );
-	ImGui::PopStyleVar( );
+	return 0;
 }
+
+static bool fSetConsoleFocus = false;
 
 static void DrawOutputWindow( ) {
 	ImGui::SetNextWindowPos( window_pos[WIN_OUT], ImGuiCond_FirstUseEver );
@@ -1146,10 +1156,43 @@ static void DrawOutputWindow( ) {
 		ImGui::SetNextWindowPos( window_pos[WIN_OUT], ImGuiCond_Always );
 		ImGui::SetNextWindowSize( window_size[WIN_OUT], ImGuiCond_Always );
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Output", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNavFocus ) ) {
-
-		for( auto it = logBuff.begin( ); it != logBuff.end( ); ++it )
-			ImGui::TextUnformatted( it->c_str( ) );
+	ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( padding.x, 0.0f ) );
+	if( DBGUI_BeginWindowWithStyledTitle( "Output", ImGuiWindowFlags_NoNavFocus ) ) {
+		ImGui::PushStyleColor( ImGuiCol_NavHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent highlight
+		ImGui::PushStyleColor( ImGuiCol_NavWindowingHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent window highlight
+		ImGui::PushStyleColor( ImGuiCol_Text, green_color );
+		if( !debugging )
+			ImGui::Text( "(Running)" );
+		else {
+			if( ( !ImGui::IsWindowFocused( ImGuiFocusedFlags_None ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) && ImGui::IsMouseDown( 0 ) ) || fSetConsoleFocus
+				|| ( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) ) {
+				fSetConsoleFocus = false;
+				ImGui::SetKeyboardFocusHere( );
+			}
+			ImGui::PushItemWidth( window_size->x * 0.99f );
+			if( ImGui::InputText( "##con", codeViewData.inputStr, IM_ARRAYSIZE( codeViewData.inputStr ), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_ElideLeft | ImGuiInputTextFlags_CallbackHistory, ConsoleEditCallback ) ) {
+				codeViewData.inputStr[MAXCMDLEN] = '\0';
+				if( ParseCommand( codeViewData.inputStr ) ) {
+					char *cmd = ltrim( codeViewData.inputStr );
+					if( histBuff.empty( ) || *--histBuff.end( ) != cmd )
+						histBuff.emplace_back( cmd );
+					if( histBuff.size( ) > MAX_HIST_BUFFER )
+						histBuff.pop_front( );
+					histBuffPos = histBuff.end( );
+					codeViewData.inputStr[0] = 0;
+					fSetConsoleFocus = true;
+				}
+			}
+			ImGui::SetItemDefaultFocus( );
+			ImGui::PopItemWidth( );
+		}
+		ImGui::PopStyleColor( );
+		if( ImGui::BeginChild( "ScrollRegion", { 0.0f, 0.0f }, false, ImGuiWindowFlags_HorizontalScrollbar ) ) {
+			for( auto it = logBuff.begin( ); it != logBuff.end( ); ++it )
+				ImGui::TextUnformatted( it->c_str( ) );
+		}
+		ImGui::EndChild( );
+		ImGui::PopStyleColor( 2 );
 	}
 	if( dbg.update_win[WIN_OUT] ) {
 		dbg.update_win[WIN_OUT] = false;
@@ -1157,11 +1200,19 @@ static void DrawOutputWindow( ) {
 	}
 	SnapToGrid( WIN_OUT );
 	DBGUI_EndWindowWithStyledTitle( );
+	ImGui::PopStyleVar( );
+}
+
+void DBGUI_SetConsoleFocus( ) {
+	fSetConsoleFocus = true;
 }
 
 // Calculate window height for a given number of rows
-static float CalcWindowHeight( uint8_t rows, bool fTitle ) {
-	return ( rows * title_bar_height ) + ( fTitle ? title_bar_height : 0.0f );
+static float CalcWindowHeight( WINDOW_ID, bool = true );
+static float CalcWindowHeight( WINDOW_ID window_id, bool fTitle ) {
+	if( !dbg.visible[window_id] )
+		return 0.0f;
+	return ( dbg.columnRows[window_id].rows * title_bar_height ) + ( fTitle ? title_bar_height : 0.0f );
 }
 // Calculate window width for a given number of columns
 static float CalcWindowWidth( uint8_t cols ) {
@@ -1178,29 +1229,27 @@ static float CalcWindowY( WINDOW_ID window_id ) {
 	float y = 0.0f;
 	switch( window_id ) {
 	case NUM_WINDOWS:
-		y += CalcWindowHeight( dbg.columnRows[WIN_STACK].rows );
+		y += CalcWindowHeight( WIN_STACK );
 	case WIN_STACK:
-		y += CalcWindowHeight( dbg.columnRows[WIN_VAR].rows );
-	case WIN_VAR:
-		y += CalcWindowHeight( dbg.columnRows[WIN_DATA].rows );
+		y += CalcWindowHeight( WIN_SEG );
+	case WIN_SEG:
+		y += CalcWindowHeight( WIN_DATA );
 	case WIN_DATA:
 		break;
 	case WIN_JUMPS:
-		y += CalcWindowHeight( dbg.columnRows[WIN_CALLS].rows );
+		y += CalcWindowHeight( WIN_CALLS );
 	case WIN_CALLS:
 		break;
 	case WIN_SDIFF:
-		y += CalcWindowHeight( dbg.columnRows[WIN_DDIFF].rows );
+		y += CalcWindowHeight( WIN_DDIFF );
 	case WIN_DDIFF:
 		break;
 	case WIN_OUT:
-		y += CalcWindowHeight( dbg.columnRows[WIN_CON].rows );
-	case WIN_CON:
-		y += CalcWindowHeight( dbg.columnRows[WIN_SEG].rows );
-	case WIN_SEG:
-		y += CalcWindowHeight( dbg.columnRows[WIN_REG].rows );
+		y += CalcWindowHeight( WIN_VAR );
+	case WIN_VAR:
+		y += CalcWindowHeight( WIN_REG );
 	case WIN_REG:
-		y += CalcWindowHeight( dbg.columnRows[WIN_CODE].rows );
+		y += CalcWindowHeight( WIN_CODE );
 	case WIN_CODE:
 	default:
 		break;
@@ -1209,9 +1258,6 @@ static float CalcWindowY( WINDOW_ID window_id ) {
 }
 static float CalcWindowWidth( WINDOW_ID window_id ) {
 	return CalcWindowWidth( dbg.window_cols[dbg.columnRows[window_id].column] );
-}
-static float CalcWindowHeight( WINDOW_ID window_id ) {
-	return CalcWindowHeight( dbg.columnRows[window_id].rows );
 }
 
 static float CalcTotalHeight( ) {
@@ -1233,7 +1279,6 @@ void DBGUI_DrawScreen( ) {
 		fReset = false;
 		DBGUI_SetCodeWinToEIP( );
 	}
-	DrawConsole( );
 	DrawCode( );
 	DrawRegisters( );
 	DrawSegments( );
@@ -1271,6 +1316,10 @@ void DBGUI_Resize( ) {
 	const uint16_t TOTAL_ROWS = dbg.window_height / title_bar_height;
 	uint16_t column_rows[NUM_COLUMNS] = { TOTAL_ROWS, TOTAL_ROWS, TOTAL_ROWS, TOTAL_ROWS };
 	for( WINDOW_ID i = static_cast<WINDOW_ID>( 0U ); i < NUM_WINDOWS; ++i ) {
+		if( !dbg.visible[i] ) {
+			dbg.columnRows[i].rows = 0U;
+			continue;
+		}
 		if( dbg.height_ratio[i] < 0 )
 			dbg.columnRows[i].rows = -dbg.height_ratio[i];
 		else if( dbg.height_ratio[i] > 0 )
@@ -1536,13 +1585,14 @@ void DBGUI_Render( ) {
 
 // Title bar colors - purple background with black text
 static const ImVec4 TitleBgColor = ImVec4( 0.42f, 0.41f, 0.84f, 0.8f ); // Purple
+static const ImVec4 TitleBgColorActive = ImVec4( 0.41f, 0.84f, 0.41f, 0.8f ); // Green
 static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );  // Black
 
 // Helper to begin a window with cyan title bar and black title text
 bool DBGUI_BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flags ) {
 	// Push title bar colors
 	ImGui::PushStyleColor( ImGuiCol_TitleBg, TitleBgColor );
-	ImGui::PushStyleColor( ImGuiCol_TitleBgActive, TitleBgColor );
+	ImGui::PushStyleColor( ImGuiCol_TitleBgActive, TitleBgColorActive );
 	ImGui::PushStyleColor( ImGuiCol_TitleBgCollapsed, TitleBgColor );
 	ImGui::PushStyleColor( ImGuiCol_Text, TitleTextColor );
 

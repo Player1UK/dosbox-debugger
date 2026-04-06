@@ -103,8 +103,8 @@ public:
 		uint16_t ahValue, uint16_t alValue );
 	static CBreakpoint* FindPhysBreakpoint( uint16_t seg, uint32_t off, bool once );
 	static CBreakpoint* FindOtherActiveBreakpoint( PhysPt adr, CBreakpoint* skip );
-	static bool IsBreakpoint( uint16_t seg, uint32_t off );
-	static bool DeleteBreakpoint( uint16_t seg, uint32_t off );
+	static bool IsBreakpoint( uint16_t seg, uint32_t off, const bool temporary = false );
+	static bool DeleteBreakpoint( uint16_t seg, uint32_t off, const bool temporary = false );
 	static bool DeleteByIndex( uint16_t index );
 	static void DeleteAll( void );
 	static void ShowList( void );
