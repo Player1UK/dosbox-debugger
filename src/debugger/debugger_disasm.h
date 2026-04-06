@@ -80,13 +80,13 @@ struct SegmentInfo {
 };
 
 struct LabelInfo {
+	LABEL_MASK type;
 	const uint16_t segment;
 	std::set<Pair<uint32_t, uint16_t>> &callers;
 };
 
 extern std::set<Pair<uint16_t, SegmentInfo>> ordered_segments;
-extern std::set<Pair<uint32_t, LabelInfo>> calls;
-extern std::set<Pair<uint32_t, LabelInfo>> jumps;
+extern std::set<Pair<uint32_t, LabelInfo>> labels;
 
 #endif // C_DEBUGGER
 

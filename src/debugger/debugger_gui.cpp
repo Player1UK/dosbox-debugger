@@ -75,7 +75,6 @@ DATA_ID &operator++( DATA_ID &id ) {
 uint16_t dataSeg[NUM_DATA_VIEWS] = { 0, 0 };
 uint32_t dataOfs[NUM_DATA_VIEWS] = { 0, 0 };
 WINDOW_ID win_data_view[NUM_DATA_VIEWS] = { WIN_DATA, WIN_STACK };
-WINDOW_ID win_diff_view[NUM_DATA_VIEWS] = { WIN_DDIFF, WIN_SDIFF };
 
 const ImVec4 white_color = ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
 const ImVec4 light_grey_color = ImVec4( 0.75f, 0.75f, 0.75f, 1.0f );
@@ -224,18 +223,45 @@ static void SnapToGrid( WINDOW_ID winID ) { // Detect movement and snap
 		}
 	}
 }
+// Title bar colors - purple background with black text
+static const ImVec4 TitleBgColor = ImVec4( 0.42f, 0.41f, 0.84f, 0.8f ); // Purple
+static const ImVec4 TitleBgColorActive = ImVec4( 0.41f, 0.84f, 0.41f, 0.8f ); // Green
+static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );  // Black
 
+static bool BeginSubWindow( const WINDOW_ID winID, const char *name, int flags ) {
+	if( !dbg.visible[winID] )
+		return false;
+	ImGui::SetNextWindowPos( window_pos[winID], ImGuiCond_FirstUseEver );
+	ImGui::SetNextWindowSize( window_size[winID], ImGuiCond_FirstUseEver );
+	if( dbg.update_win_frame[winID] ) {
+		dbg.update_win_frame[winID] = false;
+		ImGui::SetNextWindowPos( window_pos[winID], ImGuiCond_Always );
+		ImGui::SetNextWindowSize( window_size[winID], ImGuiCond_Always );
+	}
+	if( dbg.fTitleBar[winID] ) { // Push title bar colors
+		ImGui::PushStyleColor( ImGuiCol_TitleBg, TitleBgColor );
+		ImGui::PushStyleColor( ImGuiCol_TitleBgActive, TitleBgColorActive );
+		ImGui::PushStyleColor( ImGuiCol_TitleBgCollapsed, TitleBgColor );
+		ImGui::PushStyleColor( ImGuiCol_Text, TitleTextColor );
+	} else
+		flags |= ImGuiWindowFlags_NoTitleBar;
+	bool result = ImGui::Begin( name, nullptr, flags | ADDITIONAL_FLAGS );
+	if( dbg.fTitleBar[winID] )
+		ImGui::PopStyleColor( ); // Restore text color for window content (keep title bar colors)
+	return result;
+}
+static void EndSubWindow( const WINDOW_ID winID ) {
+	if( !dbg.visible[winID] )
+		return;
+	SnapToGrid( winID );
+	ImGui::End( );
+	if( dbg.fTitleBar[winID] )
+		ImGui::PopStyleColor( 3 ); // Pop title bar colors
+}
 static void DrawCode( ) {
 	static auto window_width = window_size[WIN_CODE].x;
-	ImGui::SetNextWindowPos( window_pos[WIN_CODE], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_CODE], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_CODE] ) {
-		dbg.update_win_frame[WIN_CODE] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_CODE], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_CODE], ImGuiCond_Always );
+	if( dbg.update_win_frame[WIN_CODE] )
 		dbg.update_win_scroll[WIN_CODE] = true;
-	}
 	if( dbg.update_win[WIN_CODE] ) {
 		dbg.update_win[WIN_CODE] = false;
 		uint16_t previous_num_segments = ordered_segments.size( );
@@ -245,7 +271,7 @@ static void DrawCode( ) {
 			DBGUI_UpdateOrderedSegments( true );
 		dbg.update_win_scroll[WIN_CODE] = true;
 	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Code" , ImGuiWindowFlags_HorizontalScrollbar ) && !DecodedLine::isEmpty( ) ) {
+	if( BeginSubWindow( WIN_CODE, "Code" , ImGuiWindowFlags_HorizontalScrollbar ) && !DecodedLine::isEmpty( ) ) {
 		static uint32_t selectedIndex = -1;
 		static bool setFocus = false;
 		uint32_t i = 0;
@@ -351,8 +377,7 @@ static void DrawCode( ) {
 				ImGui::Spacing( );
 		}
 	}
-	SnapToGrid( WIN_CODE );
-	DBGUI_EndWindowWithStyledTitle( );
+	EndSubWindow( WIN_CODE );
 }
 
 static std::vector<uint8_t> data_buffer;
@@ -377,15 +402,7 @@ static ImU32 diff_col = IM_COL32( 0, 96, 0, 255 );
 static uint16_t data_segment = static_cast<uint16_t>( -1 );
 
 static void DrawData( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_DATA], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_DATA], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_DATA] ) {
-		dbg.update_win_frame[WIN_DATA] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_DATA], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_DATA], ImGuiCond_Always );
-	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Data", ImGuiWindowFlags_None ) ) {
+	if( BeginSubWindow( WIN_DATA, "Data", ImGuiWindowFlags_None ) ) {
 		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
 			dbg.active_data_view = DATA_VIEW;
 		static char szAddressStart[5], szAddressEnd[5];
@@ -432,8 +449,8 @@ static void DrawData( ) {
 					*line++ = '\n';
 					yPos += line_height_no_spacing;
 				}
-				bool f32bit = false;
 				// Address
+				bool f32bit = false;
 				if( offset <= 0xFFFF )
 					sprintf( line, "%04X:%04X      ", segment, offset );
 				else {
@@ -493,8 +510,7 @@ static void DrawData( ) {
 		ImGui::EndChild( );
 		ImGui::PopStyleColor( 2 );
 	}
-	SnapToGrid( WIN_DATA );
-	DBGUI_EndWindowWithStyledTitle( );
+	EndSubWindow( WIN_DATA );
 }
 
 static std::vector<char> stack_text_buffer;
@@ -502,15 +518,7 @@ static uint32_t stack_lines = 0U;
 static uint16_t stack_segment = static_cast<uint16_t>( -1 );
 
 static void DrawStack( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_STACK], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_STACK], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_STACK] ) {
-		dbg.update_win_frame[WIN_STACK] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_STACK], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_STACK], ImGuiCond_Always );
-	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Stack", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNavFocus ) ) {
+	if( BeginSubWindow( WIN_STACK, "Stack", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNavFocus ) ) {
 		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != STACK_VIEW )
 			dbg.active_data_view = STACK_VIEW;
 		bool scroll_to_diff = false;
@@ -601,60 +609,49 @@ static void DrawStack( ) {
 				ImGui::SetScrollY( ( stack_lines - ( ( dataSeg[STACK_VIEW] - stack_segment ) + ( dataOfs[STACK_VIEW] >> 4 ) + ( dataOfs[STACK_VIEW] & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
 		}
 	}
-	SnapToGrid( WIN_STACK );
-	DBGUI_EndWindowWithStyledTitle( );
+	EndSubWindow( WIN_STACK );
 }
 
 static void DrawDiff( ) {
-	for( DATA_ID data_i = static_cast<DATA_ID>( 0U ); data_i < NUM_DATA_VIEWS; ++data_i ) {
-		ImGui::SetNextWindowPos( window_pos[win_diff_view[data_i]], ImGuiCond_FirstUseEver );
-		ImGui::SetNextWindowSize( window_size[win_diff_view[data_i]], ImGuiCond_FirstUseEver );
-
-		if( dbg.update_win_frame[win_diff_view[data_i]] ) {
-			dbg.update_win_frame[win_diff_view[data_i]] = false;
-			ImGui::SetNextWindowPos( window_pos[win_diff_view[data_i]], ImGuiCond_Always );
-			ImGui::SetNextWindowSize( window_size[win_diff_view[data_i]], ImGuiCond_Always );
-		}
-		if( DBGUI_BeginWindowWithStyledTitle( ( data_i == DATA_VIEW ? "Data changes" : "Stack changes" ), ImGuiWindowFlags_NoNavFocus ) ) {
-			static uint32_t selectedIndex = -1;
-			uint16_t currentSegment = 0U;
-			for( const auto &diff : data_diff[data_i] ) {
-				static uint8_t addressColorIndex = 0U;
-				const uint32_t offset = diff.address - ( diff.segment << 4 );
-				if( currentSegment != diff.segment ) { // match segment to defined segments
-					currentSegment = diff.segment;
-					const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
-					if( ordered_segment != ordered_segments.end( ) )
-						addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
-					ImGui::Separator( );
-				}
-				const bool isSelected = ( selectedIndex == diff.address );
-				char id[11];
-				sprintf( id, "##%08X", diff.address );
-				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-					selectedIndex = diff.address;
-					dataSeg[data_i] = diff.segment;
-					dataOfs[data_i] = offset;
-					dbg.update_win_scroll[win_data_view[data_i]] = true;
-				}
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", diff.segment );
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( grey_color, ":" );
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
-				ImGui::SameLine( );
-				ImGui::TextColored( grey_color, "%02X ->", diff.value );
-				ImGui::SameLine( );
-				ImGui::TextColored( green_color, "%02X", MemBase[diff.address] );
+	if( BeginSubWindow( WIN_DIFF, "Changes", ImGuiWindowFlags_NoNavFocus ) ) {
+		static uint32_t selectedIndex = -1;
+		uint16_t currentSegment = 0U;
+		uint32_t currentOffset = 0U;
+		for( const auto &diff : data_diff[DATA_VIEW] ) {
+			static uint8_t addressColorIndex = 0U;
+			const uint32_t offset = diff.address - ( diff.segment << 4 );
+			if( currentSegment != diff.segment ) { // match segment to defined segments
+				currentSegment = diff.segment;
+				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+				if( ordered_segment != ordered_segments.end( ) )
+					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
+				ImGui::Separator( );
+			} else if( currentOffset != offset >> 4U ) {
+				currentOffset = offset >> 4U;
+				ImGui::Spacing( );
 			}
-		}
-		SnapToGrid( win_diff_view[data_i] );
-		DBGUI_EndWindowWithStyledTitle( );
-		if( dbg.update_win[win_diff_view[data_i]] ) {
-			dbg.update_win[win_diff_view[data_i]] = false;
+			const bool isSelected = ( selectedIndex == diff.address );
+			char id[11];
+			sprintf( id, "##%08X", diff.address );
+			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+				selectedIndex = diff.address;
+				dataSeg[DATA_VIEW] = diff.segment;
+				dataOfs[DATA_VIEW] = offset;
+				dbg.update_win_scroll[WIN_DATA] = true;
+			}
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", diff.segment );
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( grey_color, ":" );
+			ImGui::SameLine( 0.0f, 0.0f );
+			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			ImGui::SameLine( );
+			ImGui::TextColored( grey_color, "%02X ->", diff.value );
+			ImGui::SameLine( );
+			ImGui::TextColored( green_color, "%02X", MemBase[diff.address] );
 		}
 	}
+	EndSubWindow( WIN_DIFF );
 }
 
 const uint8_t oEIP = 8;
@@ -699,18 +696,9 @@ const ENTRY layout[] = {
 
 static void DrawRegisters( ) {
 	static auto window_width = window_size[WIN_REG].x;
-	ImGui::SetNextWindowPos( window_pos[WIN_REG], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_REG], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_REG] ) {
-		dbg.update_win_frame[WIN_REG] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_REG], ImGuiCond_Always );
-		//ImGui::SetNextWindowSize( window_size[WIN_REG], ImGuiCond_Always );
-	}
 	static const float TAB_POS[] = { 0.0f, window_width * 0.205f, window_width * 0.405f, window_width * 0.53f, window_width * 0.655f, window_width * 0.84f, window_width * 0.93f, window_width };
 
-	if( DBGUI_BeginWindowWithStyledTitle( "Registers", ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) ) {
-
+	if( BeginSubWindow( WIN_REG, "Registers", ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse ) ) {
 		Bitu changed_flags = reg_flags ^ oldflags;
 		for( ENTRY e : layout ) {
 			float label_x = 0.0f, entry_width = 1.0f;
@@ -875,26 +863,14 @@ static void DrawRegisters( ) {
 				break;
 			}
 		}
-		if( dbg.update_win[WIN_REG] ) {
-			dbg.update_win[WIN_REG] = false;
-		}
 	}
-	SnapToGrid( WIN_REG );
-	DBGUI_EndWindowWithStyledTitle( );
+	EndSubWindow( WIN_REG );
 }
 
 const char seg_label[NUM_SEG_TYPES][3] = { "", "CS", "DS", "SS", "SP", "HP", "PS", "En", "" };
 
 static void DrawSegments( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_SEG], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_SEG], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_SEG] ) {
-		dbg.update_win_frame[WIN_SEG] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_SEG], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_SEG], ImGuiCond_Always );
-	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Segments", ImGuiWindowFlags_NoNav ) ) {
+	if( BeginSubWindow( WIN_SEG, "Segments", ImGuiWindowFlags_NoNav ) ) {
 		for( const auto &[segment, info] : ordered_segments ) {
 			if( info.type == SEG_BASE || info.type == SEG_MAX )
 				continue;
@@ -924,93 +900,14 @@ static void DrawSegments( ) {
 				ImGui::NewLine( );
 		}
 	}
-	SnapToGrid( WIN_SEG );
-	DBGUI_EndWindowWithStyledTitle( );
-	if( dbg.update_win[WIN_SEG] ) {
-		dbg.update_win[WIN_SEG] = false;
-	}
-}
-
-static void DrawCalls( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_CALLS], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_CALLS], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_CALLS] ) {
-		dbg.update_win_frame[WIN_CALLS] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_CALLS], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_CALLS], ImGuiCond_Always );
-	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Call labels", ImGuiWindowFlags_NoNavFocus ) ) {
-		static uint32_t selectedIndex = -1;
-		uint16_t currentSegment = 0U;
-		for( const auto &[address, info] : calls ) {
-			static uint8_t addressColorIndex = 0U;
-			const uint32_t offset = address - ( info.segment << 4 );
-			if( currentSegment != info.segment ) { // match segment to defined segments
-				currentSegment = info.segment;
-				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
-				if( ordered_segment != ordered_segments.end( ) )
-					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
-			}
-			const bool isSelected = ( selectedIndex == address );
-			char id[11];
-			sprintf( id, "##%08X", address );
-			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				selectedIndex = address;
-				codeViewData.useCS = info.segment;
-				codeViewData.useEIP = offset;
-				dbg.update_win_scroll[WIN_CODE] = true;
-			}
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", info.segment );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( grey_color, ":" );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
-			for( const auto &[caller_address, segment] : info.callers ) {
-				const uint32_t offset = caller_address - ( segment << 4 );
-				const bool isSelected = ( selectedIndex == caller_address );
-				char id[12];
-				sprintf( id, "##c%08X", caller_address );
-				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-					selectedIndex = caller_address;
-					codeViewData.useCS = segment;
-					codeViewData.useEIP = offset;
-					dbg.update_win_scroll[WIN_CODE] = true;
-				}
-				uint8_t color_index = addressColorIndex;
-				const auto &ordered_segment = ordered_segments.find( { segment, {} } );
-				if( ordered_segment != ordered_segments.end( ) )
-					color_index = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
-				ImGui::SameLine( address_width );
-				ImGui::TextColored( address_colors[color_index][0], "%04X", segment );
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( grey_color, ":" );
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( address_colors[color_index][1], "%04X", offset );
-			}
-		}
-	}
-	SnapToGrid( WIN_CALLS );
-	DBGUI_EndWindowWithStyledTitle( );
-	if( dbg.update_win[WIN_CALLS] ) {
-		dbg.update_win[WIN_CALLS] = false;
-	}
+	EndSubWindow( WIN_SEG );
 }
 
 static void DrawLabels( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_JUMPS], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_JUMPS], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_JUMPS] ) {
-		dbg.update_win_frame[WIN_JUMPS] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_JUMPS], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_JUMPS], ImGuiCond_Always );
-	}
-	if( DBGUI_BeginWindowWithStyledTitle( "Labels", ImGuiWindowFlags_NoNavFocus ) ) {
+	if( BeginSubWindow( WIN_LABELS, "Labels", ImGuiWindowFlags_NoNavFocus ) ) {
 		static uint32_t selectedIndex = -1;
 		uint16_t currentSegment = 0U;
-		for( const auto &[address, info] : jumps ) {
+		for( const auto &[address, info] : labels ) {
 			static uint8_t addressColorIndex = 0U;
 			const uint32_t offset = address - ( info.segment << 4 );
 			if( currentSegment != info.segment ) { // match segment to defined segments
@@ -1058,30 +955,15 @@ static void DrawLabels( ) {
 			}
 		}
 	}
-	SnapToGrid( WIN_JUMPS );
-	DBGUI_EndWindowWithStyledTitle( );
-	if( dbg.update_win[WIN_JUMPS] ) {
-		dbg.update_win[WIN_JUMPS] = false;
-	}
+	EndSubWindow( WIN_LABELS );
 }
 
 #define DEBUG_VAR_BUF_LEN 16
 static void DrawVariables( ) {
-	if( !dbg.visible[WIN_VAR] )
-		return;
-	ImGui::SetNextWindowPos( window_pos[WIN_VAR], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_VAR], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_VAR] ) {
-		dbg.update_win_frame[WIN_VAR] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_VAR], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_VAR], ImGuiCond_Always );
-	}
-
-	if( DBGUI_BeginWindowWithStyledTitle( "Variables", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNav ) ) {
-		if( varList.empty( ) ) {
+	if( BeginSubWindow( WIN_VAR, "Variables", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNav ) ) {
+		if( varList.empty( ) )
 			ImGui::TextDisabled( "(no variables defined)" );
-		} else {
+		else {
 			char buffer[DEBUG_VAR_BUF_LEN] = {};
 
 			for( size_t i = 0; i < varList.size( ); ++i ) {
@@ -1100,19 +982,13 @@ static void DrawVariables( ) {
 					}
 					snprintf( buffer, DEBUG_VAR_BUF_LEN, "0x%04x", value );
 				}
-
-				if( i % 3 != 0 ) {
+				if( i % 3 != 0 )
 					ImGui::SameLine( );
-				}
 				ImGui::Text( "%s: %s", dv->GetName( ), buffer );
 			}
 		}
 	}
-	SnapToGrid( WIN_VAR );
-	DBGUI_EndWindowWithStyledTitle( );
-	if( dbg.update_win[WIN_VAR] ) {
-		dbg.update_win[WIN_VAR] = false;
-	}
+	EndSubWindow( WIN_VAR );
 }
 #undef DEBUG_VAR_BUF_LEN
 
@@ -1145,30 +1021,16 @@ static int ConsoleEditCallback( ImGuiInputTextCallbackData *data ) {
 	return 0;
 }
 
-static bool fSetConsoleFocus = false;
-
 static void DrawOutputWindow( ) {
-	ImGui::SetNextWindowPos( window_pos[WIN_OUT], ImGuiCond_FirstUseEver );
-	ImGui::SetNextWindowSize( window_size[WIN_OUT], ImGuiCond_FirstUseEver );
-
-	if( dbg.update_win_frame[WIN_OUT] ) {
-		dbg.update_win_frame[WIN_OUT] = false;
-		ImGui::SetNextWindowPos( window_pos[WIN_OUT], ImGuiCond_Always );
-		ImGui::SetNextWindowSize( window_size[WIN_OUT], ImGuiCond_Always );
-	}
 	ImGui::PushStyleVar( ImGuiStyleVar_WindowPadding, ImVec2( padding.x, 0.0f ) );
-	if( DBGUI_BeginWindowWithStyledTitle( "Output", ImGuiWindowFlags_NoNavFocus ) ) {
+	if( BeginSubWindow( WIN_OUT, "Output", ImGuiWindowFlags_NoNavFocus ) ) {
 		ImGui::PushStyleColor( ImGuiCol_NavHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent highlight
 		ImGui::PushStyleColor( ImGuiCol_NavWindowingHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent window highlight
 		ImGui::PushStyleColor( ImGuiCol_Text, green_color );
-		if( !debugging )
-			ImGui::Text( "(Running)" );
-		else {
-			if( ( !ImGui::IsWindowFocused( ImGuiFocusedFlags_None ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) && ImGui::IsMouseDown( 0 ) ) || fSetConsoleFocus
-				|| ( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) ) {
-				fSetConsoleFocus = false;
+		if( debugging ) {
+			if( ( !ImGui::IsWindowFocused( ImGuiFocusedFlags_None ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) && ImGui::IsMouseDown( 0 ) )
+				|| ( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) )
 				ImGui::SetKeyboardFocusHere( );
-			}
 			ImGui::PushItemWidth( window_size->x * 0.99f );
 			if( ImGui::InputText( "##con", codeViewData.inputStr, IM_ARRAYSIZE( codeViewData.inputStr ), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_ElideLeft | ImGuiInputTextFlags_CallbackHistory, ConsoleEditCallback ) ) {
 				codeViewData.inputStr[MAXCMDLEN] = '\0';
@@ -1180,12 +1042,13 @@ static void DrawOutputWindow( ) {
 						histBuff.pop_front( );
 					histBuffPos = histBuff.end( );
 					codeViewData.inputStr[0] = 0;
-					fSetConsoleFocus = true;
+					ImGui::SetKeyboardFocusHere( );
 				}
 			}
 			ImGui::SetItemDefaultFocus( );
 			ImGui::PopItemWidth( );
-		}
+		} else
+			ImGui::Text( "(Running)" );
 		ImGui::PopStyleColor( );
 		if( ImGui::BeginChild( "ScrollRegion", { 0.0f, 0.0f }, false, ImGuiWindowFlags_HorizontalScrollbar ) ) {
 			for( auto it = logBuff.begin( ); it != logBuff.end( ); ++it )
@@ -1198,21 +1061,15 @@ static void DrawOutputWindow( ) {
 		dbg.update_win[WIN_OUT] = false;
 		ImGui::SetScrollHereY( );
 	}
-	SnapToGrid( WIN_OUT );
-	DBGUI_EndWindowWithStyledTitle( );
+	EndSubWindow( WIN_OUT );
 	ImGui::PopStyleVar( );
 }
 
-void DBGUI_SetConsoleFocus( ) {
-	fSetConsoleFocus = true;
-}
-
 // Calculate window height for a given number of rows
-static float CalcWindowHeight( WINDOW_ID, bool = true );
-static float CalcWindowHeight( WINDOW_ID window_id, bool fTitle ) {
-	if( !dbg.visible[window_id] )
+static float CalcWindowHeight( WINDOW_ID window_id ) {
+	if( window_id >= NUM_WINDOWS || !dbg.visible[window_id] )
 		return 0.0f;
-	return ( dbg.columnRows[window_id].rows * title_bar_height ) + ( fTitle ? title_bar_height : 0.0f );
+	return ( dbg.columnRows[window_id].rows * title_bar_height );
 }
 // Calculate window width for a given number of columns
 static float CalcWindowWidth( uint8_t cols ) {
@@ -1234,15 +1091,6 @@ static float CalcWindowY( WINDOW_ID window_id ) {
 		y += CalcWindowHeight( WIN_SEG );
 	case WIN_SEG:
 		y += CalcWindowHeight( WIN_DATA );
-	case WIN_DATA:
-		break;
-	case WIN_JUMPS:
-		y += CalcWindowHeight( WIN_CALLS );
-	case WIN_CALLS:
-		break;
-	case WIN_SDIFF:
-		y += CalcWindowHeight( WIN_DDIFF );
-	case WIN_DDIFF:
 		break;
 	case WIN_OUT:
 		y += CalcWindowHeight( WIN_VAR );
@@ -1250,7 +1098,6 @@ static float CalcWindowY( WINDOW_ID window_id ) {
 		y += CalcWindowHeight( WIN_REG );
 	case WIN_REG:
 		y += CalcWindowHeight( WIN_CODE );
-	case WIN_CODE:
 	default:
 		break;
 	}
@@ -1282,7 +1129,6 @@ void DBGUI_DrawScreen( ) {
 	DrawCode( );
 	DrawRegisters( );
 	DrawSegments( );
-	DrawCalls( );
 	DrawLabels( );
 	DrawData( );
 	DrawStack( );
@@ -1312,8 +1158,8 @@ void DBGUI_Reset( ) {
 }
 
 void DBGUI_Resize( ) {
-	SDL_GetWindowSizeInPixels( dbg.win_main, &dbg.window_width, &dbg.window_height );
-	const uint16_t TOTAL_ROWS = dbg.window_height / title_bar_height;
+	SDL_GetWindowSizeInPixels( dbg.win_main, &dbg.window_rect.w, &dbg.window_rect.h );
+	const uint16_t TOTAL_ROWS = dbg.window_rect.h / title_bar_height;
 	uint16_t column_rows[NUM_COLUMNS] = { TOTAL_ROWS, TOTAL_ROWS, TOTAL_ROWS, TOTAL_ROWS };
 	for( WINDOW_ID i = static_cast<WINDOW_ID>( 0U ); i < NUM_WINDOWS; ++i ) {
 		if( !dbg.visible[i] ) {
@@ -1321,12 +1167,12 @@ void DBGUI_Resize( ) {
 			continue;
 		}
 		if( dbg.height_ratio[i] < 0 )
-			dbg.columnRows[i].rows = -dbg.height_ratio[i];
+			dbg.columnRows[i].rows = -dbg.height_ratio[i] + ( dbg.fTitleBar[i] ? 1U : 0U );
 		else if( dbg.height_ratio[i] > 0 )
-			dbg.columnRows[i].rows = TOTAL_ROWS * ( dbg.height_ratio[i] * 0.01f ) - 1U;
+			dbg.columnRows[i].rows = TOTAL_ROWS * ( dbg.height_ratio[i] * 0.01f );
 		else
-			dbg.columnRows[i].rows = column_rows[dbg.columnRows[i].column] - 1U;
-		column_rows[dbg.columnRows[i].column] -= dbg.columnRows[i].rows + 1U;
+			dbg.columnRows[i].rows = column_rows[dbg.columnRows[i].column];
+		column_rows[dbg.columnRows[i].column] -= dbg.columnRows[i].rows;
 	}
 	for( WINDOW_ID i = static_cast<WINDOW_ID>( 0U ); i < NUM_WINDOWS; ++i ) {
 		window_pos[i] = ImVec2( CalcWindowX( i ), CalcWindowY( i ) );
@@ -1480,10 +1326,34 @@ bool DBGUI_StartUp( ) {
 	line_height_no_spacing = ImGui::GetTextLineHeight( );
 	title_bar_height = ImGui::GetFrameHeight( );
 	padding = ImGui::GetStyle( ).WindowPadding = ImVec2( char_width * 0.5f, ( title_bar_height - line_height_no_spacing ) * 0.5f ); // X = horizontal, Y = vertical padding;
-	dbg.window_width = static_cast<int>( CalcTotalWidth( ) );
-	dbg.window_height = static_cast<int>( CalcTotalHeight( ) );
-	SDL_SetWindowSize( dbg.win_main, dbg.window_width, dbg.window_height );
-	SDL_SetWindowPosition( dbg.win_main, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED );
+	dbg.window_rect.w = static_cast<int>( CalcTotalWidth( ) );
+	dbg.window_rect.h = static_cast<int>( CalcTotalHeight( ) );
+
+	// Center window in target display
+	const int targetDisplay = 2;
+	const bool maximiseWindowHeight = true;
+	int display_count = 0;
+	SDL_DisplayID *displays = SDL_GetDisplays( &display_count );
+	SDL_DisplayID display_id = displays[0];
+	if( targetDisplay >= display_count )
+		display_id = SDL_GetDisplayForWindow( dbg.win_main );
+	else
+		display_id = displays[targetDisplay];
+	SDL_free( displays );
+	int windowTopFrame;
+	SDL_Rect displayBounds;
+	SDL_GetDisplayUsableBounds( display_id, &displayBounds );
+	SDL_GetWindowBordersSize( dbg.win_main, &windowTopFrame, NULL, NULL, NULL );
+	dbg.window_rect.x = displayBounds.x + ( ( displayBounds.w - dbg.window_rect.w ) >> 1 );
+	if( maximiseWindowHeight ) {
+		dbg.window_rect.y = displayBounds.y + windowTopFrame;
+		dbg.window_rect.h = displayBounds.h - windowTopFrame;
+	} else
+		dbg.window_rect.y = displayBounds.y + ( ( displayBounds.h - ( dbg.window_rect.h + windowTopFrame ) ) >> 1 ) + windowTopFrame;
+	SDL_SetWindowSize( dbg.win_main, dbg.window_rect.w, dbg.window_rect.h );
+	SDL_SetWindowPosition( dbg.win_main, dbg.window_rect.x, dbg.window_rect.y );
+	SDL_GetWindowSize( dbg.win_main, &dbg.window_rect.w, &dbg.window_rect.h );
+	SDL_GetWindowPosition( dbg.win_main, &dbg.window_rect.x, &dbg.window_rect.y );
 	SDL_ShowWindow( dbg.win_main );
 
 	for( WINDOW_ID i = static_cast<WINDOW_ID>( 0U ); i < NUM_WINDOWS; ++i ) {
@@ -1582,37 +1452,4 @@ void DBGUI_Render( ) {
 
 	SDL_SubmitGPUCommandBuffer( command_buffer );
 }
-
-// Title bar colors - purple background with black text
-static const ImVec4 TitleBgColor = ImVec4( 0.42f, 0.41f, 0.84f, 0.8f ); // Purple
-static const ImVec4 TitleBgColorActive = ImVec4( 0.41f, 0.84f, 0.41f, 0.8f ); // Green
-static const ImVec4 TitleTextColor = ImVec4( 0.0f, 0.0f, 0.0f, 1.0f );  // Black
-
-// Helper to begin a window with cyan title bar and black title text
-bool DBGUI_BeginWindowWithStyledTitle( const char* title, ImGuiWindowFlags flags ) {
-	// Push title bar colors
-	ImGui::PushStyleColor( ImGuiCol_TitleBg, TitleBgColor );
-	ImGui::PushStyleColor( ImGuiCol_TitleBgActive, TitleBgColorActive );
-	ImGui::PushStyleColor( ImGuiCol_TitleBgCollapsed, TitleBgColor );
-	ImGui::PushStyleColor( ImGuiCol_Text, TitleTextColor );
-
-	bool result = ImGui::Begin( title, nullptr, flags | ADDITIONAL_FLAGS );
-
-	// Restore text color for window content (keep title bar colors)
-	ImGui::PopStyleColor( ); // Pop text color
-
-	return result;
-}
-// Helper to end a styled window
-void DBGUI_EndWindowWithStyledTitle( ) {
-	ImGui::End( );
-	ImGui::PopStyleColor( 3 ); // Pop title bar colors
-}
-
-bool DBGUI_BeginWindow( const char *name, int flags ) {
-	return ImGui::Begin( name, nullptr, static_cast<ImGuiWindowFlags>( flags | ImGuiWindowFlags_NoTitleBar ) );
-}
-void DBGUI_EndWindow( ) {
-	ImGui::End( );
-}
-#endif
+#endif // C_DEBUGGER

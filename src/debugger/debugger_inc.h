@@ -27,10 +27,8 @@ typedef enum Window_ID :uint8_t {
 	WIN_REG,
 	WIN_VAR,
 	WIN_OUT,
-	WIN_CALLS,
-	WIN_JUMPS,
-	WIN_DDIFF,
-	WIN_SDIFF,
+	WIN_LABELS,
+	WIN_DIFF,
 	WIN_SEG,
 	WIN_DATA,
 	WIN_STACK,
@@ -55,19 +53,11 @@ void DBGUI_SaveCPUstate( );
 void DBGUI_SaveMemoryState( );
 void DBGUI_SetCodeWinToEIP( );
 void DBGUI_SetCodeWinToAddress( const uint16_t, const uint32_t );
-void DBGUI_SetConsoleFocus( );
 void DBGUI_UpdateMemoryViews( );
 void DBGUI_UpdateOrderedSegments( const bool = false );
 
-// Window title styling helpers (cyan background, black text)
-bool DBGUI_BeginWindowWithStyledTitle( const char* title, int flags );
-void DBGUI_EndWindowWithStyledTitle( );
-bool DBGUI_BeginWindow( const char* name, int flags );
-void DBGUI_EndWindow( );
-
 // GUI layout and styling constants
 namespace DBGUI {
-
 	// Buffer sizes
 	constexpr size_t MaxLogBuffer = 500;
 	constexpr size_t MsgBufferSize = 512;
@@ -91,7 +81,6 @@ namespace DBGUI {
 	constexpr uint8_t ClearColorG = 0;
 	constexpr uint8_t ClearColorB = 0;
 	constexpr uint8_t ClearColorA = 255;
-
 } // namespace DBGUI
 
 typedef struct ColumnRows {
@@ -105,22 +94,22 @@ struct DBGBlock {
 	SDL_Window* win_main = nullptr;
 	SDL_GPUDevice* gpu_device = nullptr;
 	DATA_ID active_data_view = DATA_VIEW;    /* Current active data window */
-	bool update_win[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true, true, true };
-	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false, false };
-	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false, false, false };
-	bool visible[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true, true, true };
+	bool update_win[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true };
+	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
+	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
+	bool visible[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true };
+	bool fTitleBar[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
 	uint32_t input_y = 0U;
 	uint32_t global_mask = 0U;
 	/* Window column selection and height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 62U }, { 1U, 4U }, { 1U, 4U }, { 1U, 33U }, { 0U, 41U }, { 0U, 64U }, { 3U, 63U }, { 3U, 42U }, { 2U, 4U }, { 2U, 60U }, { 2U, 40U } };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 65U }, { 1U, 4U }, { 1U, 5U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 4U }, { 2U, 63U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
 	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
-	const int8_t height_ratio[NUM_WINDOWS] = { 64, -4, -4, 0, 39, 0, 64, 0, -4, 64, 0 };
+	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 65, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
-	int window_width = 0;
-	int window_height = 0;
+	SDL_Rect window_rect;
 	uint16_t segment[NUM_SEG_TYPES];
 };
 

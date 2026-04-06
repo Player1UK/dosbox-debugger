@@ -20,8 +20,7 @@ namespace std {
 }
 
 std::set<Pair<uint16_t, SegmentInfo>> ordered_segments;
-std::set<Pair<uint32_t, LabelInfo>> calls;
-std::set<Pair<uint32_t, LabelInfo>> jumps;
+std::set<Pair<uint32_t, LabelInfo>> labels;
 
 static std::set<Pair<uint32_t, DecodedLine>> ordered_code;
 static std::unordered_set<uint32_t> visited;
@@ -96,8 +95,7 @@ uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const boo
 static uint32_t lastProcessedCount = 0U;
 
 void DasmReset( ) {
-    calls.clear( );
-    jumps.clear( );
+    labels.clear( );
     ordered_segments.clear( );
     visited.clear( );
     ordered_code.clear( );
@@ -299,29 +297,27 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                             if( addr < segment0 || addr >= binarySize ) // Still invalid, skip
                                 continue;
                         }
+                        bool existingLabel = true;
                         if( !added.count( addr ) ) {
                             added.insert( addr );
                             if( !visited.count( addr ) )
                                 toVisit.push_back( ptr );
-                            if( dline.mnemonicMask & MM_CALL ) {
-                                auto call = calls.insert( { addr, LabelInfo( ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
-                                if( call.second ) // insert success
-                                    call.first->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                            auto label = labels.insert( { addr, LabelInfo( ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP, ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+                            if( label.second ) { // insert success
+                                label.first->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                                existingLabel = false;
                             } else {
-                                auto jump = jumps.insert( { addr, LabelInfo( ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
-                                if( jump.second ) // insert success
-                                    jump.first->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                                std::set<Pair<uint32_t, uint16_t>> callers;
+                                auto label = labels.find( { addr, { LABEL_BOTH, ptr.segment, callers } } );
+                                if( label != labels.end( ) )
+                                    const_cast<LABEL_MASK &>( label->extra.type ) = LABEL_BOTH;
                             }
-                        } else if( dline.mnemonicMask & MM_CALL ) {
+                        }
+                        if( existingLabel ) {
                             std::set<Pair<uint32_t, uint16_t>> callers;
-                            auto call = calls.find( { addr, { ptr.segment, callers } } );
-                            if( call != calls.end( ) )
-                                call->extra.callers.insert( { dline.base_offset, dline.address.segment } );
-                        } else {
-                            std::set<Pair<uint32_t, uint16_t>> callers;
-                            auto jump = jumps.find( { addr, { ptr.segment, callers } } );
-                            if( jump != jumps.end( ) )
-                                jump->extra.callers.insert( { dline.base_offset, dline.address.segment } );
+                            auto label = labels.find( { addr, { LABEL_BOTH, ptr.segment, callers } } );
+                            if( label != labels.end( ) )
+                                label->extra.callers.insert( { dline.base_offset, dline.address.segment } );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -366,18 +362,11 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
             }
         }
     }
-    for( const auto &[address, info] : calls ) {
+    for( const auto &[address, info] : labels ) {
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
             auto &dline = it->extra;
-            const_cast<DecodedLine &>( dline ).mnemonicMask |= MM_Proc;
-        }
-    }
-    for( const auto &[address, segment] : jumps ) {
-        auto it = ordered_code.find( { address, DecodedLine( ) } );
-        if( it != ordered_code.end( ) ) {
-            auto &dline = it->extra;
-            const_cast<DecodedLine &>( dline ).mnemonicMask |= MM_Label;
+            const_cast<DecodedLine &>( dline ).mnemonicMask |= ( info.type & LABEL_CALL ? MM_Proc : MM_NONE ) | ( info.type & LABEL_JUMP ? MM_Label : MM_NONE );
         }
     }
     DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", visited.size( ) - lastProcessedCount );
@@ -392,9 +381,6 @@ struct Label {
     uint32_t base_offset;
     char szLabel[13];
 };
-
-static std::unordered_set<Pair<uint32_t, Proc>> procs;
-static std::unordered_set<Pair<uint32_t, Label>> labels;
 
 void Dasm_WriteFile( ) {
     DEBUG_ShowMsg( "DEBUG: Creating asm file Code.asm\n" );
