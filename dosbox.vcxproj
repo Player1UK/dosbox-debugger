@@ -207,6 +207,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\debugger\debug_analyzer.cpp" />
     <ClCompile Include="src\debugger\debug.cpp" />
     <ClCompile Include="src\debugger\debugvar.cpp" />
     <ClCompile Include="src\main.cpp" />

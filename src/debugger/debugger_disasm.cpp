@@ -61,6 +61,14 @@ const DecodedLine &DecodedLine::last( ) {
     return currentLine->extra;
 }
 
+const DecodedLine * DecodedLine::find( uint32_t address ) {
+    const auto it = ordered_code.find( { address, {} } );
+    return ( it != ordered_code.end( ) ) ? &it->extra : nullptr;
+}
+const DecodedLine * DecodedLine::find( uint16_t segment, uint32_t offset ) {
+    return find( offset + ( segment << 4 ) );
+}
+
 bool DecodedLine::isStart( ) {
     return currentLine == ordered_code.begin( );
 }
@@ -79,14 +87,17 @@ bool AddressVisited( uint16_t segment, uint32_t offset ) {
     return AddressVisited( offset + ( segment << 4 ) );
 }
 
-uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const bool f32bit, const bool fProtected ) {
+uint8_t DasmI386( char *decodedInstruction, char *&pOperands, const uint32_t pc, const uint32_t ip, const bool f32bit, const bool fProtected ) {
+    pOperands = nullptr;
 	ZydisDisassembledInstruction instruction;
 	if( ZYAN_SUCCESS( ZydisDisassembleIntel(
 		( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
 		ip, MemBase + pc, ZYDIS_MAX_OPERAND_COUNT + 1, &instruction ) ) ) {
-		sprintf( buffer, "%s", instruction.text );
+		strcpy( decodedInstruction, instruction.text );
+        pOperands = decodedInstruction;
+        while( *pOperands && *pOperands != ' ' ) ++pOperands;
 	} else { // invalid instruction, use db xx
-		sprintf( buffer, "db %02X", MemBase[pc] );
+		sprintf( decodedInstruction, "db %02X", MemBase[pc] );
 		return 1U;
 	}
 	return instruction.info.length;
@@ -182,9 +193,9 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, dline.szInstruction, sizeof( dline.szInstruction ), address.offset, ZYAN_NULL );
                 char *cptr = dline.szInstruction;
                 while( *cptr && *cptr != ' ' ) ++cptr;
-                if( cptr ) {
+                if( *cptr ) {
                     *cptr++ = 0;
-                    dline.szOperands = cptr;
+                    dline.pOperands = cptr;
                 }
                 address.offset += dline.instruction.length;
                 base_offset += dline.instruction.length;
@@ -266,9 +277,16 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 case ZYDIS_MNEMONIC_SUB:
                     dline.mnemonicMask = MM_Math;
                     break;
+                case ZYDIS_MNEMONIC_LOOP:
+                case ZYDIS_MNEMONIC_LOOPE:
+                case ZYDIS_MNEMONIC_LOOPNE:
+                    dline.mnemonicMask = MM_LOOP;
+                    break;
                 default:
                     break;
                 }
+                if( dline.instruction.attributes & ( ZYDIS_ATTRIB_HAS_REP | ZYDIS_ATTRIB_HAS_REPE | ZYDIS_ATTRIB_HAS_REPNE ) )
+                    dline.mnemonicMask |= MM_REP;
                 if( dline.mnemonicMask & MM_Branch ) {
                     ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
                     for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
@@ -366,7 +384,7 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
             auto &dline = it->extra;
-            const_cast<DecodedLine &>( dline ).mnemonicMask |= ( info.type & LABEL_CALL ? MM_Proc : MM_NONE ) | ( info.type & LABEL_JUMP ? MM_Label : MM_NONE );
+            const_cast<DecodedLine &>( dline ).mnemonicMask |= ( info.type & LABEL_CALL ? MM_Call_Label : MM_NONE ) | ( info.type & LABEL_JUMP ? MM_Jump_Label : MM_NONE );
         }
     }
     DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", visited.size( ) - lastProcessedCount );

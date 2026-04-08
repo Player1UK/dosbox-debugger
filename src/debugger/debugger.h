@@ -25,6 +25,8 @@ Bitu DEBUG_EnableDebugger();
 bool DEBUG_Breakpoint();
 bool DEBUG_IntBreakpoint(uint8_t intNum);
 
+extern void DEBUG_AnalyzeCurrentInstruction( );
+
 void LOG_StartUp();
 void LOG_Init();
 void LOG_Destroy();

@@ -14,52 +14,43 @@
 #include "hardware/pic.h"
 #include "shell/shell.h"
 
-extern uint32_t GetAddress( uint16_t, uint32_t );
-extern uint16_t RealSegValue( const SegNames index );
-
-extern bool exitNormalLoop;
-
-extern DBGBlock dbg;
-extern bool debugging;
 extern bool forceDraw;
-
-extern SCodeViewData codeViewData;
 
 bool skipFirstInstruction = false;
 
 static bool SetRedirectBreakpoint( ) {
-	char dline[200];
-	uint32_t size = DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
-
-	if( strstr( dline, "call" ) || strstr( dline, "int" ) ||
-		strstr( dline, "loop" ) || strstr( dline, "rep" ) ) {
+	bool fResult = false;
+	uint8_t size = 0U;
+	auto address = GetAddress( SegValue( cs ), reg_eip );
+	auto dline = DecodedLine::find( address );
+	if( dline ) {
+		size = dline->instruction.length;
+		fResult = dline->mnemonicMask & ( MM_CALL | MM_INT | MM_LOOP | MM_REP ) ? true : false;
+	} else {
+		char instruction[128], *pOperands;
+		size = DasmI386( instruction, pOperands, address, reg_eip, cpu.code.big, cpu.pmode );
+		if( strstr( instruction, "call" ) || strstr( instruction, "int" ) ||
+			strstr( instruction, "loop" ) || strstr( instruction, "rep" ) )
+			fResult = true;
+	}
+	if( fResult ) {
 		// Don't add a temporary breakpoint if there's already one here
 		if( !CBreakpoint::FindPhysBreakpoint( SegValue( cs ), reg_eip + size, true ) )
 			CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip + size, true );
-		return true;
 	}
-	return false;
+	return fResult;
 }
 
 static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
-	DBGUI_SaveCPUstate( );
-	DBGUI_SaveMemoryState( );
+	DEBUG_SaveCurrentState( );
 	skipFirstInstruction = true;
 	CPU_CycleLeft += CPU_Cycles - amount;
 	CPU_Cycles = amount;
 	int32_t ret = ( *cpudecoder )( );
-	if( quickexit ) {
-		DBGUI_SetCodeWinToEIP( );
-		DBGUI_UpdateMemoryViews( );
-		DBGUI_UpdateOrderedSegments( );
-	} else {
-		// ensure all breakpoints are activated
-		CBreakpoint::ActivateBreakpoints( );
-
-		const auto graphics_window = GFX_GetWindow( );
-		SDL_ShowWindow( graphics_window );
-		SDL_RaiseWindow( graphics_window );
-
+	if( quickexit )
+		DEBUG_NewInstruction( );
+	else {
+		CBreakpoint::ActivateBreakpoints( ); // ensure all breakpoints are activated
 		DOSBOX_SetNormalLoop( );
 	}
 	return ret;
@@ -141,26 +132,26 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
+	case SDLK_F6: case SDLK_F7: case SDLK_F8: // Run to cursor
+		// Don't add a temporary breakpoint if there's already one here
+		if( !CBreakpoint::FindPhysBreakpoint( codeView.cursorSegment, codeView.cursorOffset, true ) )
+			CBreakpoint::AddBreakpoint( codeView.cursorSegment, codeView.cursorOffset, true );
 	case SDLK_F5: // Run Program
 		debugging = false;
 		forceDraw = true;
 		ret = DEBUG_Run( 1, false );
+		DEBUG_ShowDOSBox( );
 		break;
 	case SDLK_F9: { // Set/Remove Breakpoint. Hold SHIFT for permanent breakpoint
 		const bool ftemp = ( key.mod & SDL_KMOD_SHIFT ) ? false : true;
-		if( CBreakpoint::IsBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp ) ) {
-			if( CBreakpoint::DeleteBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp ) )
-				DEBUG_ShowMsg( "DEBUG: %sreakpoint deletion success.\n",
-					ftemp ? "Temporary b" : "B" );
+		if( CBreakpoint::IsBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp ) ) {
+			if( CBreakpoint::DeleteBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp ) )
+				DEBUG_ShowMsg( "DEBUG: %sreakpoint deletion success.\n", ftemp ? "Temporary b" : "B" );
 			else
-				DEBUG_ShowMsg( "DEBUG: Failed to delete%sbreakpoint.\n",
-					ftemp ? " temporary " : " " );
+				DEBUG_ShowMsg( "DEBUG: Failed to delete%sbreakpoint.\n", ftemp ? " temporary " : " " );
 		} else {
-			CBreakpoint::AddBreakpoint( codeViewData.cursorSeg, codeViewData.cursorOfs, ftemp );
-			DEBUG_ShowMsg( "DEBUG: Set%sbreakpoint at %04X:%04X\n",
-				ftemp ? " temporary " : " ",
-				codeViewData.cursorSeg,
-				codeViewData.cursorOfs );
+			CBreakpoint::AddBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp );
+			DEBUG_ShowMsg( "DEBUG: Set%sbreakpoint at %04X:%04X\n", ftemp ? " temporary " : " ", codeView.cursorSegment, codeView.cursorOffset );
 		}
 	}
 		break;

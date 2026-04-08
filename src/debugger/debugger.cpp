@@ -81,12 +81,20 @@ Bitu DEBUG_Loop( void ) {
 		exitDebugLoop = false;
 		exitNormalLoop = true;
 		DBGUI_Reset( );
-		DBGUI_SaveCPUstate( );
-		DBGUI_SaveMemoryState( );
-		SDL_ShowWindow( GFX_GetWindow( ) );
+		DEBUG_ShowDOSBox( );
 		return -1;
 	}
 	return ret;
+}
+
+void DEBUG_ShowDOSBox( ) {
+	const auto graphics_window = GFX_GetWindow( );
+	SDL_ShowWindow( graphics_window );
+	SDL_RaiseWindow( graphics_window );
+}
+void DEBUG_HideDOSBox( ) {
+	GFX_LosingFocus( ); // Defocus the graphical UI...
+	SDL_HideWindow( GFX_GetWindow( ) );
 }
 
 void DEBUG_Enable( bool pressed ) {
@@ -103,24 +111,20 @@ void DEBUG_Enable( bool pressed ) {
 		LOG_ERR( "DEBUG: Failed to start up the debug window" );
 		return;
 	}
-
-	GFX_LosingFocus( );					// Defocus the graphical UI...
-	SDL_HideWindow( GFX_GetWindow( ) );
+	DEBUG_HideDOSBox( );
 	SDL_RaiseWindow( dbg.win_main );	// ...and bring the debugger UI into focus
-	DBGUI_SetCodeWinToEIP( );
-	DBGUI_UpdateMemoryViews( );
-	DBGUI_UpdateOrderedSegments( );
 
 	static bool was_help_shown = false;
 	if( !was_help_shown ) { // Show first time help
 		DEBUG_ShowMsg( "           TYPE ? or HELP (+ENTER) TO GET AN OVERVIEW OF ALL COMMANDS           \n" );
 		was_help_shown = true;
 	}
-
 	debugging = true;
 	DOSBOX_SetLoop( &DEBUG_Loop ); // Start the debugging loop
 
 	KEYBOARD_ClrBuffer( );
+
+	DEBUG_NewInstruction( );
 }
 
 void DEBUG_Close( ) {
@@ -137,16 +141,11 @@ Bitu DEBUG_EnableDebugger( ) {
 	return 0;
 }
 
-extern SCodeViewData codeViewData;
-
 Bitu debugCallback;
 
 void DEBUG_Init( ) {
 	// Add some keyhandlers
 	MAPPER_AddHandler( DEBUG_Enable, SDL_SCANCODE_PAUSE, MMOD2, "debugger", "Debugger" );
-
-	// Reset code overview and input line
-	codeViewData = {};
 
 	// setup debug.com
 	PROGRAMS_MakeFile( "DEBUG.COM", ProgramCreate<DEBUG> );

@@ -28,12 +28,15 @@ typedef enum Mnemonic_Mask : uint16_t {
 	MM_MOV		        = 0x0010,
 	MM_RET		        = 0x0020,
 	MM_CMP		        = 0x0040,
-	MM_Logical	        = 0x0080,
-	MM_Math				= 0x0100,
-	MM_Stack	        = 0x0200,
-	MM_Proc				= 0x0400,
-	MM_Label			= 0x0800,
+	MM_LOOP				= 0x0080,
+	MM_REP				= 0x0100,
+	MM_Logical	        = 0x0200,
+	MM_Math				= 0x0400,
+	MM_Stack	        = 0x0800,
+	MM_Call_Label		= 0x1000,
+	MM_Jump_Label		= 0x2000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
+	MM_Label			= MM_Call_Label | MM_Jump_Label,
 } MNEMONIC_MASK;
 constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
 	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
@@ -52,11 +55,13 @@ struct DecodedLine {
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
 	char szOpcode[25];
 	char szInstruction[128];
-	char szComment[64] = "";
-	char const *szOperands = nullptr;
+	char szComment[128] = "";
+	char const *pOperands = nullptr;
 
-	static const DecodedLine &first( );
-	static const DecodedLine &last( );
+	static const DecodedLine * find( uint32_t );
+	static const DecodedLine * find( uint16_t, uint32_t );
+	static const DecodedLine & first( );
+	static const DecodedLine & last( );
 	static bool isStart( );
 	static bool isEnd( );
 	static bool isEmpty( );
@@ -66,13 +71,13 @@ const DecodedLine operator++( DecodedLine const &, int ); // Postfix increment
 const DecodedLine & operator--( DecodedLine const & ); // Prefix decrement
 const DecodedLine operator--( DecodedLine const &, int ); // Postfix decrement
 
-extern bool AddressVisited( uint32_t address );
-extern bool AddressVisited( uint16_t segment, uint32_t offset );
+extern bool AddressVisited( uint32_t );
+extern bool AddressVisited( uint16_t, uint32_t );
 
-extern uint32_t DasmI386( char *buffer, const uint32_t pc, const uint32_t ip, const bool f32bit, const bool fProtected );
+extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const bool, const bool );
 
 extern void DasmReset( );
-extern void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected );
+extern void DasmRecursiveDisassemble( const uint32_t, const uint32_t, const bool, const bool );
 
 struct SegmentInfo {
 	const SEGTYPE type;

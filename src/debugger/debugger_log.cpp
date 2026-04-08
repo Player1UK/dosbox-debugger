@@ -11,20 +11,12 @@
 #endif
 
 #include "breakpoint.h"
-#include "cpu/callback.h"
 #include "cpu/lazyflags.h"
 #include "cpu/paging.h"
 #include "debugger_disasm.h"
-#include "debugvar.h"
 #include "dos/programs.h"
 
-extern DBGBlock dbg;
-
-extern char curSelectorName[3];
-
 extern bool skipFirstInstruction;
-
-extern uint32_t GetHexValue( char*, char*& );
 
 bool showExtend = false;
 
@@ -37,7 +29,7 @@ static _LogGroup loggrp[LOG_MAX] = {
 		{     "",  true},
 		{nullptr, false}
 };
-FILE* debuglog = nullptr;
+FILE *debuglog = nullptr;
 
 void LOG::operator()( const char* format, ... ) {
 	char buf[DBGUI::MsgBufferSize];
@@ -136,221 +128,6 @@ void LOG_StartUp( ) {
 		PropBool* pbool = sect->AddBool( buf, Property::Changeable::Always, true );
 		pbool->SetHelp( "Enable/disable logging of this type." );
 	}
-}
-
-/***********/
-/* Helpers */
-/***********/
-
-uint32_t GetAddress( uint16_t seg, uint32_t offset ) {
-	if( seg == SegValue( cs ) )
-		return SegPhys( cs ) + offset;
-	if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-		Descriptor desc;
-		if( cpu.gdt.GetDescriptor( seg, desc ) )
-			return desc.GetBase( ) + offset;
-	}
-	return ( seg << 4 ) + offset;
-}
-
-char* AnalyzeInstruction( char* inst, bool saveSelector, const bool f32bit ) {
-	static char result[256];
-
-	char instu[256];
-	char prefix[3];
-	uint16_t seg;
-
-	strcpy( instu, inst );
-	upcase( instu );
-
-	result[0] = 0;
-	char* pos = strchr( instu, '[' );
-	if( pos ) {
-		// Segment prefix ?
-		if( *( pos - 1 ) == ':' ) {
-			char* segpos = pos - 3;
-			prefix[0] = tolower( *segpos );
-			prefix[1] = tolower( *( segpos + 1 ) );
-			prefix[2] = 0;
-			seg = (uint16_t) GetHexValue( segpos, segpos );
-		} else {
-			if( strstr( pos, "SP" ) || strstr( pos, "BP" ) ) {
-				seg = SegValue( ss );
-				strcpy( prefix, "ss" );
-			} else {
-				seg = SegValue( ds );
-				strcpy( prefix, "ds" );
-			}
-		}
-
-		pos++;
-		uint32_t adr = GetHexValue( pos, pos );
-		while( *pos != ']' ) {
-			if( *pos == '+' ) {
-				pos++;
-				adr += GetHexValue( pos, pos );
-			} else if( *pos == '-' ) {
-				pos++;
-				adr -= GetHexValue( pos, pos );
-			} else {
-				pos++;
-			}
-		}
-		uint32_t address = GetAddress( seg, adr );
-		if( !( get_tlb_readhandler( address )->flags & PFLAG_INIT ) ) {
-			static char outmask[] = "%s:[%04X]=%02X";
-
-			if( cpu.pmode ) {
-				outmask[6] = '8';
-			}
-			if( f32bit ) {
-				uint32_t val = mem_readd<MemOpMode::SkipBreakpoints>( address );
-				outmask[12] = '8';
-				sprintf( result, outmask, prefix, adr, val );
-			} else {
-				uint16_t val = mem_readw<MemOpMode::SkipBreakpoints>( address );
-				outmask[12] = '4';
-				sprintf( result, outmask, prefix, adr, val );
-			}
-		} else {
-			sprintf( result, "[illegal]" );
-		}
-		// Variable found ?
-		CDebugVar* var = CDebugVar::FindVar( address );
-		if( var ) {
-			// Replace occurrence
-			char* pos1 = strchr( inst, '[' );
-			char* pos2 = strchr( inst, ']' );
-			if( pos1 && pos2 ) {
-				char temp[256];
-				strcpy( temp, pos2 ); // save end
-				pos1++;
-				*pos1 = 0;                    // cut after '['
-				strcat( inst, var->GetName( ) ); // add var name
-				strcat( inst, temp );           // add end
-			}
-		}
-		// show descriptor info, if available
-		if( ( cpu.pmode ) && saveSelector ) {
-			strcpy( curSelectorName, prefix );
-		}
-	}
-	// If it is a callback add additional info
-	pos = strstr( inst, "callback" );
-	if( pos ) {
-		pos += 9;
-		Bitu nr = GetHexValue( pos, pos );
-		const char* descr = CALLBACK_GetDescription( nr );
-		if( descr ) {
-			strcat( inst, "  (" );
-			strcat( inst, descr );
-			strcat( inst, ")" );
-		}
-	}
-	// Must be a jump
-	if( instu[0] == 'J' ) {
-		bool jmp = false;
-		switch( instu[1] ) {
-		case 'A': {
-			jmp = ( get_CF( ) ? false : true ) &&
-				( get_ZF( ) ? false : true ); // JA
-		} break;
-		case 'B': {
-			if( instu[2] == 'E' ) {
-				jmp = ( get_CF( ) ? true : false ) ||
-					( get_ZF( ) ? true : false ); // JBE
-			} else {
-				jmp = get_CF( ) ? true : false; // JB
-			}
-		} break;
-		case 'C': {
-			if( instu[2] == 'X' ) {
-				jmp = reg_cx == 0; // JCXZ
-			} else {
-				jmp = get_CF( ) ? true : false; // JC
-			}
-		} break;
-		case 'E': {
-			jmp = get_ZF( ) ? true : false; // JE
-		} break;
-		case 'G': {
-			if( instu[2] == 'E' ) {
-				jmp = ( get_SF( ) ? true : false ) ==
-					( get_OF( ) ? true : false ); // JGE
-			} else {
-				jmp = ( get_ZF( ) ? false : true ) &&
-					( ( get_SF( ) ? true : false ) ==
-						( get_OF( ) ? true : false ) ); // JG
-			}
-		} break;
-		case 'L': {
-			if( instu[2] == 'E' ) {
-				jmp = ( get_ZF( ) ? true : false ) ||
-					( ( get_SF( ) ? true : false ) !=
-						( get_OF( ) ? true : false ) ); // JLE
-			} else {
-				jmp = ( get_SF( ) ? true : false ) !=
-					( get_OF( ) ? true : false ); // JL
-			}
-		} break;
-		case 'M': {
-			jmp = true; // JMP
-		} break;
-		case 'N': {
-			switch( instu[2] ) {
-			case 'B':
-			case 'C': {
-				jmp = get_CF( ) ? false : true; // JNB / JNC
-			} break;
-			case 'E': {
-				jmp = get_ZF( ) ? false : true; // JNE
-			} break;
-			case 'O': {
-				jmp = get_OF( ) ? false : true; // JNO
-			} break;
-			case 'P': {
-				jmp = get_PF( ) ? false : true; // JNP
-			} break;
-			case 'S': {
-				jmp = get_SF( ) ? false : true; // JNS
-			} break;
-			case 'Z': {
-				jmp = get_ZF( ) ? false : true; // JNZ
-			} break;
-			}
-		} break;
-		case 'O': {
-			jmp = get_OF( ) ? true : false; // JO
-		} break;
-		case 'P': {
-			if( instu[2] == 'O' ) {
-				jmp = get_PF( ) ? false : true; // JPO
-			} else {
-				jmp = get_SF( ) ? true : false; // JP / JPE
-			}
-		} break;
-		case 'S': {
-			jmp = get_SF( ) ? true : false; // JS
-		} break;
-		case 'Z': {
-			jmp = get_ZF( ) ? true : false; // JZ
-		} break;
-		}
-		if( jmp ) {
-			pos = strchr( instu, '$' );
-			if( pos ) {
-				pos = strchr( instu, '+' );
-				if( pos ) {
-					strcpy( result, "(down)" );
-				} else {
-					strcpy( result, "(up)" );
-				}
-			}
-		} else {
-			sprintf( result, "(no jmp)" );
-		}
-	}
-	return result;
 }
 
 // Display the content of the MCB chain starting with the MCB at the specified
@@ -509,7 +286,7 @@ void LogIDT( void ) {
 void LogPages( char* selname ) {
 	char out1[512];
 	if( paging.enabled ) {
-		Bitu sel = GetHexValue( selname, selname );
+		Bitu sel = GetHexValue( selname );
 		if( ( sel == 0x00 ) && ( ( *selname == 0 ) || ( *selname == '*' ) ) ) {
 			for( int i = 0; i < 0xfffff; i++ ) {
 				Bitu table_addr = ( paging.base.page << 12 ) +
@@ -621,7 +398,6 @@ void LogCPUInfo( void ) {
 }
 
 #if C_HEAVY_DEBUGGER
-
 // Heavy Debugging Vars for logging
 std::ofstream cpuLogFile;
 bool cpuLog = false;
@@ -642,25 +418,22 @@ static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream&
 		return;
 	}
 
-	char dline[200];
+	char dline[128], *pOperands;
 	uint32_t start = GetAddress( segValue, eipValue );
-	uint32_t size = DasmI386( dline, start, reg_eip, cpu.code.big, cpu.pmode );
+	uint32_t size = DasmI386( dline, pOperands, start, reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend && ( cpuLogType > 0 ) ) {
-		res = AnalyzeInstruction( dline, false, cpu.code.big );
-		if( !res || !( *res ) ) {
+		res = const_cast<char *>( AnalyzeInstruction( dline, pOperands ) );
+		if( !res || !( *res ) )
 			res = empty;
-		}
 		Bitu reslen = strlen( res );
-		if( reslen < 22 ) {
+		if( reslen < 22 )
 			memset( res + reslen, ' ', 22 - reslen );
-		}
 		res[22] = 0;
 	}
 	Bitu len = safe_strlen( dline );
-	if( len < 30 ) {
+	if( len < 30 )
 		memset( dline + len, ' ', 30 - len );
-	}
 	dline[30] = 0;
 
 	// Get register values
@@ -873,11 +646,11 @@ void DEBUG_HeavyLogInstruction( ) {
 	static char empty[23] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 							 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
 
-	char dline[200];
-	DasmI386( dline, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
+	char dline[128], *pOperands;
+	DasmI386( dline, pOperands, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
 	char* res = empty;
 	if( showExtend ) {
-		res = AnalyzeInstruction( dline, false, cpu.code.big );
+		res = const_cast<char *>( AnalyzeInstruction( dline, pOperands ) );
 		if( !res || !( *res ) ) {
 			res = empty;
 		}

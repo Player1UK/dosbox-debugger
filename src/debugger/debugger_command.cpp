@@ -37,122 +37,6 @@ extern void LogPages( char* );
 extern void LogCPUInfo( void );
 extern void OutputVecTable( char* );
 
-extern uint32_t GetAddress( uint16_t, uint32_t );
-extern uint16_t RealSegValue( const SegNames index );
-
-extern SCodeViewData codeViewData;
-
-extern bool debugging;
-extern bool exitDebugLoop;
-
-extern bool showExtend;
-
-/********************/
-/*    User input    */
-/********************/
-
-uint32_t GetHexValue( char* str, char*& hex ) {
-	uint32_t value = 0;
-	uint32_t regval = 0;
-	hex = str;
-	while( *hex == ' ' ) {
-		hex++;
-	}
-	if( strncmp( hex, "EAX", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_eax;
-	} else if( strncmp( hex, "EBX", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_ebx;
-	} else if( strncmp( hex, "ECX", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_ecx;
-	} else if( strncmp( hex, "EDX", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_edx;
-	} else if( strncmp( hex, "ESI", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_esi;
-	} else if( strncmp( hex, "EDI", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_edi;
-	} else if( strncmp( hex, "EBP", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_ebp;
-	} else if( strncmp( hex, "ESP", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_esp;
-	} else if( strncmp( hex, "EIP", 3 ) == 0 ) {
-		hex += 3;
-		regval = reg_eip;
-	} else if( strncmp( hex, "AX", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_ax;
-	} else if( strncmp( hex, "BX", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_bx;
-	} else if( strncmp( hex, "CX", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_cx;
-	} else if( strncmp( hex, "DX", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_dx;
-	} else if( strncmp( hex, "SI", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_si;
-	} else if( strncmp( hex, "DI", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_di;
-	} else if( strncmp( hex, "BP", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_bp;
-	} else if( strncmp( hex, "SP", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_sp;
-	} else if( strncmp( hex, "IP", 2 ) == 0 ) {
-		hex += 2;
-		regval = reg_ip;
-	} else if( strncmp( hex, "CS", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( cs );
-	} else if( strncmp( hex, "DS", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( ds );
-	} else if( strncmp( hex, "ES", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( es );
-	} else if( strncmp( hex, "FS", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( fs );
-	} else if( strncmp( hex, "GS", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( gs );
-	} else if( strncmp( hex, "SS", 2 ) == 0 ) {
-		hex += 2;
-		regval = SegValue( ss );
-	}
-
-	while( *hex ) {
-		if( ( *hex >= '0' ) && ( *hex <= '9' ) ) {
-			value = ( value << 4 ) + *hex - '0';
-		} else if( ( *hex >= 'A' ) && ( *hex <= 'F' ) ) {
-			value = ( value << 4 ) + *hex - 'A' + 10;
-		} else {
-			if( *hex == '+' ) {
-				hex++;
-				return regval + value + GetHexValue( hex, hex );
-			} else if( *hex == '-' ) {
-				hex++;
-				return regval + value - GetHexValue( hex, hex );
-			} else {
-				break; // No valid char
-			}
-		}
-		hex++;
-	}
-	return regval + value;
-}
-
 bool ChangeRegister( char* str ) {
 	char* hex = str;
 	while( *hex == ' ' ) {
@@ -160,211 +44,104 @@ bool ChangeRegister( char* str ) {
 	}
 	if( strncmp( hex, "EAX", 3 ) == 0 ) {
 		hex += 3;
-		reg_eax = GetHexValue( hex, hex );
+		reg_eax = GetHexValue( hex );
 	} else if( strncmp( hex, "EBX", 3 ) == 0 ) {
 		hex += 3;
-		reg_ebx = GetHexValue( hex, hex );
+		reg_ebx = GetHexValue( hex );
 	} else if( strncmp( hex, "ECX", 3 ) == 0 ) {
 		hex += 3;
-		reg_ecx = GetHexValue( hex, hex );
+		reg_ecx = GetHexValue( hex );
 	} else if( strncmp( hex, "EDX", 3 ) == 0 ) {
 		hex += 3;
-		reg_edx = GetHexValue( hex, hex );
+		reg_edx = GetHexValue( hex );
 	} else if( strncmp( hex, "ESI", 3 ) == 0 ) {
 		hex += 3;
-		reg_esi = GetHexValue( hex, hex );
+		reg_esi = GetHexValue( hex );
 	} else if( strncmp( hex, "EDI", 3 ) == 0 ) {
 		hex += 3;
-		reg_edi = GetHexValue( hex, hex );
+		reg_edi = GetHexValue( hex );
 	} else if( strncmp( hex, "EBP", 3 ) == 0 ) {
 		hex += 3;
-		reg_ebp = GetHexValue( hex, hex );
+		reg_ebp = GetHexValue( hex );
 	} else if( strncmp( hex, "ESP", 3 ) == 0 ) {
 		hex += 3;
-		reg_esp = GetHexValue( hex, hex );
+		reg_esp = GetHexValue( hex );
 	} else if( strncmp( hex, "EIP", 3 ) == 0 ) {
 		hex += 3;
-		reg_eip = GetHexValue( hex, hex );
+		reg_eip = GetHexValue( hex );
 	} else if( strncmp( hex, "AX", 2 ) == 0 ) {
 		hex += 2;
-		reg_ax = (uint16_t) GetHexValue( hex, hex );
+		reg_ax = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "BX", 2 ) == 0 ) {
 		hex += 2;
-		reg_bx = (uint16_t) GetHexValue( hex, hex );
+		reg_bx = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "CX", 2 ) == 0 ) {
 		hex += 2;
-		reg_cx = (uint16_t) GetHexValue( hex, hex );
+		reg_cx = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "DX", 2 ) == 0 ) {
 		hex += 2;
-		reg_dx = (uint16_t) GetHexValue( hex, hex );
+		reg_dx = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "SI", 2 ) == 0 ) {
 		hex += 2;
-		reg_si = (uint16_t) GetHexValue( hex, hex );
+		reg_si = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "DI", 2 ) == 0 ) {
 		hex += 2;
-		reg_di = (uint16_t) GetHexValue( hex, hex );
+		reg_di = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "BP", 2 ) == 0 ) {
 		hex += 2;
-		reg_bp = (uint16_t) GetHexValue( hex, hex );
+		reg_bp = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "SP", 2 ) == 0 ) {
 		hex += 2;
-		reg_sp = (uint16_t) GetHexValue( hex, hex );
+		reg_sp = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "IP", 2 ) == 0 ) {
 		hex += 2;
-		reg_ip = (uint16_t) GetHexValue( hex, hex );
+		reg_ip = (uint16_t) GetHexValue( hex );
 	} else if( strncmp( hex, "CS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( cs, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( cs, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "DS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( ds, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( ds, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "ES", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( es, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( es, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "FS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( fs, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( fs, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "GS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( gs, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( gs, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "SS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( ss, (uint16_t) GetHexValue( hex, hex ) );
+		SegSet16( ss, (uint16_t) GetHexValue( hex ) );
 	} else if( strncmp( hex, "AF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( AF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( AF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "CF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( CF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( CF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "DF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( DF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( DF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "IF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( IF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( IF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "OF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( OF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( OF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "ZF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( ZF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( ZF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "PF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( PF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( PF, GetHexValue( hex ) );
 	} else if( strncmp( hex, "SF", 2 ) == 0 ) {
 		hex += 2;
-		SETFLAGBIT( SF, GetHexValue( hex, hex ) );
+		SETFLAGBIT( SF, GetHexValue( hex ) );
 	} else {
 		return false;
 	}
 	return true;
-}
-
-static char empty_sel[] = { ' ', ' ', 0 };
-
-bool GetDescriptorInfo( char* selname, char* out1, char* out2 ) {
-	Bitu sel;
-	Descriptor desc;
-
-	if( strstr( selname, "cs" ) || strstr( selname, "CS" ) ) {
-		sel = SegValue( cs );
-	} else if( strstr( selname, "ds" ) || strstr( selname, "DS" ) ) {
-		sel = SegValue( ds );
-	} else if( strstr( selname, "es" ) || strstr( selname, "ES" ) ) {
-		sel = SegValue( es );
-	} else if( strstr( selname, "fs" ) || strstr( selname, "FS" ) ) {
-		sel = SegValue( fs );
-	} else if( strstr( selname, "gs" ) || strstr( selname, "GS" ) ) {
-		sel = SegValue( gs );
-	} else if( strstr( selname, "ss" ) || strstr( selname, "SS" ) ) {
-		sel = SegValue( ss );
-	} else {
-		sel = GetHexValue( selname, selname );
-		if( *selname == 0 ) {
-			selname = empty_sel;
-		}
-	}
-	if( cpu.gdt.GetDescriptor( sel, desc ) ) {
-		switch( desc.Type( ) ) {
-		case DESC_TASK_GATE:
-			sprintf( out1,
-				"%s: s:%08X type:%02X p",
-				selname,
-				desc.GetSelector( ),
-				desc.saved.gate.type );
-			sprintf( out2,
-				"    TaskGate   dpl : %01X %1X",
-				desc.saved.gate.dpl,
-				desc.saved.gate.p );
-			return true;
-		case DESC_LDT:
-		case DESC_286_TSS_A:
-		case DESC_286_TSS_B:
-		case DESC_386_TSS_A:
-		case DESC_386_TSS_B:
-			sprintf( out1,
-				"%s: b:%08X type:%02X pag",
-				selname,
-				desc.GetBase( ),
-				desc.saved.seg.type );
-			sprintf( out2,
-				"    l:%08X dpl : %01X %1X%1X%1X",
-				desc.GetLimit( ),
-				desc.saved.seg.dpl,
-				desc.saved.seg.p,
-				desc.saved.seg.avl,
-				desc.saved.seg.g );
-			return true;
-		case DESC_286_CALL_GATE:
-		case DESC_386_CALL_GATE:
-			sprintf( out1,
-				"%s: s:%08X type:%02X p params: %02X",
-				selname,
-				desc.GetSelector( ),
-				desc.saved.gate.type,
-				desc.saved.gate.paramcount );
-			sprintf( out2,
-				"    o:%08X dpl : %01X %1X",
-				desc.GetOffset( ),
-				desc.saved.gate.dpl,
-				desc.saved.gate.p );
-			return true;
-		case DESC_286_INT_GATE:
-		case DESC_286_TRAP_GATE:
-		case DESC_386_INT_GATE:
-		case DESC_386_TRAP_GATE:
-			sprintf( out1,
-				"%s: s:%08X type:%02X p",
-				selname,
-				desc.GetSelector( ),
-				desc.saved.gate.type );
-			sprintf( out2,
-				"    o:%08X dpl : %01X %1X",
-				desc.GetOffset( ),
-				desc.saved.gate.dpl,
-				desc.saved.gate.p );
-			return true;
-		}
-		sprintf( out1,
-			"%s: b:%08X type:%02X parbg",
-			selname,
-			desc.GetBase( ),
-			desc.saved.seg.type );
-		sprintf( out2,
-			"    l:%08X dpl : %01X %1X%1X%1X%1X%1X",
-			desc.GetLimit( ),
-			desc.saved.seg.dpl,
-			desc.saved.seg.p,
-			desc.saved.seg.avl,
-			desc.saved.seg.r,
-			desc.saved.seg.big,
-			desc.saved.seg.g );
-		return true;
-	} else {
-		strcpy( out1, "                                     " );
-		strcpy( out2, "                                     " );
-	}
-	return false;
 }
 
 static void DEBUG_RaiseTimerIrq( void ) {
@@ -390,31 +167,31 @@ bool ParseCommand( char* str ) {
 	found = const_cast<char*>( s_found.c_str( ) );
 
 	if( command == "MEMDUMP" ) { // Dump memory to file
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++;
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		found++;
-		uint32_t num = GetHexValue( found, found );
+		uint32_t num = GetHexValue( found );
 		found++;
 		SaveMemory( seg, ofs, num );
 		return true;
 	}
 
 	if( command == "MEMDUMPBIN" ) { // Dump memory to file binary
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++;
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		found++;
-		uint32_t num = GetHexValue( found, found );
+		uint32_t num = GetHexValue( found );
 		found++;
 		SaveMemoryBin( seg, ofs, num );
 		return true;
 	}
 
 	if( command == "IV" ) { // Insert variable
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++;
-		uint32_t ofs = GetHexValue( found, found ); // Do not truncate; IV must support 32-bit addresses like SV/LV.
+		uint32_t ofs = GetHexValue( found ); // Do not truncate; IV must support 32-bit addresses like SV/LV.
 		found++;
 		char name[16];
 		for( int i = 0; i < 16; i++ ) {
@@ -489,9 +266,9 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "SM" ) { // Set memory with following values
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++;
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		found++;
 		uint16_t count = 0;
 		while( *found ) {
@@ -499,7 +276,7 @@ bool ParseCommand( char* str ) {
 				found++;
 			}
 			if( *found ) {
-				auto value = (uint8_t) GetHexValue( found, found );
+				auto value = (uint8_t) GetHexValue( found );
 				if( *found ) {
 					found++;
 				}
@@ -513,9 +290,9 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BP" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		CBreakpoint::AddBreakpoint( seg, ofs, false );
 		DEBUG_ShowMsg( "DEBUG: Set breakpoint at %04X:%04X\n", seg, ofs );
 		return true;
@@ -524,18 +301,18 @@ bool ParseCommand( char* str ) {
 #if C_HEAVY_DEBUGGER
 
 	if( command == "BPM" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		CBreakpoint::AddMemBreakpoint( seg, ofs );
 		DEBUG_ShowMsg( "DEBUG: Set memory breakpoint at %04X:%04X\n", seg, ofs );
 		return true;
 	}
 
 	if( command == "BPMR" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( seg, ofs );
 		bp->SetType( BKPNT_MEMORY_READ );
 		bp->FlagMemoryAsUnread( );
@@ -546,9 +323,9 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BPPM" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found, found );
+		auto seg = (uint16_t) GetHexValue( found );
 		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( seg, ofs );
 		if( bp ) {
 			bp->SetType( BKPNT_MEMORY_PROT );
@@ -560,7 +337,7 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BPLM" ) { // Add new breakpoint
-		uint32_t ofs = GetHexValue( found, found );
+		uint32_t ofs = GetHexValue( found );
 		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( 0, ofs );
 		if( bp ) {
 			bp->SetType( BKPNT_MEMORY_LINEAR );
@@ -572,16 +349,16 @@ bool ParseCommand( char* str ) {
 #endif
 
 	if( command == "BPINT" ) { // Add Interrupt Breakpoint
-		auto intNr = (uint8_t) GetHexValue( found, found );
+		auto intNr = (uint8_t) GetHexValue( found );
 		bool all = !( *found );
-		auto valAH = (uint8_t) GetHexValue( found, found );
+		auto valAH = (uint8_t) GetHexValue( found );
 		if( ( valAH == 0x00 ) && ( *found == '*' || all ) ) {
 			CBreakpoint::AddIntBreakpoint( intNr, BPINT_ALL, BPINT_ALL, false );
 			DEBUG_ShowMsg( "DEBUG: Set interrupt breakpoint at INT %02X\n",
 				intNr );
 		} else {
 			all = !( *found );
-			auto valAL = (uint8_t) GetHexValue( found, found );
+			auto valAL = (uint8_t) GetHexValue( found );
 			if( ( valAL == 0x00 ) && ( *found == '*' || all ) ) {
 				CBreakpoint::AddIntBreakpoint( intNr,
 					valAH,
@@ -609,7 +386,7 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BPDEL" ) { // Delete Breakpoints
-		auto bpNr = (uint8_t) GetHexValue( found, found );
+		auto bpNr = (uint8_t) GetHexValue( found );
 		if( ( bpNr == 0x00 ) && ( *found == '*' ) ) { // Delete all
 			CBreakpoint::DeleteAll( );
 			DEBUG_ShowMsg( "DEBUG: Breakpoints deleted.\n" );
@@ -623,18 +400,18 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "C" ) { // Set code overview
-		auto codeSeg = (uint16_t) GetHexValue( found, found );
+		auto codeSeg = (uint16_t) GetHexValue( found );
 		++found;
-		uint32_t codeOfs = GetHexValue( found, found );
+		uint32_t codeOfs = GetHexValue( found );
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", codeSeg, codeOfs );
-		DBGUI_SetCodeWinToAddress( codeSeg, codeOfs );
+		codeView.Set( codeSeg, codeOfs );
 		return true;
 	}
 
 	if( command == "D" ) { // Set data overview
-		uint16_t segment = GetHexValue( found, found );
+		uint16_t segment = GetHexValue( found );
 		++found;
-		uint32_t offset = GetHexValue( found, found );
+		uint32_t offset = GetHexValue( found );
 		if( segment != dataSeg[dbg.active_data_view] || offset > 0xFFFF )
 			dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
@@ -679,7 +456,7 @@ bool ParseCommand( char* str ) {
 		cpuLogFile << std::hex << std::noshowbase << std::setfill( '0' )
 			<< std::uppercase;
 		cpuLog = true;
-		cpuLogCounter = GetHexValue( found, found );
+		cpuLogCounter = GetHexValue( found );
 
 		debugging = false;
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
@@ -689,15 +466,15 @@ bool ParseCommand( char* str ) {
 #endif
 
 	if( command == "INTT" ) { // trace int.
-		auto intNr = (uint8_t) GetHexValue( found, found );
+		auto intNr = (uint8_t) GetHexValue( found );
 		DEBUG_ShowMsg( "DEBUG: Tracing INT %02X\n", intNr );
 		CPU_HW_Interrupt( intNr );
-		DBGUI_SetCodeWinToEIP( );
+		codeView.SetToEIP( );
 		return true;
 	}
 
 	if( command == "INT" ) { // start int.
-		auto intNr = (uint8_t) GetHexValue( found, found );
+		auto intNr = (uint8_t) GetHexValue( found );
 		DEBUG_ShowMsg( "DEBUG: Starting INT %02X\n", intNr );
 		CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip, true );
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip - 1 );
@@ -759,11 +536,9 @@ bool ParseCommand( char* str ) {
 
 	if( command == "INTHAND" ) {
 		if( found[0] != 0 ) {
-			auto intNr = (uint8_t) GetHexValue( found, found );
-			DEBUG_ShowMsg( "DEBUG: Set code overview to interrupt handler %X\n",
-				intNr );
-			codeViewData.useCS = mem_readw( intNr * 4 + 2 );
-			codeViewData.useEIP = mem_readw( intNr * 4 );
+			auto intNr = (uint8_t) GetHexValue( found );
+			DEBUG_ShowMsg( "DEBUG: Set code overview to interrupt handler %X\n", intNr );
+			codeView.Set( mem_readw( intNr * 4 + 2 ), mem_readw( intNr * 4 ) );
 			return true;
 		}
 	}
@@ -801,8 +576,6 @@ bool ParseCommand( char* str ) {
 		uint32_t *dwEnd = reinterpret_cast<uint32_t *>( &MemBase[RealSegValue( ss ) << 4] );
 		for( uint32_t *dw = &dwPSP[0x40]; dw < dwEnd; ++dw ) // clear program memory
 			*dw = 0U;
-		DBGUI_Reset( );
-		DBGUI_SaveCPUstate( );
 		DOS_Terminate( psp_seg, false, 2 );
 		dwEnd = &dwPSP[0x40];
 		for( uint32_t *dw = dwPSP; dw < dwEnd; ++dw ) // clear PSP
@@ -864,10 +637,8 @@ bool ParseCommand( char* str ) {
 
 		//DEBUG_ShowMsg("HELP                      - Help\n");
 		DEBUG_ShowMsg( "Keys --------------------------------------------------------------------------\n" );
-		DEBUG_ShowMsg( "F3/F6                     - Previous command in history.\n" );
-		DEBUG_ShowMsg( "F4/F7                     - Next command in history.\n" );
 		DEBUG_ShowMsg( "F5                        - Run.\n" );
-		DEBUG_ShowMsg( "F8                        - Toggle printable characters.\n" );
+		DEBUG_ShowMsg( "F6/F7/F8                  - Run to cursor.\n" );
 		DEBUG_ShowMsg( "F9                        - Set/Remove breakpoint.\n" );
 		DEBUG_ShowMsg( "F10/F11                   - Step over / trace into instruction.\n" );
 		DEBUG_ShowMsg( "ALT + C/D/E/S/X/B         - Set data to CS:IP/DS:SI/ES:DI/SS:SP/DS:DX/ES:BX.\n" );

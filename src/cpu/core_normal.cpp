@@ -142,6 +142,7 @@ Bits CPU_Core_Normal_Run() noexcept
 		core.base_val_ds=ds;
 #if C_DEBUGGER
 #if C_HEAVY_DEBUGGER
+		DEBUG_AnalyzeCurrentInstruction( );
 		if (DEBUG_HeavyIsBreakpoint()) {
 			FillFlags();
 			return debugCallback;

@@ -9,6 +9,7 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
+#include "cpu/registers.h"
 #include "debugtypes.h"
 #include <SDL3/SDL.h>
 #include <queue>
@@ -25,11 +26,11 @@ enum DebugColorPairs {
 typedef enum Window_ID :uint8_t {
 	WIN_CODE = 0U,
 	WIN_REG,
-	WIN_VAR,
+	WIN_SEG,
 	WIN_OUT,
 	WIN_LABELS,
 	WIN_DIFF,
-	WIN_SEG,
+	WIN_VAR,
 	WIN_DATA,
 	WIN_STACK,
 	NUM_WINDOWS
@@ -49,12 +50,19 @@ void DBGUI_NewFrame( );
 void DBGUI_Render( );
 void DBGUI_Reset( );
 void DBGUI_Resize( );
-void DBGUI_SaveCPUstate( );
-void DBGUI_SaveMemoryState( );
-void DBGUI_SetCodeWinToEIP( );
-void DBGUI_SetCodeWinToAddress( const uint16_t, const uint32_t );
-void DBGUI_UpdateMemoryViews( );
-void DBGUI_UpdateOrderedSegments( const bool = false );
+
+void DEBUG_NewInstruction( );
+void DEBUG_SaveCurrentState( );
+
+void DEBUG_ShowDOSBox( );
+void DEBUG_HideDOSBox( );
+
+extern const char * AnalyzeInstruction( const char *, const char *, char * = nullptr );
+extern bool ParseCommand( char * );
+extern uint32_t GetAddress( uint16_t, uint32_t );
+extern uint32_t GetHexValue( char *& );
+extern uint16_t RealSegValue( const SegNames index );
+extern bool GetDescriptorInfo( char *, char *, char * );
 
 // GUI layout and styling constants
 namespace DBGUI {
@@ -94,19 +102,19 @@ struct DBGBlock {
 	SDL_Window* win_main = nullptr;
 	SDL_GPUDevice* gpu_device = nullptr;
 	DATA_ID active_data_view = DATA_VIEW;    /* Current active data window */
-	bool update_win[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true };
+	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true, false, true, true };
 	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
 	bool update_win_scroll[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
-	bool visible[NUM_WINDOWS] = { true, true, false, true, true, true, true, true, true };
+	bool visible[NUM_WINDOWS] = { true, true, true, true, true, true, false, true, true };
 	bool fTitleBar[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
 	uint32_t input_y = 0U;
 	uint32_t global_mask = 0U;
 	/* Window column selection and height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 65U }, { 1U, 4U }, { 1U, 5U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 4U }, { 2U, 63U }, { 2U, 40U } };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 66U }, { 1U, 4U }, { 1U, 4U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 0U }, { 2U, 67U }, { 2U, 40U } };
 
 	// Window dimensions (in characters)
-	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
-	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 65, 0 };
+	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols + 5U, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
+	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 69, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	SDL_Rect window_rect;
@@ -119,18 +127,25 @@ extern WINDOW_ID win_data_view[NUM_DATA_VIEWS];
 extern WINDOW_ID win_diff_view[NUM_DATA_VIEWS];
 
 extern DBGBlock dbg;
+extern bool debugging;
+extern bool exitDebugLoop;
+extern bool exitNormalLoop;
+extern bool showExtend;
 
 #define MAXCMDLEN 254
-struct SCodeViewData {
-	uint16_t firstInstSize = 0;
-	uint16_t useCS = 0;
-	uint32_t useEIP = 0;
-	uint16_t cursorSeg = 0;
-	uint32_t cursorOfs = 0;
+struct SCodeView {
+	uint16_t segment = 0;
+	uint32_t offset = 0;
+	uint32_t address = 0;
+	uint16_t cursorSegment = 0;
+	uint32_t cursorOffset = 0;
+	uint32_t cursorAddress = 0;
 
-	char inputStr[MAXCMDLEN + 1] = {};
-	char suspInputStr[MAXCMDLEN + 1] = {};
+	void Set( const uint16_t, const uint32_t, const bool = true, const bool = true );
+	void SetToEIP( );
+	void SetCursor( const uint16_t, const uint32_t );
 };
+extern SCodeView codeView;
 
 // Event queue for debugger input
 struct DebuggerInputEvent {
