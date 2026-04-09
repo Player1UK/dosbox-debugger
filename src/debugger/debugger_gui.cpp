@@ -30,6 +30,7 @@ char curSelectorName[3] = "";
 static bool imgui_initialized = false;
 static float display_scale = 1.0f;
 
+static uint32_t start_address = 0U;
 static float char_width, digit_width, space_width, address_width, scrollbar_width;
 static float line_height;
 static float line_height_no_spacing;
@@ -303,6 +304,9 @@ static void DrawCode( ) {
 				}
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
+			} else if( start_address == dline.base_offset ) {
+				ImGui::SetCursorPosX( 21 * char_width );
+				ImGui::TextColored( green_color, "start:" );
 			}
 			const bool is_current_ip = ( dline.address.segment == RealSegValue( cs ) ) && ( dline.address.offset == reg_eip );
 			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset );
@@ -359,7 +363,9 @@ static void DrawCode( ) {
 			ImGui::TextColored( *operator_color, "%s", dline.szInstruction );
 			const ImVec4 *operands_color = is_current_ip ? &green_color : &purple_color;
 			if( dline.pOperands ) {
-				ImGui::SameLine( 36 * char_width );
+				ImGui::SameLine( );
+				if( ImGui::GetCursorPosX( ) < 36 * char_width )
+					ImGui::SetCursorPosX( 36 * char_width );
 				ImGui::TextColored( *operands_color, "%s", dline.pOperands );
 			}
 			if( dline.szComment[0] ) {
@@ -768,15 +774,14 @@ static void DrawRegisters( ) {
 				sprintf( id, "##seg_%s", e.label );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
 					switch( e.x ) {
-					case cs:
-						codeView.Set( segVal, 0U );
-						break;
 					case ss:
 						dataSeg[STACK_VIEW] = segVal;
 						dataOfs[STACK_VIEW] = reg_esp;
 						dbg.update_win[WIN_STACK] = stack_segment != segVal;
 						dbg.update_win_scroll[WIN_STACK] = true;
 						break;
+					case cs:
+						codeView.Set( segVal, 0U );
 					default:
 						dataSeg[DATA_VIEW] = segVal;
 						dataOfs[DATA_VIEW] = 0U;
@@ -1296,6 +1301,8 @@ bool DBGUI_StartUp( ) {
 	// Point stack view to top of stack
 	dataSeg[STACK_VIEW] = RealSegValue( ss );
 	dataOfs[STACK_VIEW] = reg_sp;
+
+	start_address = GetAddress( SegValue( cs ), reg_eip );
 
 	data_buffer.resize( dbg.segment[SEG_HEAP] << 4 );
 	SaveMemoryState( ); // Required to prevent every difference from zero being incorrectly identified.

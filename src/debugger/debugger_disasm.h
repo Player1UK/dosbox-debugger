@@ -5,6 +5,7 @@
 
 #if C_DEBUGGER
 #include "debugtypes.h"
+#include <capstone/capstone.h>
 #include "Zydis/Zydis.h"
 #include <set>
 
@@ -35,6 +36,7 @@ typedef enum Mnemonic_Mask : uint16_t {
 	MM_Stack	        = 0x0800,
 	MM_Call_Label		= 0x1000,
 	MM_Jump_Label		= 0x2000,
+	MM_Has_Segment		= 0x4000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
 	MM_Label			= MM_Call_Label | MM_Jump_Label,
 } MNEMONIC_MASK;
@@ -52,9 +54,10 @@ struct DecodedLine {
     uint32_t base_offset;
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+	cs_insn *cs_instruction;
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
 	char szOpcode[25];
-	char szInstruction[128];
+	char szInstruction[32];
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 

@@ -5,6 +5,10 @@
   "description": "DOSBox Staging is a modern continuation of DOSBox with advanced features and current development practices.",
   "dependencies": [
     "asio",
+    {
+      "name": "capstone",
+      "features": [ "x86" ]
+    },
     "fluidsynth",
     "iir1",
     "libmt32emu",

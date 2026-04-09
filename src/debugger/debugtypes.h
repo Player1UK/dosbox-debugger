@@ -5,6 +5,20 @@
 
 #if C_DEBUGGER
 
+typedef enum Size_Type : uint8_t {
+	SIZE_BYTE = 0U,
+	SIZE_WORD,
+	SIZE_DWORD
+} SIZE_TYPE;
+
+typedef enum Ptr_Type : uint8_t {
+	PTR_NONE = 0U,
+	PTR_BYTE,
+	PTR_WORD,
+	PTR_DWORD,
+	PTR
+} PTR_TYPE;
+
 typedef enum Label_Mask : unsigned __int8 {
 	LABEL_CALL = 0x1u,
 	LABEL_JUMP = 0x2u,

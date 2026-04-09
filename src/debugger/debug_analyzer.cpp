@@ -108,148 +108,203 @@ uint32_t GetAddress( uint16_t seg, uint32_t offset ) {
 	return ( seg << 4 ) + offset;
 }
 
-uint32_t GetHexValue( char *&hex ) {
-	uint32_t value = 0U;
-	uint32_t regval = 0U;
-	bool fReg = true;
-	bool extended = false;
+void ResetHexValueSizeType( ) {
+	hex_value_size_type = SIZE_BYTE;
+}
+
+uint32_t GetHexValue( char *&hex, SIZE_TYPE &size_type ) {
 	while( *hex == ' ' )
 		++hex;
-	
+	switch( *hex ) {
+	case ']':
+	case ':':
+	case ',':
+	case 0:
+		return 0U;
+	}
+	bool fReg = true;
+	bool extended = false;
+	uint32_t reg_value = 0U;
+	SIZE_TYPE reg_size_type = SIZE_WORD;
 	if( ( *hex & CASE_MASK ) == 'E' ) {
+		reg_size_type = SIZE_DWORD;
 		extended = true;
 		++hex;
 	}
 	switch( ( *hex++ & CASE_MASK ) ) {
 	case 'A':
 		if( ( *hex & CASE_MASK ) == 'X' )
-			regval = extended ? reg_eax : reg_ax;
-		else if( ( *hex & CASE_MASK ) == 'H' )
-			regval = reg_ah;
-		else if( ( *hex & CASE_MASK ) == 'L' )
-			regval = reg_al;
-		else
+			reg_value = extended ? reg_eax : reg_ax;
+		else if( ( *hex & CASE_MASK ) == 'H' ) {
+			reg_value = reg_ah; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'L' ) {
+			reg_value = reg_al; reg_size_type = SIZE_BYTE;
+		} else
 			fReg = false;
 		break;
 	case 'B':
 		if( ( *hex & CASE_MASK ) == 'X' )
-			regval = extended ? reg_ebx : reg_bx;
-		else if( ( *hex & CASE_MASK ) == 'H' )
-			regval = reg_bh;
-		else if( ( *hex & CASE_MASK ) == 'L' )
-			regval = reg_bl;
-		else if( ( *hex & CASE_MASK ) == 'P' )
-			regval = extended ? reg_ebp : reg_bp;
+			reg_value = extended ? reg_ebx : reg_bx;
+		else if( ( *hex & CASE_MASK ) == 'H' ) {
+			reg_value = reg_bh; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'L' ) {
+			reg_value = reg_bl; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'P' )
+			reg_value = extended ? reg_ebp : reg_bp;
 		else
 			fReg = false;
 		break;
 	case 'C':
 		if( ( *hex & CASE_MASK ) == 'X' )
-			regval = extended ? reg_ecx : reg_cx;
-		else if( ( *hex & CASE_MASK ) == 'H' )
-			regval = reg_ch;
-		else if( ( *hex & CASE_MASK ) == 'L' )
-			regval = reg_cl;
-		else if( ( *hex & CASE_MASK ) == 'S' )
-			regval = RealSegValue( cs );
+			reg_value = extended ? reg_ecx : reg_cx;
+		else if( ( *hex & CASE_MASK ) == 'H' ) {
+			reg_value = reg_ch; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'L' ) {
+			reg_value = reg_cl; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'S' )
+			reg_value = RealSegValue( cs );
 		else
 			fReg = false;
 		break;
 	case 'D':
 		if( ( *hex & CASE_MASK ) == 'X' )
-			regval = extended ? reg_edx : reg_dx;
-		else if( ( *hex & CASE_MASK ) == 'H' )
-			regval = reg_dh;
-		else if( ( *hex & CASE_MASK ) == 'L' )
-			regval = reg_dl;
-		else if( ( *hex & CASE_MASK ) == 'S' )
-			regval = RealSegValue( ds );
+			reg_value = extended ? reg_edx : reg_dx;
+		else if( ( *hex & CASE_MASK ) == 'H' ) {
+			reg_value = reg_dh; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'L' ) {
+			reg_value = reg_dl; reg_size_type = SIZE_BYTE;
+		} else if( ( *hex & CASE_MASK ) == 'S' )
+			reg_value = RealSegValue( ds );
 		else if( ( *hex & CASE_MASK ) == 'I' )
-			regval = extended ? reg_edi : reg_di;
+			reg_value = extended ? reg_edi : reg_di;
 		else
 			fReg = false;
 		break;
 	case 'F':
 		if( ( *hex & CASE_MASK ) == 'S' )
-			regval = RealSegValue( fs );
+			reg_value = RealSegValue( fs );
 		else
 			fReg = false;
 		break;
 	case 'G':
 		if( ( *hex & CASE_MASK ) == 'S' )
-			regval = RealSegValue( gs );
+			reg_value = RealSegValue( gs );
 		else
 			fReg = false;
 		break;
 	case 'S':
 		if( ( *hex & CASE_MASK ) == 'I' )
-			regval = extended ? reg_esi : reg_si;
+			reg_value = extended ? reg_esi : reg_si;
 		else if( ( *hex & CASE_MASK ) == 'P' )
-			regval = extended ? reg_esp : reg_sp;
+			reg_value = extended ? reg_esp : reg_sp;
 		else if( extended ) {
-			regval = RealSegValue( es );
+			reg_value = RealSegValue( es );
+			reg_size_type = SIZE_WORD;
 			--hex;
 		} else if( ( *hex & CASE_MASK ) == 'S' )
-			regval = RealSegValue( ss );
+			reg_value = RealSegValue( ss );
 		else
 			fReg = false;
 		break;
 	case 'I':
 		if( ( *hex & CASE_MASK ) == 'P' )
-			regval = extended ? reg_eip : reg_ip;
+			reg_value = extended ? reg_eip : reg_ip;
 		else
 			fReg = false;
 		break;
 	default:
 		fReg = false;
 	}
-	if( fReg )
-		++hex;
-	else {
+	if( fReg ) {
+		while( *++hex == ' ' );
+		if( reg_size_type > size_type )
+			size_type = reg_size_type;
+	} else {
 		--hex;
 		if( extended )
 			--hex;
-		while( *hex ) {
-			switch( *hex ) {
-			case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-				value <<= 4U;
-				value += *hex - 'A';
-				value += 10U;
-				break;
-			case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-				value <<= 4U;
-				value += *hex - 'a';
-				value += 10U;
-				break;
-			case '0':
-				if( ( hex[1] & CASE_MASK ) == 'X' ) { // Skip 0x
-					++hex;
-					break;
-				}
-			case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-				value <<= 4U;
-				value += *hex - '0';
-				break;
-			case '+':
-				++hex;
-				return regval + value + GetHexValue( hex );
-			case '-':
-				++hex;
-				return regval + value - GetHexValue( hex );
-			default:
-				return regval + value;
-			}
+	}
+	uint32_t value = 0U;
+	uint8_t count = 0U;
+	bool fDecodeHex = true;
+	while( *hex && fDecodeHex ) {
+		switch( *hex ) {
+		case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
+			value <<= 4U;
+			value += *hex - 'A';
+			value += 10U;
 			++hex;
+			++count;
+			break;
+		case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
+			value <<= 4U;
+			value += *hex - 'a';
+			value += 10U;
+			++hex;
+			++count;
+			break;
+		case '0':
+			if( ( hex[1] & CASE_MASK ) == 'X' ) { // Skip 0x
+				++hex;
+				++hex;
+				break;
+			}
+		case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
+			value <<= 4U;
+			value += *hex - '0';
+			++hex;
+			++count;
+			break;
+		case 'h': case 'H':
+			if( count )
+				++hex;
+		default:
+			fDecodeHex = false;
 		}
 	}
-	return regval + value;
+	if( count ) {
+		SIZE_TYPE value_size_type = count > 4U ? SIZE_DWORD : count > 2U ? SIZE_WORD : SIZE_BYTE;
+		if( value_size_type > size_type )
+			size_type = value_size_type;
+		while( *hex == ' ' )
+			++hex;
+	}
+	if( *hex == '+' ) {
+		++hex;
+		value += GetHexValue( hex, size_type );
+	} else if( *hex == '-' ) {
+		++hex;
+		value -= GetHexValue( hex, size_type );
+	}
+	hex_value = reg_value + value;
+	return hex_value;
 }
 
+static PTR_TYPE last_ptr_type = PTR_NONE;
 static char * AnalyzeOperand( char *, char *, char *, bool = false );
 static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS ) {
+	if( !RHS )
+		last_ptr_type = PTR_NONE;
 	char *pEnd = result;
 	char *pos = strchr( OPS, '[' );
 	if( pos ) {
+		PTR_TYPE ptr_type = PTR_WORD;
+		switch( *OPS ) {
+		case 'B':
+			ptr_type = PTR_BYTE;
+			break;
+		case 'W':
+			ptr_type = PTR_WORD;
+			break;
+		case 'D':
+			ptr_type = PTR_DWORD;
+			break;
+		case 'P':
+			ptr_type = PTR;
+			break;
+		}
+		if( !RHS )
+			last_ptr_type = ptr_type;
 		uint16_t segment;
 		if( pos[-1] == ':' ) { // Segment prefix ?
 			char *segpos = &pos[-3];
@@ -284,22 +339,25 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 		}
 		uint32_t address = GetAddress( segment, offset );
 		if( !( get_tlb_readhandler( address )->flags & PFLAG_INIT ) ) {
-			static char outmask[] = "%04X:%04X=%02X";
-			if( cpu.pmode )
-				outmask[7] = '8';
-			uint32_t val = 0U;
-			if( !RHS )
-				outmask[9] = 0;
-			else if( cpu.code.big ) {
-				val = mem_readd<MemOpMode::SkipBreakpoints>( address );
-				outmask[12] = '8';
-			} else {
-				val = mem_readw<MemOpMode::SkipBreakpoints>( address );
-				outmask[12] = '4';
+			pEnd += sprintf( result, "%04X:%04X", segment, offset );
+			if( RHS ) {
+				switch( ptr_type ) {
+				case PTR_BYTE:
+					pEnd += sprintf( pEnd, "=%02X", mem_readb<MemOpMode::SkipBreakpoints>( address ) );
+					break;
+				case PTR_WORD:
+					pEnd += sprintf( pEnd, "=%04X", mem_readw<MemOpMode::SkipBreakpoints>( address ) );
+					break;
+				case PTR_DWORD:
+					pEnd += sprintf( pEnd, "=%08X", mem_readd<MemOpMode::SkipBreakpoints>( address ) );
+					break;
+				case PTR:
+					pEnd += sprintf( pEnd, "=%04X:%04X", mem_readw<MemOpMode::SkipBreakpoints>( address ), mem_readw<MemOpMode::SkipBreakpoints>( address + 2U ) );
+					break;
+				default:
+					break;
+				}
 			}
-			pEnd += sprintf( result, outmask, segment, offset, val );
-			if( !RHS )
-				outmask[9] = '=';
 		} else
 			pEnd += sprintf( result, "[illegal]" );
 
@@ -317,14 +375,21 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 			uint32_t valueRHS = GetHexValue( pos );
 			pEnd += sprintf( result, "%04X:%04X", valueLHS, valueRHS );
 		} else {
+			ResetHexValueSizeType( );
 			uint32_t value = GetHexValue( OPS );
 			switch( *OPS ) {
 			case ' ':
+			case 'h':
 			case ']':
 			case ':':
 			case ',':
 			case 0:
-				pEnd += sprintf( result, "%02X", value );
+				if( hex_value_size_type == SIZE_DWORD || ( RHS && last_ptr_type == PTR_DWORD ) )
+					pEnd += sprintf( result, "%08X", value );
+				else if( hex_value_size_type == SIZE_WORD || ( RHS && last_ptr_type == PTR_WORD ) )
+					pEnd += sprintf( result, "%04X", value );
+				else
+					pEnd += sprintf( result, "%02X", value );
 				break;
 			}
 		}
@@ -340,9 +405,13 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		*selector = 0;
 
 	*result = 0;
-	if( pOperands ) {
-		strncpy( INST, inst, pOperands - inst );
-		INST[pOperands - inst - 1] = 0;
+	if( pOperands && *pOperands ) {
+		const char *cpos = strchr( inst, ' ' );
+		if( cpos ) {
+			strncpy( INST, inst, cpos - inst );
+			INST[cpos - inst] = 0;
+		}  else
+			strcpy( INST, inst );
 		upcase( INST );
 		strcpy( OPS, pOperands );
 		upcase( OPS );
@@ -448,92 +517,40 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		if( jmp ) {
 			pos = strchr( OPS, '$' );
 			if( pos ) {
-				pos = strchr( OPS, '+' );
-				if( pos )
+				if( pos[1] == '+' || pos[2] == '+' )
 					strcpy( pEnd, " ->" );
 				else
 					strcpy( pEnd, " <-" );
-			} else
-				strcpy( pEnd, " <>" );
+			} else if( hex_value > reg_ip )
+				strcpy( pEnd, " ->" );
+			else
+				strcpy( pEnd, " <-" );
 		} else
 			strcpy( pEnd, " ><" );
 	}
 		break;
 	case 'L':
-		if( !strncmp( &INST[1], "ODS", 3U ) ) {
-			switch( INST[4] ) {
-			case 'B': {
-				uint32_t address = GetAddress( SegValue( ds ), reg_si );
-				uint8_t value = mem_readb<MemOpMode::SkipBreakpoints>( address );
-				pEnd += sprintf( pEnd, "al <- %04X:%04X=%02X", RealSegValue( ds ), reg_si, value );
-			}
-				break;
-			case 'D': {
-				uint32_t address = GetAddress( SegValue( ds ), reg_esi );
-				uint32_t value = mem_readd<MemOpMode::SkipBreakpoints>( address );
-				pEnd += sprintf( pEnd, "eax <- %04X:%04X=%08X", RealSegValue( ds ), reg_esi, value );
-			}
-				break;
-			default: {
-				uint32_t address = GetAddress( SegValue( ds ), reg_si );
-				uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
-				pEnd += sprintf( pEnd, "ax <- %04X:%04X=%04X", RealSegValue( ds ), reg_si, value );
-			}
-			}
-		} else if( !strncmp( &INST[1], "OOP", 3U ) )
+		if( !strncmp( &INST[1], "OOP", 3U ) )
 			sprintf( result, "%X", reg_cx );
 		break;
 	case 'P':
 		if( INST[1] == 'O' && INST[2] == 'P' ) {
 			uint32_t address = GetAddress( SegValue( ss ), reg_esp );
-			uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
-			sprintf( pEnd, pEnd == result ? "%04X" : " -> %04X", value );
+			if( pEnd == result ) {
+				uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
+				sprintf( pEnd, "%04X", value );
+			} else if( hex_value_size_type == SIZE_BYTE ) {
+				uint8_t value = mem_readb<MemOpMode::SkipBreakpoints>( address );
+				sprintf( pEnd, "%02X", value );
+			} else if( hex_value_size_type == SIZE_WORD ) {
+				uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
+				sprintf( pEnd, "%04X", value );
+			} else {
+				uint32_t value = mem_readd<MemOpMode::SkipBreakpoints>( address );
+				sprintf( pEnd, "%08X", value );
+			}
 		} else if( !strncmp( &INST[1], "USHF", 4U ) )
 			sprintf( pEnd, "%04X", reg_flags );
-		break;
-	case 'R':
-		if( INST[1] == 'E' && INST[2] == 'P' ) {
-			switch( *OPS ) {
-			case 'L':
-				if( !strncmp( &OPS[1], "ODS", 3U ) ) {
-					bool f16bit = true;
-					uint8_t multiplier = 1U;
-					switch( OPS[4] ) {
-					case 'B':
-						pEnd += sprintf( pEnd, "al" );
-						multiplier = 0U;
-						break;
-					case 'D':
-						pEnd += sprintf( pEnd, "eax" );
-						f16bit = false;
-						break;
-					default:
-						pEnd += sprintf( pEnd, "ax" );
-					}
-					pEnd += sprintf( pEnd, " <- %04X:%04X-%04X", RealSegValue( ds ), f16bit ? reg_si : reg_esi, f16bit ? ( reg_si + ( reg_cx << multiplier ) ) : ( reg_esi + ( reg_ecx << 2U ) ) );
-				}
-				break;
-			case 'S':
-				if( !strncmp( &OPS[1], "TOS", 3U ) ) {
-					bool f16bit = true;
-					uint8_t multiplier = 1U;
-					switch( OPS[4] ) {
-					case 'B':
-						pEnd += sprintf( pEnd, "%02X", reg_al );
-						multiplier = 0U;
-						break;
-					case 'D':
-						pEnd += sprintf( pEnd, "%08X", reg_eax );
-						f16bit = false;
-						break;
-					default:
-						pEnd += sprintf( pEnd, "%04X", reg_ax );
-					}
-					pEnd += sprintf( pEnd, " -> %04X:%04X-%04X", RealSegValue( es ), f16bit ? reg_di : reg_edi, f16bit ? ( reg_di + ( reg_cx << multiplier ) ) : ( reg_edi + ( reg_ecx << 2U ) ) );
-				}
-				break;
-			}
-		}
 		break;
 	}
 	return result;

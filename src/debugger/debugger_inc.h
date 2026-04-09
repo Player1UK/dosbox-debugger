@@ -60,7 +60,10 @@ void DEBUG_HideDOSBox( );
 extern const char * AnalyzeInstruction( const char *, const char *, char * = nullptr );
 extern bool ParseCommand( char * );
 extern uint32_t GetAddress( uint16_t, uint32_t );
-extern uint32_t GetHexValue( char *& );
+static SIZE_TYPE hex_value_size_type = SIZE_BYTE;
+static uint32_t hex_value = 0U;
+extern uint32_t GetHexValue( char *&, SIZE_TYPE & = hex_value_size_type );
+extern void ResetHexValueSizeType( );
 extern uint16_t RealSegValue( const SegNames index );
 extern bool GetDescriptorInfo( char *, char *, char * );
 

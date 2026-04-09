@@ -149,12 +149,14 @@ static ZydisDecodedOperand callback_operand = {
 
 // Recursive disassembly function (credit: CoPilot)
 void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
+    csh cs_handle;
     ZydisDecoder decoder;
     ZydisFormatter formatter;
     ZydisDecoderInit( &decoder,
         ( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
         ( f32bit ? ZYDIS_STACK_WIDTH_32 : ZYDIS_STACK_WIDTH_16 ) );
     ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL );
+    cs_open( CS_ARCH_X86, CS_MODE_16, &cs_handle );
 
     const auto binary = MemBase;
     const size_t binarySize = MEM_TotalPages( ) * 4096; // DosPageSize
@@ -190,13 +192,10 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 for( auto i = 0; i < dline.instruction.length; ++i )
                     pOpCode += sprintf( pOpCode, "%02X ", binary[base_offset + i] );
 
-                ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, dline.szInstruction, sizeof( dline.szInstruction ), address.offset, ZYAN_NULL );
-                char *cptr = dline.szInstruction;
-                while( *cptr && *cptr != ' ' ) ++cptr;
-                if( *cptr ) {
-                    *cptr++ = 0;
-                    dline.pOperands = cptr;
-                }
+                cs_disasm( cs_handle, &binary[base_offset], binarySize - base_offset, address.offset, 1, &dline.cs_instruction );
+                //ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, dline.szInstruction, sizeof( dline.szInstruction ), address.offset, ZYAN_NULL );
+                strcpy( dline.szInstruction, dline.cs_instruction->mnemonic );
+                dline.pOperands = dline.cs_instruction->op_str;
                 address.offset += dline.instruction.length;
                 base_offset += dline.instruction.length;
 
@@ -287,6 +286,8 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 }
                 if( dline.instruction.attributes & ( ZYDIS_ATTRIB_HAS_REP | ZYDIS_ATTRIB_HAS_REPE | ZYDIS_ATTRIB_HAS_REPNE ) )
                     dline.mnemonicMask |= MM_REP;
+                if( dline.instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT )
+                    dline.mnemonicMask |= MM_Has_Segment;
                 if( dline.mnemonicMask & MM_Branch ) {
                     ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
                     for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
