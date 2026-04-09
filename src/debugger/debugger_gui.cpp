@@ -31,7 +31,7 @@ static bool imgui_initialized = false;
 static float display_scale = 1.0f;
 
 static uint32_t start_address = 0U;
-static float char_width, digit_width, space_width, address_width, scrollbar_width;
+static float char_width, digit_width, space_width, address_width, scrollbar_width, cursor_width;
 static float line_height;
 static float line_height_no_spacing;
 static ImVec2 padding;
@@ -403,6 +403,20 @@ static void SaveMemoryState( ) {
 		*data32++ = *mem32++;
 }
 
+struct Cursor {
+	ImU32		color = IM_COL32( 255, 255, 255, 255 );
+	ImVec2		pos = { 0.0f, 0.0f };
+	bool		visible = false;
+	uint16_t	segment = 0U;
+	uint32_t	offset = 0U;
+};
+
+enum DataCursor : uint8_t {
+	DI_CURSOR = 0U,
+	SI_CURSOR,
+	NUM_DATA_CURSORS
+};
+
 typedef struct Diff {
 	uint32_t	address;
 	uint16_t	segment;
@@ -414,6 +428,36 @@ static std::vector<char> data_text_buffer;
 static std::vector<DIFF> data_diff[NUM_DATA_VIEWS];
 static ImU32 diff_col = IM_COL32( 0, 96, 0, 255 );
 static uint16_t data_segment = static_cast<uint16_t>( -1 );
+static Cursor data_cursor[NUM_DATA_CURSORS] = { { IM_COL32( 234, 63, 247, 255 ) }, { IM_COL32( 255, 142, 85, 255 ) } };
+
+static void SetCursors( ) {
+	data_cursor[DI_CURSOR].visible = false;
+	data_cursor[DI_CURSOR].segment = RealSegValue( es );
+	data_cursor[DI_CURSOR].offset = reg_edi;
+	data_cursor[SI_CURSOR].visible = false;
+	data_cursor[SI_CURSOR].segment = RealSegValue( ds );
+	data_cursor[SI_CURSOR].offset = reg_esi;
+	auto dline = DecodedLine::find( RealSegValue( cs ), reg_eip );
+	if( dline ) {
+		if( dline->mnemonicMask & MM_Has_Segment ) {
+			SegNames seg_name;
+			if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_CS ) seg_name = cs;
+			else if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_SS ) seg_name = ss;
+			else if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_DS ) seg_name = ds;
+			else if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_ES ) seg_name = es;
+			else if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_FS ) seg_name = fs;
+			else if( dline->instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_GS ) seg_name = gs;
+			if( dline->instruction.operand_count >= 3 ) {
+				if( dline->operands[2].type == ZYDIS_OPERAND_TYPE_REGISTER ) {
+					if( dline->operands[2].reg.value == ZYDIS_REGISTER_SI )
+						data_cursor[SI_CURSOR].segment = RealSegValue( seg_name );
+					else if( dline->operands[2].reg.value == ZYDIS_REGISTER_DI )
+						data_cursor[DI_CURSOR].segment = RealSegValue( seg_name );
+				}
+			}
+		}
+	}
+}
 
 static void DrawData( ) {
 	if( BeginSubWindow( WIN_DATA, "Data", ImGuiWindowFlags_None ) ) {
@@ -455,7 +499,8 @@ static void DrawData( ) {
 			}
 			char *line = &data_text_buffer[0];
 			float yPos = 0.0f;
-			for( ; count; --count, offset += 16U, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
+			SetCursors( );
+			for( ; count; --count, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment >= ordered_segment->value ) {
 					segment = ordered_segment->value;
 					++ordered_segment;
@@ -474,7 +519,7 @@ static void DrawData( ) {
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, ++mem ) {
+				for( uint8_t x = 0U; x < 16U; ++x, ++mem, ++offset ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
@@ -484,6 +529,12 @@ static void DrawData( ) {
 						if( *data != *mem )
 							data_diff[DATA_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						++data;
+					}
+					for( auto &cursor : data_cursor ) {
+						if( segment == cursor.segment && offset == cursor.offset ) {
+							cursor.pos = { digit_width * num_digits + space_width * num_spaces - cursor_width, yPos };
+							cursor.visible = true;
+						}
 					}
 				}
 				*reinterpret_cast<int16_t *>( &line[63] ) = 0x2020;
@@ -512,6 +563,12 @@ static void DrawData( ) {
 				ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
 				drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
 			}
+			for( auto &cursor : data_cursor ) {
+				if( cursor.visible ) {
+					ImVec2 pos = { top_left.x + cursor.pos.x, top_left.y + cursor.pos.y };
+					drawList->AddRectFilled( pos, { pos.x + cursor_width, pos.y + line_height_no_spacing }, cursor.color );
+				}
+			}
 			ImGui::TextUnformatted( &data_text_buffer[0] );
 			if( dbg.update_win_scroll[WIN_DATA] ) {
 				dbg.update_win_scroll[WIN_DATA] = false;
@@ -530,6 +587,7 @@ static void DrawData( ) {
 static std::vector<char> stack_text_buffer;
 static uint32_t stack_lines = 0U;
 static uint16_t stack_segment = static_cast<uint16_t>( -1 );
+static Cursor sp_cursor = { IM_COL32( 94, 219, 247, 255 ) };
 
 static void DrawStack( ) {
 	if( BeginSubWindow( WIN_STACK, "Stack", ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoNavFocus ) ) {
@@ -570,7 +628,10 @@ static void DrawStack( ) {
 			}
 			char *line = &stack_text_buffer[0];
 			float yPos = 0.0f;
-			for( uint32_t count = stack_lines; count; --count, offset -= 16U, line += 82, --line_segment, yPos += line_height_no_spacing ) {
+			sp_cursor.visible = false;
+			sp_cursor.segment = dbg.segment[SEG_STACK];
+			sp_cursor.offset = reg_esp;
+			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;
 					segment = ordered_segment->value;
@@ -587,7 +648,7 @@ static void DrawStack( ) {
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, --mem ) {
+				for( uint8_t x = 0U; x < 16U; ++x, --mem, --offset ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
@@ -597,6 +658,10 @@ static void DrawStack( ) {
 						if( *data != *mem )
 							data_diff[STACK_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						--data;
+					}
+					if( segment == sp_cursor.segment && offset == sp_cursor.offset ) {
+						sp_cursor.pos = { digit_width * ( num_digits + 2U ) + space_width * num_spaces, yPos };
+						sp_cursor.visible = true;
 					}
 				}
 				*reinterpret_cast<int16_t *>( &line[63] ) = 0x2020;
@@ -613,6 +678,10 @@ static void DrawStack( ) {
 		for( const auto &diff : data_diff[STACK_VIEW] ) {
 			ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
 			drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
+		}
+		if( sp_cursor.visible ) {
+			ImVec2 pos = { top_left.x + sp_cursor.pos.x, top_left.y + sp_cursor.pos.y };
+			drawList->AddRectFilled( pos, { pos.x + cursor_width, pos.y + line_height_no_spacing }, sp_cursor.color );
 		}
 		ImGui::TextUnformatted( &stack_text_buffer[0] );
 		if( dbg.update_win_scroll[WIN_STACK] ) {
@@ -747,11 +816,15 @@ static void DrawRegisters( ) {
 							dbg.update_win_scroll[WIN_STACK] = true;
 							break;
 						case REGI_DX:
-						case REGI_SI:
 							dataSeg[DATA_VIEW] = RealSegValue( ds );
+						case REGI_SI:
+							if( e.x == REGI_SI )
+								dataSeg[DATA_VIEW] = data_cursor[SI_CURSOR].segment;
 						case REGI_BX:
 						case REGI_DI:
-							if( e.x == REGI_DI || e.x == REGI_BX )
+							if( e.x == REGI_DI )
+								dataSeg[DATA_VIEW] = data_cursor[DI_CURSOR].segment;
+							else if( e.x == REGI_BX )
 								dataSeg[DATA_VIEW] = RealSegValue( es );
 							dataOfs[DATA_VIEW] = cpu_regs.regs[e.x].dword[DW_INDEX];
 							dbg.update_win[WIN_DATA] = data_segment != dataSeg[DATA_VIEW];
@@ -1325,6 +1398,7 @@ bool DBGUI_StartUp( ) {
 	digit_width = ImGui::CalcTextSize( "00000000000000000000000000000000", NULL, false, 0.0f ).x * 0.03125f;
 	space_width = ImGui::CalcTextSize( "                                ", NULL, false, 0.0f ).x * 0.03125f;
 	scrollbar_width = style.ScrollbarSize;
+	cursor_width = space_width * 0.8f;
 	address_width = char_width * 10.0f;
 	line_height = ImGui::GetTextLineHeightWithSpacing( );
 	line_height_no_spacing = ImGui::GetTextLineHeight( );

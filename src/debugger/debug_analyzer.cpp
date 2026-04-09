@@ -352,7 +352,7 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 					pEnd += sprintf( pEnd, "=%08X", mem_readd<MemOpMode::SkipBreakpoints>( address ) );
 					break;
 				case PTR:
-					pEnd += sprintf( pEnd, "=%04X:%04X", mem_readw<MemOpMode::SkipBreakpoints>( address ), mem_readw<MemOpMode::SkipBreakpoints>( address + 2U ) );
+					pEnd += sprintf( pEnd, "=%04X:%04X", mem_readw<MemOpMode::SkipBreakpoints>( address + 2U ), mem_readw<MemOpMode::SkipBreakpoints>( address ) );
 					break;
 				default:
 					break;
@@ -541,13 +541,13 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 				sprintf( pEnd, "%04X", value );
 			} else if( hex_value_size_type == SIZE_BYTE ) {
 				uint8_t value = mem_readb<MemOpMode::SkipBreakpoints>( address );
-				sprintf( pEnd, "%02X", value );
+				sprintf( pEnd, " -> %02X", value );
 			} else if( hex_value_size_type == SIZE_WORD ) {
 				uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
-				sprintf( pEnd, "%04X", value );
+				sprintf( pEnd, " -> %04X", value );
 			} else {
 				uint32_t value = mem_readd<MemOpMode::SkipBreakpoints>( address );
-				sprintf( pEnd, "%08X", value );
+				sprintf( pEnd, " -> %08X", value );
 			}
 		} else if( !strncmp( &INST[1], "USHF", 4U ) )
 			sprintf( pEnd, "%04X", reg_flags );
