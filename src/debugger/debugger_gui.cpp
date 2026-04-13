@@ -62,17 +62,15 @@ DATA_ID &operator++( DATA_ID &id ) {
 	id = static_cast<DATA_ID>( ++reinterpret_cast<uint8_t &>( id ) );
 	return id;
 }
-uint16_t dataSeg[NUM_DATA_VIEWS] = { 0, 0 };
-uint32_t dataOfs[NUM_DATA_VIEWS] = { 0, 0 };
+ADDRESS_PAIR dataAddress[NUM_DATA_VIEWS];
 WINDOW_ID win_data_view[NUM_DATA_VIEWS] = { WIN_DATA, WIN_STACK };
 
 struct SLabelView {
-	uint16_t segment = 0;
-	uint32_t offset = 0;
+	ADDRESS_PAIR realAddress;
 	bool fLabel = true;
 
-	void Set( const uint16_t, const uint32_t, const bool, const bool = true );
-	bool IsMatch( const uint16_t, const uint32_t, const bool ) const;
+	void Set( const ADDRESS_PAIR &, const bool, const bool = true );
+	bool IsMatch( const ADDRESS_PAIR &, const bool ) const;
 } static labelView;
 
 const ImVec4 white_color = ImVec4( 1.0f, 1.0f, 1.0f, 1.0f );
@@ -169,12 +167,11 @@ static void CheckSegmentRegisters( ) {
 	}
 }
 
-void SCodeView::Set( const uint16_t segment, const uint32_t offset, const bool update_code, const bool update_scroll ) {
-	this->segment = cursorSegment = segment;
-	this->offset = cursorOffset = offset;
-	address = cursorAddress = offset + ( segment << 4 );
+void SCodeView::Set( const ADDRESS_PAIR &address_pair, const bool update_code, const bool update_scroll ) {
+	realAddress = cursorRealAddress = address_pair;
+	address = cursorAddress = address_pair.offset + ( address_pair.segment << 4 );
 	if( update_code && !AddressVisited( address ) ) { // address not already disassembled
-		DasmRecursiveDisassemble( address, offset, cpu.code.big, cpu.pmode );
+		DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
 		if( UpdateOrderedSegments( ) )
 			UpdateMemoryViews( );
 	}
@@ -182,24 +179,22 @@ void SCodeView::Set( const uint16_t segment, const uint32_t offset, const bool u
 }
 
 void SCodeView::SetToEIP( ) {
-	Set( RealSegValue( cs ), reg_eip );
+	Set( { RealSegValue( cs ), reg_eip } );
 }
 
-void SCodeView::SetCursor( const uint16_t segment, const uint32_t offset ) {
-	cursorSegment = segment;
-	cursorOffset = offset;
-	cursorAddress = offset + ( segment << 4 );
+void SCodeView::SetCursor( const ADDRESS_PAIR &address_pair ) {
+	cursorRealAddress = address_pair;
+	cursorAddress = address_pair.offset + ( address_pair.segment << 4 );
 }
 
-void SLabelView::Set( const uint16_t segment, const uint32_t offset, const bool fLabel, const bool update_scroll ) {
-	this->segment = segment;
-	this->offset = offset;
+void SLabelView::Set( const ADDRESS_PAIR &address_pair, const bool fLabel, const bool update_scroll ) {
+	realAddress = address_pair;
 	this->fLabel = fLabel;
 	dbg.update_win_scroll[WIN_LABELS] = update_scroll;
 }
 
-bool SLabelView::IsMatch( const uint16_t segment, const uint32_t offset, const bool fLabel ) const {
-	return( this->segment == segment && this->offset == offset && this->fLabel == fLabel );
+bool SLabelView::IsMatch( const ADDRESS_PAIR &address_pair, const bool fLabel ) const {
+	return( realAddress == address_pair && this->fLabel == fLabel );
 }
 
 static void SnapToGrid( WINDOW_ID winID ) { // Detect movement and snap
@@ -281,7 +276,7 @@ static void DrawCode( ) {
 		uint16_t currentSegment = 0U;
 		for( auto dline = DecodedLine::first( ); !DecodedLine::isEnd( ); ++dline, ++i ) {
 			static uint8_t addressColorIndex = 0U;
-			if( dbg.update_win_scroll[WIN_CODE] && dline.address.segment >= codeView.segment && dline.address.offset >= codeView.offset ) {
+			if( dbg.update_win_scroll[WIN_CODE] && dline.address.segment >= codeView.realAddress.segment && dline.address.offset >= codeView.realAddress.offset ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
 				ImGui::SetScrollHereY( );
 				if( selectedIndex == static_cast<uint32_t>( -1 ) )
@@ -299,8 +294,8 @@ static void DrawCode( ) {
 				sprintf( id, "##L%08X", dline.base_offset );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick ) ) {
 					selectedIndex = i;
-					codeView.SetCursor( dline.address.segment, dline.address.offset );
-					labelView.Set( dline.address.segment, dline.address.offset, true );
+					codeView.SetCursor( dline.address );
+					labelView.Set( dline.address, true );
 				}
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
@@ -309,15 +304,15 @@ static void DrawCode( ) {
 				ImGui::TextColored( green_color, "start:" );
 			}
 			const bool is_current_ip = ( dline.address.segment == RealSegValue( cs ) ) && ( dline.address.offset == reg_eip );
-			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset );
-			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.address.segment, dline.address.offset, true );
+			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address );
+			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.address, true );
 			const bool isSelected = ( selectedIndex == i );
 			sprintf( id, "##%08X", dline.base_offset );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = i;
-				codeView.SetCursor( dline.address.segment, dline.address.offset );
+				codeView.SetCursor( dline.address );
 				if( dline.mnemonicMask & ( MM_Branch | MM_Label ) )
-					labelView.Set( dline.address.segment, dline.address.offset, ( dline.mnemonicMask & MM_Branch ) ? false : true );
+					labelView.Set( dline.address, ( dline.mnemonicMask & MM_Branch ) ? false : true );
 			}
 			if( setFocus ) {
 				setFocus = false;
@@ -404,11 +399,10 @@ static void SaveMemoryState( ) {
 }
 
 struct Cursor {
-	ImU32		color = IM_COL32( 255, 255, 255, 255 );
-	ImVec2		pos = { 0.0f, 0.0f };
-	bool		visible = false;
-	uint16_t	segment = 0U;
-	uint32_t	offset = 0U;
+	ImU32			color = IM_COL32( 255, 255, 255, 255 );
+	ImVec2			pos = { 0.0f, 0.0f };
+	bool			visible = false;
+	ADDRESS_PAIR	realAddress = { 0U, 0U };
 };
 
 enum DataCursor : uint8_t {
@@ -432,12 +426,10 @@ static Cursor data_cursor[NUM_DATA_CURSORS] = { { IM_COL32( 234, 63, 247, 255 ) 
 
 static void SetCursors( ) {
 	data_cursor[DI_CURSOR].visible = false;
-	data_cursor[DI_CURSOR].segment = RealSegValue( es );
-	data_cursor[DI_CURSOR].offset = reg_edi;
+	data_cursor[DI_CURSOR].realAddress = { RealSegValue( es ), reg_edi };
 	data_cursor[SI_CURSOR].visible = false;
-	data_cursor[SI_CURSOR].segment = RealSegValue( ds );
-	data_cursor[SI_CURSOR].offset = reg_esi;
-	auto dline = DecodedLine::find( RealSegValue( cs ), reg_eip );
+	data_cursor[SI_CURSOR].realAddress = { RealSegValue( ds ), reg_esi };
+	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
 	if( dline ) {
 		if( dline->mnemonicMask & MM_Has_Segment ) {
 			SegNames seg_name;
@@ -450,9 +442,9 @@ static void SetCursors( ) {
 			if( dline->instruction.operand_count >= 3 ) {
 				if( dline->operands[2].type == ZYDIS_OPERAND_TYPE_REGISTER ) {
 					if( dline->operands[2].reg.value == ZYDIS_REGISTER_SI )
-						data_cursor[SI_CURSOR].segment = RealSegValue( seg_name );
+						data_cursor[SI_CURSOR].realAddress.segment = RealSegValue( seg_name );
 					else if( dline->operands[2].reg.value == ZYDIS_REGISTER_DI )
-						data_cursor[DI_CURSOR].segment = RealSegValue( seg_name );
+						data_cursor[DI_CURSOR].realAddress.segment = RealSegValue( seg_name );
 				}
 			}
 		}
@@ -467,26 +459,26 @@ static void DrawData( ) {
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_DATA] ) {
 			dbg.update_win[WIN_DATA] = false;
-			uint16_t segment = data_segment = dataSeg[DATA_VIEW];
+			data_segment = dataAddress[DATA_VIEW].segment;
+			ADDRESS_PAIR address_pair = { data_segment, 0U };
 			auto ordered_segment = ordered_segments.begin( );
 			for( ; ordered_segment != ordered_segments.end( ); ++ordered_segment ) {
-				if( segment < ordered_segment->value )
+				if( address_pair.segment < ordered_segment->value )
 					break;
 			}
-			uint32_t count = ( dataOfs[DATA_VIEW] + 1U ) >> 4;
-			if( ( count << 4 ) < dataOfs[DATA_VIEW] + 1U )
+			uint32_t count = ( dataAddress[DATA_VIEW].offset + 1U ) >> 4;
+			if( ( count << 4 ) < dataAddress[DATA_VIEW].offset + 1U )
 				++count;
-			count += segment;
+			count += address_pair.segment;
 			if( count >= dbg.segment[SEG_STACK_END] ) {
-				count -= segment;
+				count -= address_pair.segment;
 				count = ( count < 0x1000 ? 0x1000 : count );
 			} else if( count >= dbg.segment[SEG_STACK] )
-				count = dbg.segment[SEG_STACK_END] - segment;
+				count = dbg.segment[SEG_STACK_END] - address_pair.segment;
 			else
-				count = dbg.segment[SEG_STACK] - segment;
-			uint32_t offset = 0U;
-			uint32_t line_segment = segment;
-			const uint32_t data_base = segment << 4;
+				count = dbg.segment[SEG_STACK] - address_pair.segment;
+			uint32_t line_segment = address_pair.segment;
+			const uint32_t data_base = address_pair.segment << 4;
 			auto mem = &MemBase[data_base];
 			const auto mem_compare_end = &MemBase[data_buffer.size( )];
 			if( data_base >= data_buffer.size( ) )
@@ -502,24 +494,24 @@ static void DrawData( ) {
 			SetCursors( );
 			for( ; count; --count, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment >= ordered_segment->value ) {
-					segment = ordered_segment->value;
+					address_pair.segment = ordered_segment->value;
 					++ordered_segment;
-					offset = 0U;
+					address_pair.offset = 0U;
 					*line++ = '\n';
 					yPos += line_height_no_spacing;
 				}
 				// Address
 				bool f32bit = false;
-				if( offset <= 0xFFFF )
-					sprintf( line, "%04X:%04X      ", segment, offset );
+				if( address_pair.offset <= 0xFFFF )
+					sprintf( line, "%04X:%04X      ", address_pair.segment, address_pair.offset );
 				else {
-					sprintf( line, "%04X:%08X  ", segment, offset );
+					sprintf( line, "%04X:%08X  ", address_pair.segment, address_pair.offset );
 					f32bit = true;
 				}
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, ++mem, ++offset ) {
+				for( uint8_t x = 0U; x < 16U; ++x, ++mem, ++address_pair.offset ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
@@ -527,11 +519,11 @@ static void DrawData( ) {
 					line[65U + x] = ( *mem < 32 || !isprint( *mem ) ? '.' : *mem ); // Ascii representation
 					if( mem < mem_compare_end ) {
 						if( *data != *mem )
-							data_diff[DATA_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
+							data_diff[DATA_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), address_pair.segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						++data;
 					}
 					for( auto &cursor : data_cursor ) {
-						if( segment == cursor.segment && offset == cursor.offset ) {
+						if( address_pair == cursor.realAddress ) {
 							cursor.pos = { digit_width * num_digits + space_width * num_spaces - cursor_width, yPos };
 							cursor.visible = true;
 						}
@@ -575,7 +567,7 @@ static void DrawData( ) {
 				if( scroll_to_diff && !data_diff[DATA_VIEW].empty( ) )
 					ImGui::SetScrollY( data_diff[DATA_VIEW][0].pos.y );
 				else
-					ImGui::SetScrollY( ( ( dataSeg[DATA_VIEW] - data_segment ) + ( dataOfs[DATA_VIEW] >> 4 ) ) * line_height_no_spacing );
+					ImGui::SetScrollY( ( ( dataAddress[DATA_VIEW].segment - data_segment ) + ( dataAddress[DATA_VIEW].offset >> 4 ) ) * line_height_no_spacing );
 			}
 		}
 		ImGui::EndChild( );
@@ -596,27 +588,27 @@ static void DrawStack( ) {
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_STACK] ) {
 			dbg.update_win[WIN_STACK] = false;
-			uint16_t segment = stack_segment = dataSeg[STACK_VIEW];
-			uint32_t offset = dataOfs[STACK_VIEW];
-			offset = ( offset & 0x0000000F ? 16U : 0U ) + ( ( offset >> 4 ) << 4 );
-			uint32_t line_segment = segment + ( offset >> 4 );
+			ADDRESS_PAIR address_pair = dataAddress[STACK_VIEW];
+			stack_segment = address_pair.segment;
+			address_pair.offset = ( address_pair.offset & 0x0000000F ? 16U : 0U ) + ( ( address_pair.offset >> 4 ) << 4 );
+			uint32_t line_segment = address_pair.segment + ( address_pair.offset >> 4 );
 			auto ordered_segment = ordered_segments.end( );
 			--ordered_segment;
 			for( ; ordered_segment != ordered_segments.begin( ); --ordered_segment ) {
 				if( line_segment > ordered_segment->value )
 					break;
 			}
-			if( segment < ordered_segment->value ) {
-				segment = ordered_segment->value;
-				offset = ( ( line_segment - segment ) << 4 ) + 0xF;
+			if( address_pair.segment < ordered_segment->value ) {
+				address_pair.segment = ordered_segment->value;
+				address_pair.offset = ( ( line_segment - address_pair.segment ) << 4 ) + 0xF;
 			} else {
-				offset = ( ( std::next( ordered_segment, 1 )->value - segment ) << 4 ) - 1U;
+				address_pair.offset = ( ( std::next( ordered_segment, 1 )->value - address_pair.segment ) << 4 ) - 1U;
 				line_segment = std::next( ordered_segment, 1 )->value;
 			}
-			const uint32_t data_base = segment << 4;
-			auto mem = &MemBase[data_base + offset];
+			const uint32_t data_base = address_pair.segment << 4;
+			auto mem = &MemBase[data_base + address_pair.offset];
 			const auto mem_compare_end = &MemBase[data_buffer.size( )];
-			const_cast<uint32_t &>( data_base ) += offset;
+			const_cast<uint32_t &>( data_base ) += address_pair.offset;
 			if( data_base >= data_buffer.size( ) )
 				const_cast<uint32_t &>( data_base ) = data_buffer.size( ) - 1U;
 			auto data = &data_buffer[data_base];
@@ -629,26 +621,25 @@ static void DrawStack( ) {
 			char *line = &stack_text_buffer[0];
 			float yPos = 0.0f;
 			sp_cursor.visible = false;
-			sp_cursor.segment = dbg.segment[SEG_STACK];
-			sp_cursor.offset = reg_esp;
+			sp_cursor.realAddress = { dbg.segment[SEG_STACK], reg_esp };
 			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;
-					segment = ordered_segment->value;
-					offset = ( ( line_segment - segment ) << 4 ) + 0xF;
+					address_pair.segment = ordered_segment->value;
+					address_pair.offset = ( ( line_segment - address_pair.segment ) << 4 ) + 0xF;
 				}
 				bool f32bit = false;
 				// Address
-				if( offset <= 0xFFFF )
-					sprintf( line, "%04X:%04X      ", segment, offset );
+				if( address_pair.offset <= 0xFFFF )
+					sprintf( line, "%04X:%04X      ", address_pair.segment, address_pair.offset );
 				else {
-					sprintf( line, "%04X:%08X  ", segment, offset );
+					sprintf( line, "%04X:%08X  ", address_pair.segment, address_pair.offset );
 					f32bit = true;
 				}
 				// Hex values
 				uint8_t start_digits = f32bit ? 12U : 8U;
 				uint8_t start_spaces = f32bit ? 3U : 4U;
-				for( uint8_t x = 0U; x < 16U; ++x, --mem, --offset ) {
+				for( uint8_t x = 0U; x < 16U; ++x, --mem, --address_pair.offset ) {
 					uint8_t num_digits = start_digits + ( x << 1U );
 					uint8_t num_spaces = start_spaces + x + ( f32bit ? 0U : ( x >> 2U ) );
 					uint8_t char_pos = num_digits + num_spaces - 1U;
@@ -656,10 +647,10 @@ static void DrawStack( ) {
 					line[65U + x] = ( *mem < 32 || !isprint( *mem ) ? '.' : *mem ); // Ascii representation
 					if( mem < mem_compare_end ) {
 						if( *data != *mem )
-							data_diff[STACK_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
+							data_diff[STACK_VIEW].push_back( { static_cast<uint32_t>( mem - MemBase ), address_pair.segment, *data, { digit_width * num_digits + space_width * num_spaces - space_width * 0.5f, yPos } } );
 						--data;
 					}
-					if( segment == sp_cursor.segment && offset == sp_cursor.offset ) {
+					if( address_pair == sp_cursor.realAddress ) {
 						sp_cursor.pos = { digit_width * ( num_digits + 2U ) + space_width * num_spaces, yPos };
 						sp_cursor.visible = true;
 					}
@@ -689,7 +680,7 @@ static void DrawStack( ) {
 			if( scroll_to_diff && !data_diff[STACK_VIEW].empty( ) )
 				ImGui::SetScrollY( data_diff[STACK_VIEW][0].pos.y );
 			else
-				ImGui::SetScrollY( ( stack_lines - ( ( dataSeg[STACK_VIEW] - stack_segment ) + ( dataOfs[STACK_VIEW] >> 4 ) + ( dataOfs[STACK_VIEW] & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
+				ImGui::SetScrollY( ( stack_lines - ( ( dataAddress[STACK_VIEW].segment - stack_segment ) + ( dataAddress[STACK_VIEW].offset >> 4 ) + ( dataAddress[STACK_VIEW].offset & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
 		}
 	}
 	EndSubWindow( WIN_STACK );
@@ -698,19 +689,18 @@ static void DrawStack( ) {
 static void DrawDiff( ) {
 	if( BeginSubWindow( WIN_DIFF, "Changes", ImGuiWindowFlags_NoNavFocus ) ) {
 		static uint32_t selectedIndex = -1;
-		uint16_t currentSegment = 0U;
-		uint32_t currentOffset = 0U;
+		ADDRESS_PAIR currentAddress;
 		uint8_t addressColorIndex = 0U;
 		for( const auto &diff : data_diff[DATA_VIEW] ) {
 			const uint32_t offset = diff.address - ( diff.segment << 4 );
-			if( currentSegment != diff.segment ) { // match segment to defined segments
-				currentSegment = diff.segment;
-				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
+			if( currentAddress.segment != diff.segment ) { // match segment to defined segments
+				currentAddress.segment = diff.segment;
+				const auto &ordered_segment = ordered_segments.find( { currentAddress.segment, {} } );
 				if( ordered_segment != ordered_segments.end( ) )
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 				ImGui::Separator( );
-			} else if( currentOffset != offset >> 4U ) {
-				currentOffset = offset >> 4U;
+			} else if( currentAddress.offset != offset >> 4U ) {
+				currentAddress.offset = offset >> 4U;
 				ImGui::Spacing( );
 			}
 			const bool isSelected = ( selectedIndex == diff.address );
@@ -718,8 +708,7 @@ static void DrawDiff( ) {
 			sprintf( id, "##%08X", diff.address );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = diff.address;
-				dataSeg[DATA_VIEW] = diff.segment;
-				dataOfs[DATA_VIEW] = offset;
+				dataAddress[DATA_VIEW] = { diff.segment, offset };
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
@@ -810,24 +799,24 @@ static void DrawRegisters( ) {
 						switch( e.x ) {
 						case REGI_SP:
 						case REGI_BP:
-							dataSeg[STACK_VIEW] = RealSegValue( ss );
-							dataOfs[STACK_VIEW] = cpu_regs.regs[e.x].dword[DW_INDEX];
-							dbg.update_win[WIN_STACK] = stack_segment != dataSeg[STACK_VIEW];
+							dataAddress[STACK_VIEW].segment = RealSegValue( ss );
+							dataAddress[STACK_VIEW].offset = cpu_regs.regs[e.x].word[W_INDEX];
+							dbg.update_win[WIN_STACK] = stack_segment != dataAddress[STACK_VIEW].segment;
 							dbg.update_win_scroll[WIN_STACK] = true;
 							break;
 						case REGI_DX:
-							dataSeg[DATA_VIEW] = RealSegValue( ds );
+							dataAddress[DATA_VIEW].segment = RealSegValue( ds );
 						case REGI_SI:
 							if( e.x == REGI_SI )
-								dataSeg[DATA_VIEW] = data_cursor[SI_CURSOR].segment;
+								dataAddress[DATA_VIEW].segment = data_cursor[SI_CURSOR].realAddress.segment;
 						case REGI_BX:
 						case REGI_DI:
 							if( e.x == REGI_DI )
-								dataSeg[DATA_VIEW] = data_cursor[DI_CURSOR].segment;
+								dataAddress[DATA_VIEW].segment = data_cursor[DI_CURSOR].realAddress.segment;
 							else if( e.x == REGI_BX )
-								dataSeg[DATA_VIEW] = RealSegValue( es );
-							dataOfs[DATA_VIEW] = cpu_regs.regs[e.x].dword[DW_INDEX];
-							dbg.update_win[WIN_DATA] = data_segment != dataSeg[DATA_VIEW];
+								dataAddress[DATA_VIEW].segment = RealSegValue( es );
+							dataAddress[DATA_VIEW].offset = cpu_regs.regs[e.x].word[W_INDEX];
+							dbg.update_win[WIN_DATA] = data_segment != dataAddress[DATA_VIEW].segment;
 							dbg.update_win_scroll[WIN_DATA] = true;
 							break;
 						}
@@ -848,16 +837,14 @@ static void DrawRegisters( ) {
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
 					switch( e.x ) {
 					case ss:
-						dataSeg[STACK_VIEW] = segVal;
-						dataOfs[STACK_VIEW] = reg_esp;
+						dataAddress[STACK_VIEW] = { segVal, reg_esp };
 						dbg.update_win[WIN_STACK] = stack_segment != segVal;
 						dbg.update_win_scroll[WIN_STACK] = true;
 						break;
 					case cs:
-						codeView.Set( segVal, 0U );
+						codeView.Set( { segVal, 0U } );
 					default:
-						dataSeg[DATA_VIEW] = segVal;
-						dataOfs[DATA_VIEW] = 0U;
+						dataAddress[DATA_VIEW] = { segVal, 0U };
 						dbg.update_win[WIN_DATA] = data_segment != segVal;
 						dbg.update_win_scroll[WIN_DATA] = true;
 						break;
@@ -959,14 +946,13 @@ static void DrawSegments( ) {
 			ImGui::SameLine( 0.0f, 0.0f );
 			float text_width = ImGui::GetCursorPosX( ) - text_start_x;
 			ImGui::SetCursorPosX( text_start_x );
-			const bool isSelected = ( codeView.segment == segment );
+			const bool isSelected = ( codeView.realAddress.segment == segment );
 			char id[11];
 			sprintf( id, "##%04X", segment );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { text_width, 0.0f } ) ) {
 				if( info.type == SEG_CODE )
-					codeView.Set( segment, 0U, false );
-				dataSeg[DATA_VIEW] = segment;
-				dataOfs[DATA_VIEW] = 0U;
+					codeView.Set( { segment, 0U }, false );
+				dataAddress[DATA_VIEW] = { segment, 0U };
 				dbg.update_win[WIN_DATA] = data_segment != segment;
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
@@ -990,7 +976,7 @@ static void DrawLabels( ) {
 				if( ordered_segment != ordered_segments.end( ) )
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
-			const bool isSelected = labelView.IsMatch( info.segment, offset, true );
+			const bool isSelected = labelView.IsMatch( { info.segment, offset }, true );
 			if( dbg.update_win_scroll[WIN_LABELS] && isSelected ) {
 				dbg.update_win_scroll[WIN_LABELS] = false;
 				ImGui::SetScrollHereY( );
@@ -998,8 +984,8 @@ static void DrawLabels( ) {
 			char id[11];
 			sprintf( id, "##%08X", address );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				labelView.Set( info.segment, offset, true, false );
-				codeView.Set( info.segment, offset, false );
+				labelView.Set( { info.segment, offset }, true, false );
+				codeView.Set( { info.segment, offset }, false );
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", info.segment );
@@ -1009,7 +995,7 @@ static void DrawLabels( ) {
 			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
 			for( const auto &[caller_address, segment] : info.callers ) {
 				const uint32_t offset = caller_address - ( segment << 4 );
-				const bool isSelected = labelView.IsMatch( segment, offset, false );
+				const bool isSelected = labelView.IsMatch( { segment, offset }, false );
 				if( dbg.update_win_scroll[WIN_LABELS] && isSelected ) {
 					dbg.update_win_scroll[WIN_LABELS] = false;
 					ImGui::SetScrollHereY( );
@@ -1017,8 +1003,8 @@ static void DrawLabels( ) {
 				char id[12];
 				sprintf( id, "##c%08X", caller_address );
 				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-					labelView.Set( segment, offset, false, false );
-					codeView.Set( segment, offset, false );
+					labelView.Set( { segment, offset }, false, false );
+					codeView.Set( { segment, offset }, false );
 				}
 				uint8_t color_index = addressColorIndex;
 				const auto &ordered_segment = ordered_segments.find( { segment, {} } );
@@ -1226,8 +1212,7 @@ void DBGUI_Reset( ) {
 	for( DATA_ID data_i = static_cast<DATA_ID>( 0U ); data_i < NUM_DATA_VIEWS; ++data_i ) {
 		//for( auto data = &data_buffers[i][0]; *data; ++data )
 			//*data = 0;
-		dataSeg[data_i] = 0U;
-		dataOfs[data_i] = 0U;
+		dataAddress[data_i] = { 0U, 0U };
 	}
 	for( WINDOW_ID win_i = static_cast<WINDOW_ID>( 0U ); win_i < NUM_WINDOWS; ++win_i )
 		dbg.update_win[win_i] = true;
@@ -1361,7 +1346,7 @@ bool DBGUI_StartUp( ) {
 	dbg.segment[SEG_CODE] = RealSegValue( cs );
 	dbg.segment[SEG_PSP] = RealSegValue( es ); // could also use es or ds segments, or dos.psp( )
 	dbg.segment[SEG_STACK] = RealSegValue( ss );
-	dbg.segment[SEG_STACK_END] = GetAddress( SegValue( ss ), reg_sp ) >> 4;
+	dbg.segment[SEG_STACK_END] = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
 	const auto psp = &MemBase[dbg.segment[SEG_PSP] << 4];
 	dbg.segment[SEG_HEAP] = reinterpret_cast<uint16_t &>( psp[0x2] ); // Segment of the first byte beyond the memory allocated to the program
 	dbg.segment[SEG_ENV] = reinterpret_cast<uint16_t &>( psp[0x2C] ); // Environment segment
@@ -1372,20 +1357,17 @@ bool DBGUI_StartUp( ) {
 		++seg_type;
 	}
 	// Point stack view to top of stack
-	dataSeg[STACK_VIEW] = RealSegValue( ss );
-	dataOfs[STACK_VIEW] = reg_sp;
+	dataAddress[STACK_VIEW] = { RealSegValue( ss ), reg_sp };
 
-	start_address = GetAddress( SegValue( cs ), reg_eip );
+	start_address = GetPhysicalAddress( { SegValue( cs ), reg_eip } );
 
 	data_buffer.resize( dbg.segment[SEG_HEAP] << 4 );
 	SaveMemoryState( ); // Required to prevent every difference from zero being incorrectly identified.
 
-	char program_name[debugger_title_length + 10U] = "";
+	char program_name[debugger_title_length + 11U] = "";
+	strncpy( program_name, reinterpret_cast<char *>( &MemBase[( dbg.segment[SEG_ENV] << 4 ) + 0xB8] ), 8 );
+	strcat( program_name, " - " );
 	strcat( program_name, debugger_title );
-	program_name[debugger_title_length - 1] = ':';
-	program_name[debugger_title_length] = ' ';
-	strncpy( &program_name[debugger_title_length + 1U], reinterpret_cast<char *>( &MemBase[( dbg.segment[SEG_ENV] << 4 ) + 0xB8] ), 8 );
-	program_name[debugger_title_length + 9U] = 0U;
 	SDL_SetWindowTitle( dbg.win_main, program_name );
 
 	// Now that ImGui is initialized, resize the window to fit all child
@@ -1524,7 +1506,7 @@ static uint32_t last_ip = static_cast<uint32_t>( -1 );
 void DEBUG_AnalyzeCurrentInstruction( ) {
 	if( reg_eip == last_ip )
 		return;
-	auto dline = DecodedLine::find( RealSegValue( cs ), reg_eip );
+	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
 	if( dline ) {
 		auto szResult = AnalyzeInstruction( dline->szInstruction, dline->pOperands, curSelectorName );
 		if( *szResult )

@@ -21,7 +21,7 @@ bool skipFirstInstruction = false;
 static bool SetRedirectBreakpoint( ) {
 	bool fResult = false;
 	uint8_t size = 0U;
-	auto address = GetAddress( SegValue( cs ), reg_eip );
+	auto address = GetPhysicalAddress( { SegValue( cs ), reg_eip } );
 	auto dline = DecodedLine::find( address );
 	if( dline ) {
 		size = dline->instruction.length;
@@ -35,23 +35,45 @@ static bool SetRedirectBreakpoint( ) {
 	}
 	if( fResult ) {
 		// Don't add a temporary breakpoint if there's already one here
-		if( !CBreakpoint::FindPhysBreakpoint( SegValue( cs ), reg_eip + size, true ) )
-			CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip + size, true );
+		ADDRESS_PAIR address_pair = { SegValue( cs ), reg_eip + size };
+		if( !CBreakpoint::FindPhysBreakpoint( address_pair, true ) )
+			CBreakpoint::AddBreakpoint( address_pair, true );
 	}
 	return fResult;
 }
 
-static int32_t DEBUG_Run( int32_t amount, bool quickexit ) {
+int32_t DEBUG_Run( const RUN_TYPE run_type, const ADDRESS_PAIR &breakpoint_address ) {
+	bool quickexit = false;
+	switch( run_type ) {
+	case RUN_TO_TBP:
+		if( !CBreakpoint::FindPhysBreakpoint( breakpoint_address, true ) ) // Don't add a temporary breakpoint if there's already one here
+			CBreakpoint::AddBreakpoint( breakpoint_address, true );
+		break;
+	case RUN_STEP:
+		SetRedirectBreakpoint( );
+		quickexit = true;
+		break;
+	case RUN_STEP_OVER:
+		quickexit = !SetRedirectBreakpoint( );
+		break;
+	default:
+		break;
+	}
 	DEBUG_SaveCurrentState( );
 	skipFirstInstruction = true;
-	CPU_CycleLeft += CPU_Cycles - amount;
-	CPU_Cycles = amount;
+	CPU_CycleLeft += CPU_Cycles - 1;
+	CPU_Cycles = 1;
 	int32_t ret = ( *cpudecoder )( );
 	if( quickexit )
 		DEBUG_NewInstruction( );
 	else {
+		debugging = false;
 		CBreakpoint::ActivateBreakpoints( ); // ensure all breakpoints are activated
 		DOSBOX_SetNormalLoop( );
+		if( RUN_FOREVER == run_type || RUN_TO_TBP == run_type ) {
+			forceDraw = true;
+			DEBUG_ShowDOSBox( );
+		}
 	}
 	return ret;
 }
@@ -63,110 +85,81 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 	case SDLK_C: // ALT - C: CS:IP
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( cs );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_eip;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_ip;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( cs ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_eip : reg_ip };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_D: // ALT - D: DS:SI
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( ds );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_esi;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_si;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esi : reg_si };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_E: // ALT - E: es:di
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( es );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_edi;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_di;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edi : reg_di };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_X: // ALT - X: ds:dx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( ds );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_edx;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_dx;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edx : reg_dx };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_B: // ALT -B: es:bx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( es );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_ebx;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_bx;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_ebx : reg_bx };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
 	case SDLK_S: // ALT - S: ss:sp
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataSeg[dbg.active_data_view] = RealSegValue( ss );
-		if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
-			dataOfs[dbg.active_data_view] = reg_esp;
-		} else {
-			dataOfs[dbg.active_data_view] = reg_sp;
-		}
+		dataAddress[dbg.active_data_view] = { RealSegValue( ss ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esp : reg_sp };
 		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
 		break;
+	case SDLK_F1:
+		if( key.mod & SDL_KMOD_SHIFT )
+			codeView.Set( { codeView.cursorRealAddress.segment, 0U } );
+		else {
+			auto dline = DecodedLine::find( codeView.cursorAddress );
+			if( dline )
+				codeView.Set( { dline->address.segment, dline->address.offset + dline->instruction.length } );
+		}
+		break;
 	case SDLK_F6: case SDLK_F7: case SDLK_F8: // Run to cursor
-		// Don't add a temporary breakpoint if there's already one here
-		if( !CBreakpoint::FindPhysBreakpoint( codeView.cursorSegment, codeView.cursorOffset, true ) )
-			CBreakpoint::AddBreakpoint( codeView.cursorSegment, codeView.cursorOffset, true );
+		ret = DEBUG_Run( RUN_TO_TBP, codeView.cursorRealAddress );
+		break;
 	case SDLK_F5: // Run Program
-		debugging = false;
-		forceDraw = true;
-		ret = DEBUG_Run( 1, false );
-		DEBUG_ShowDOSBox( );
+		ret = DEBUG_Run( RUN_FOREVER );
 		break;
 	case SDLK_F9: { // Set/Remove Breakpoint. Hold SHIFT for permanent breakpoint
 		const bool ftemp = ( key.mod & SDL_KMOD_SHIFT ) ? false : true;
-		if( CBreakpoint::IsBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp ) ) {
-			if( CBreakpoint::DeleteBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp ) )
+		if( CBreakpoint::IsBreakpoint( codeView.cursorRealAddress, ftemp ) ) {
+			if( CBreakpoint::DeleteBreakpoint( codeView.cursorRealAddress, ftemp ) )
 				DEBUG_ShowMsg( "DEBUG: %sreakpoint deletion success.\n", ftemp ? "Temporary b" : "B" );
 			else
 				DEBUG_ShowMsg( "DEBUG: Failed to delete%sbreakpoint.\n", ftemp ? " temporary " : " " );
 		} else {
-			CBreakpoint::AddBreakpoint( codeView.cursorSegment, codeView.cursorOffset, ftemp );
-			DEBUG_ShowMsg( "DEBUG: Set%sbreakpoint at %04X:%04X\n", ftemp ? " temporary " : " ", codeView.cursorSegment, codeView.cursorOffset );
+			CBreakpoint::AddBreakpoint( codeView.cursorRealAddress, ftemp );
+			DEBUG_ShowMsg( "DEBUG: Set%sbreakpoint at %04X:%04X\n", ftemp ? " temporary " : " ", codeView.cursorRealAddress.segment, codeView.cursorRealAddress.offset );
 		}
 	}
 		break;
 	case SDLK_F11: // trace into
-		if( ( key.mod & SDL_KMOD_SHIFT ) ) { // exit trace into
-			debugging = false;
-			ret = DEBUG_Run( 1, false );
-			break;
-		}
+		if( key.mod & SDL_KMOD_SHIFT ) // exit trace into
+			ret = DEBUG_Run( RUN_OUT );
+		else
+			ret = DEBUG_Run( RUN_STEP );
+		break;
 	case SDLK_F10: // Step over instruction
-		if( SetRedirectBreakpoint( ) && key.key == SDLK_F10 ) {
-			debugging = false;
-			ret = DEBUG_Run( 1, false );
-		} else
-			ret = DEBUG_Run( 1, true );
+		ret = DEBUG_Run( RUN_STEP_OVER );
 		break;
 	default:
 		break;

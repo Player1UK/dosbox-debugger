@@ -1,11 +1,10 @@
-
 #ifndef DOSBOX_BREAKPOINT_H
 #define DOSBOX_BREAKPOINT_H
 
 #include "dosbox.h"
 
 #if C_DEBUGGER
-
+#include "debugtypes.h"
 #include "hardware/memory.h"
 
 enum EBreakpoint {
@@ -23,33 +22,33 @@ enum EBreakpoint {
 class CBreakpoint {
 public:
 	CBreakpoint( void );
-	void SetAddress( uint16_t seg, uint32_t off );
-	void SetAddress( PhysPt adr ) {
+	void SetAddress( const ADDRESS_PAIR & );
+	void SetAddress( const PhysPt adr ) {
 		location = adr;
 		type = BKPNT_PHYSICAL;
 	}
-	void SetInt( uint8_t _intNr, uint16_t ah, uint16_t al ) {
+	void SetInt( const uint8_t _intNr, const uint16_t ah, const uint16_t al ) {
 		intNr = _intNr, ahValue = ah;
 		alValue = al;
 		type = BKPNT_INTERRUPT;
 	}
-	void SetOnce( bool _once ) {
+	void SetOnce( const bool _once ) {
 		once = _once;
 	}
-	void SetType( EBreakpoint _type ) {
+	void SetType( const EBreakpoint _type ) {
 		type = _type;
 	}
-	void SetValue( uint8_t value ) {
+	void SetValue( const uint8_t value ) {
 		ahValue = value;
 	}
-	void SetOther( uint8_t other ) {
+	void SetOther( const uint8_t other ) {
 		alValue = other;
 	}
 
-	bool IsActive( void ) {
+	bool IsActive( void ) const {
 		return active;
 	}
-	void Activate( bool _active );
+	void Activate( const bool _active );
 
 	EBreakpoint GetType( ) const noexcept {
 		return type;
@@ -60,11 +59,14 @@ public:
 	PhysPt GetLocation( ) const noexcept {
 		return location;
 	}
+	ADDRESS_PAIR GetAddress( ) const noexcept {
+		return real_address;
+	}
 	uint16_t GetSegment( ) const noexcept {
-		return segment;
+		return real_address.segment;
 	}
 	uint32_t GetOffset( ) const noexcept {
-		return offset;
+		return real_address.offset;
 	}
 	uint8_t GetIntNr( ) const noexcept {
 		return intNr;
@@ -79,33 +81,28 @@ public:
 	void FlagMemoryAsRead( ) {
 		memory_was_read = true;
 	}
-
 	void FlagMemoryAsUnread( ) {
 		memory_was_read = false;
 	}
-
 	bool WasMemoryRead( ) const {
 		return memory_was_read;
 	}
 #endif
-
 	// statics
-	static CBreakpoint* AddBreakpoint( uint16_t seg, uint32_t off, bool once );
-	static CBreakpoint* AddIntBreakpoint( uint8_t intNum, uint16_t ah,
-		uint16_t al, bool once );
-	static CBreakpoint* AddMemBreakpoint( uint16_t seg, uint32_t off );
+	static CBreakpoint * AddBreakpoint( const ADDRESS_PAIR &, const bool once );
+	static CBreakpoint * AddIntBreakpoint( const uint8_t intNum, const uint16_t ah, const uint16_t al, const bool once );
+	static CBreakpoint * AddMemBreakpoint( const ADDRESS_PAIR & );
 	static void DeactivateBreakpoints( );
 	static void ActivateBreakpoints( );
-	static void ActivateBreakpointsExceptAt( PhysPt adr );
-	static bool CheckBreakpoint( PhysPt adr );
-	static bool CheckBreakpoint( Bitu seg, Bitu off );
-	static bool CheckIntBreakpoint( PhysPt adr, uint8_t intNr,
-		uint16_t ahValue, uint16_t alValue );
-	static CBreakpoint* FindPhysBreakpoint( uint16_t seg, uint32_t off, bool once );
-	static CBreakpoint* FindOtherActiveBreakpoint( PhysPt adr, CBreakpoint* skip );
-	static bool IsBreakpoint( uint16_t seg, uint32_t off, const bool temporary = false );
-	static bool DeleteBreakpoint( uint16_t seg, uint32_t off, const bool temporary = false );
-	static bool DeleteByIndex( uint16_t index );
+	static void ActivateBreakpointsExceptAt( const PhysPt adr );
+	static bool CheckBreakpoint( const PhysPt adr );
+	static bool CheckBreakpoint( const ADDRESS_PAIR & );
+	static bool CheckIntBreakpoint( const PhysPt adr, const uint8_t intNr, const uint16_t ahValue, const uint16_t alValue );
+	static CBreakpoint * FindPhysBreakpoint( const ADDRESS_PAIR &, const bool once );
+	static CBreakpoint * FindOtherActiveBreakpoint( const PhysPt adr, const CBreakpoint *skip );
+	static bool IsBreakpoint( const ADDRESS_PAIR &, const bool temporary = false );
+	static bool DeleteBreakpoint( const ADDRESS_PAIR &, const bool temporary = false );
+	static bool DeleteByIndex( const uint16_t index );
 	static void DeleteAll( void );
 	static void ShowList( void );
 
@@ -114,8 +111,7 @@ private:
 	// Physical
 	PhysPt location = 0;
 	uint8_t oldData = 0;
-	uint16_t segment = 0;
-	uint32_t offset = 0;
+	ADDRESS_PAIR real_address;
 	// Int
 	uint8_t intNr = 0;
 	uint16_t ahValue = 0;

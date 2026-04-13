@@ -11,42 +11,37 @@
 
 class CDebugVar {
 public:
-	CDebugVar(const char* vname, PhysPt address);
+	CDebugVar( const char *vname, PhysPt address );
 
-	char* GetName(void)
-	{
+	char *GetName( void ) {
 		return name;
 	}
-	PhysPt GetAdr(void)
-	{
+	PhysPt GetAdr( void ) {
 		return adr;
 	}
-	void SetValue(bool has, uint16_t val)
-	{
+	void SetValue( bool has, uint16_t val ) {
 		hasvalue = has;
-		value    = val;
+		value = val;
 	}
-	uint16_t GetValue(void)
-	{
+	uint16_t GetValue( void ) {
 		return value;
 	}
-	bool HasValue(void)
-	{
+	bool HasValue( void ) {
 		return hasvalue;
 	}
 
 private:
 	const PhysPt adr = 0;
-	char name[16]    = {};
-	bool hasvalue    = false;
-	uint16_t value   = 0;
+	char name[16] = {};
+	bool hasvalue = false;
+	uint16_t value = 0;
 
 public:
-	static void InsertVariable(char* name, PhysPt adr);
-	static CDebugVar* FindVar(PhysPt adr);
-	static void DeleteAll();
-	static bool SaveVars(char* name);
-	static bool LoadVars(char* name);
+	static void InsertVariable( char *name, PhysPt adr );
+	static CDebugVar *FindVar( PhysPt adr );
+	static void DeleteAll( );
+	static bool SaveVars( char *name );
+	static bool LoadVars( char *name );
 };
 #endif // C_DEBUGGER
 

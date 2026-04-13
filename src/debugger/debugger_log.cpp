@@ -21,7 +21,7 @@ extern bool skipFirstInstruction;
 bool showExtend = false;
 
 struct _LogGroup {
-	const char* front = nullptr;
+	const char *front = nullptr;
 	bool enabled = false;
 };
 
@@ -31,7 +31,7 @@ static _LogGroup loggrp[LOG_MAX] = {
 };
 FILE *debuglog = nullptr;
 
-void LOG::operator()( const char* format, ... ) {
+void LOG::operator()( const char *format, ... ) {
 	char buf[DBGUI::MsgBufferSize];
 	va_list msg;
 	va_start( msg, format );
@@ -115,7 +115,7 @@ void LOG_StartUp( ) {
 	// Register the log section
 	auto sect = control->AddSection( "log" );
 
-	PropString* pstring = sect->AddString( "logfile",
+	PropString *pstring = sect->AddString( "logfile",
 		Property::Changeable::Always,
 		"" );
 
@@ -125,7 +125,7 @@ void LOG_StartUp( ) {
 	for( Bitu i = LOG_ALL + 1; i < LOG_MAX; i++ ) {
 		safe_strcpy( buf, loggrp[i].front );
 		lowcase( buf );
-		PropBool* pbool = sect->AddBool( buf, Property::Changeable::Always, true );
+		PropBool *pbool = sect->AddBool( buf, Property::Changeable::Always, true );
 		pbool->SetHelp( "Enable/disable logging of this type." );
 	}
 }
@@ -135,19 +135,17 @@ void LOG_StartUp( ) {
 static void LogMCBChain( uint16_t mcb_segment ) {
 	DOS_MCB mcb( mcb_segment );
 	char filename[9]; // 8 characters plus a terminating NUL
-	const char* psp_seg_note;
-	auto DOS_dataOfs = static_cast<uint16_t>( dataOfs[dbg.active_data_view] ); // Realmode addressing only
-	PhysPt dataAddr = PhysicalMake( dataSeg[dbg.active_data_view], DOS_dataOfs ); // location being viewed in the "Data Overview"
+	const char *psp_seg_note;
+	auto realOffset = static_cast<uint16_t>( dataAddress[dbg.active_data_view].offset ); // Realmode addressing only
+	PhysPt dataAddr = PhysicalMake( dataAddress[dbg.active_data_view].segment, realOffset ); // location being viewed in the "Data Overview"
 
 	// loop forever, breaking out of the loop once we've processed the last MCB
 	while( true ) {
-		// verify that the type field is valid
-		if( mcb.GetType( ) != 0x4d && mcb.GetType( ) != 0x5a ) {
+		if( mcb.GetType( ) != 0x4d && mcb.GetType( ) != 0x5a ) { // verify that the type field is valid
 			LOG( LOG_MISC, LOG_ERROR )
 				( "MCB chain broken at %04X:0000!", mcb_segment );
 			return;
 		}
-
 		mcb.GetFileName( filename );
 
 		// some PSP segment values have special meanings
@@ -156,31 +154,19 @@ static void LogMCBChain( uint16_t mcb_segment ) {
 		case MCB_DOS: psp_seg_note = "(DOS)"; break;
 		default: psp_seg_note = "";
 		}
-
 		LOG( LOG_MISC, LOG_ERROR )
-			( "   %04X  %12u     %04X %-7s  %s",
-				mcb_segment,
-				mcb.GetSize( ) << 4,
-				mcb.GetPSPSeg( ),
-				psp_seg_note,
-				filename );
+			( "   %04X  %12u     %04X %-7s  %s", mcb_segment, mcb.GetSize( ) << 4, mcb.GetPSPSeg( ), psp_seg_note, filename );
 
 		// print a message if dataAddr is within this MCB's memory range
 		PhysPt mcbStartAddr = PhysicalMake( mcb_segment + 1, 0 );
 		PhysPt mcbEndAddr = PhysicalMake( mcb_segment + 1 + mcb.GetSize( ), 0 );
 		if( dataAddr >= mcbStartAddr && dataAddr < mcbEndAddr ) {
 			LOG( LOG_MISC, LOG_ERROR )
-				( "   (data addr %04hX:%04X is %u bytes past this MCB)",
-					dataSeg[dbg.active_data_view],
-					DOS_dataOfs,
-					dataAddr - mcbStartAddr );
+				( "   (data addr %04hX:%04X is %u bytes past this MCB)", dataAddress[dbg.active_data_view].segment, realOffset, dataAddr - mcbStartAddr );
 		}
-
-		// if we've just processed the last MCB in the chain, break out
-		// of the loop
-		if( mcb.GetType( ) == 0x5a ) {
+		// if we've just processed the last MCB in the chain, break out of the loop
+		if( mcb.GetType( ) == 0x5a )
 			break;
-		}
 		// else, move to the next MCB in the chain
 		mcb_segment += mcb.GetSize( ) + 1;
 		mcb.SetPt( mcb_segment );
@@ -283,7 +269,7 @@ void LogIDT( void ) {
 	}
 }
 
-void LogPages( char* selname ) {
+void LogPages( char *selname ) {
 	char out1[512];
 	if( paging.enabled ) {
 		Bitu sel = GetHexValue( selname );
@@ -405,23 +391,20 @@ int cpuLogCounter = 0;
 int cpuLogType = 1; // log detail
 bool zeroProtect = false;
 bool logHeavy = false;
-extern std::list<CBreakpoint*> BPoints;
+extern std::list<CBreakpoint *> BPoints;
 
-static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream& out ) {
+static void LogInstruction( const ADDRESS_PAIR &address_pair, std::ofstream &out ) {
 	static char empty[23] = { 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
 							 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
-
 	using std::setw;
 	if( cpuLogType == 3 ) { // Log only cs:ip.
-		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip
-			<< std::endl;
+		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip << std::endl;
 		return;
 	}
-
 	char dline[128], *pOperands;
-	uint32_t start = GetAddress( segValue, eipValue );
+	uint32_t start = GetPhysicalAddress( address_pair );
 	uint32_t size = DasmI386( dline, pOperands, start, reg_eip, cpu.code.big, cpu.pmode );
-	char* res = empty;
+	char *res = empty;
 	if( showExtend && ( cpuLogType > 0 ) ) {
 		res = const_cast<char *>( AnalyzeInstruction( dline, pOperands ) );
 		if( !res || !( *res ) )
@@ -437,42 +420,35 @@ static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream&
 	dline[30] = 0;
 
 	// Get register values
-
-	if( cpuLogType == 0 ) {
-		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 4 ) << reg_eip
-			<< "  " << dline;
-	} else if( cpuLogType == 1 ) {
-		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip
-			<< "  " << dline << "  " << res;
-	} else if( cpuLogType == 2 ) {
+	if( cpuLogType == 0 )
+		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 4 ) << reg_eip << "  " << dline;
+	else if( cpuLogType == 1 )
+		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip << "  " << dline << "  " << res;
+	else if( cpuLogType == 2 ) {
 		char ibytes[200] = "";
 		char tmpc[200];
-		for( Bitu i = 0; i < size; i++ ) {
+		for( Bitu i = 0; i < size; ++i ) {
 			uint8_t value;
-			if( mem_readb_checked( start + i, &value ) ) {
+			if( mem_readb_checked( start + i, &value ) )
 				sprintf( tmpc, "%s", "?? " );
-			} else {
+			else
 				sprintf( tmpc, "%02X ", value );
-			}
 			strcat( ibytes, tmpc );
 		}
 		len = safe_strlen( ibytes );
 		if( len < 21 ) {
-			for( Bitu i = 0; i < 21 - len; i++ ) {
+			for( Bitu i = 0; i < 21 - len; ++i )
 				ibytes[len + i] = ' ';
-			}
 			ibytes[21] = 0;
 		} // NOTE THE BRACKETS
-		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip
-			<< "  " << dline << "  " << res << "  " << ibytes;
+		out << setw( 4 ) << SegValue( cs ) << ":" << setw( 8 ) << reg_eip << "  " << dline << "  " << res << "  " << ibytes;
 	}
 
 	out << " EAX:" << setw( 8 ) << reg_eax << " EBX:" << setw( 8 ) << reg_ebx
 		<< " ECX:" << setw( 8 ) << reg_ecx << " EDX:" << setw( 8 ) << reg_edx
 		<< " ESI:" << setw( 8 ) << reg_esi << " EDI:" << setw( 8 ) << reg_edi
 		<< " EBP:" << setw( 8 ) << reg_ebp << " ESP:" << setw( 8 ) << reg_esp
-		<< " DS:" << setw( 4 ) << SegValue( ds ) << " ES:" << setw( 4 )
-		<< SegValue( es );
+		<< " DS:" << setw( 4 ) << SegValue( ds ) << " ES:" << setw( 4 ) << SegValue( es );
 
 	if( cpuLogType == 0 ) {
 		out << " SS:" << setw( 4 ) << SegValue( ss ) << " C" << ( get_CF( ) > 0 )
@@ -488,52 +464,31 @@ static void LogInstruction( uint16_t segValue, uint32_t eipValue, std::ofstream&
 	}
 	if( cpuLogType == 2 ) {
 		out << " TF:" << GETFLAGBOOL( TF ) << " VM:" << GETFLAGBOOL( VM )
-			<< " FLG:" << setw( 8 ) << reg_flags << " CR0:" << setw( 8 )
-			<< cpu.cr0;
+			<< " FLG:" << setw( 8 ) << reg_flags << " CR0:" << setw( 8 ) << cpu.cr0;
 	}
 	out << std::endl;
 }
 #endif
 
-void SaveMemory( uint16_t seg, uint32_t ofs1, uint32_t num ) {
+void SaveMemory( ADDRESS_PAIR &address_pair, uint32_t num ) {
 	const std_fs::path memdump_txt = "MEMDUMP.TXT";
-	FILE* f = fopen( memdump_txt.string( ).c_str( ), "wt" );
+	FILE *f = fopen( memdump_txt.string( ).c_str( ), "wt" );
 	if( !f ) {
 		DEBUG_ShowMsg( "DEBUG: Memory dump failed.\n" );
 		return;
 	}
-	DEBUG_ShowMsg( "DEBUG: Memory dump file '%s' created.\n",
-		std_fs::absolute( memdump_txt ).string( ).c_str( ) );
+	DEBUG_ShowMsg( "DEBUG: Memory dump file '%s' created.\n", std_fs::absolute( memdump_txt ).string( ).c_str( ) );
 
-	char buffer[128];
-	char temp[16];
-
-	while( num > 16 ) {
-		sprintf( buffer, "%04X:%04X   ", seg, ofs1 );
-		for( uint16_t x = 0; x < 16; x++ ) {
+	while( num ) {
+		char buffer[65];
+		auto bufferPos = buffer;
+		bufferPos += sprintf_s( buffer, sizeof( buffer ), "%04X:%04X   ", address_pair.segment, address_pair.offset );
+		for( uint8_t count = 16U; count && num; --count, --num, ++address_pair.offset ) {
 			uint8_t value;
-			if( mem_readb_checked( GetAddress( seg, ofs1 + x ), &value ) ) {
-				sprintf( temp, "%s", "?? " );
-			} else {
-				sprintf( temp, "%02X ", value );
-			}
-			strcat( buffer, temp );
-		}
-		ofs1 += 16;
-		num -= 16;
-
-		fprintf( f, "%s\n", buffer );
-	}
-	if( num > 0 ) {
-		sprintf( buffer, "%04X:%04X   ", seg, ofs1 );
-		for( uint16_t x = 0; x < num; x++ ) {
-			uint8_t value;
-			if( mem_readb_checked( GetAddress( seg, ofs1 + x ), &value ) ) {
-				sprintf( temp, "%s", "?? " );
-			} else {
-				sprintf( temp, "%02X ", value );
-			}
-			strcat( buffer, temp );
+			if( mem_readb_checked( GetPhysicalAddress( address_pair ), &value ) )
+				bufferPos += sprintf_s( bufferPos, sizeof( buffer ) - ( bufferPos - buffer ), "%s", "?? " );
+			else
+				bufferPos += sprintf_s( bufferPos, sizeof( buffer ) - ( bufferPos - buffer ), "%02X ", value );
 		}
 		fprintf( f, "%s\n", buffer );
 	}
@@ -541,31 +496,28 @@ void SaveMemory( uint16_t seg, uint32_t ofs1, uint32_t num ) {
 	DEBUG_ShowMsg( "DEBUG: Memory dump success.\n" );
 }
 
-void SaveMemoryBin( uint16_t seg, uint32_t ofs1, uint32_t num ) {
+void SaveMemoryBin( ADDRESS_PAIR &address_pair, uint32_t num ) {
 	const std_fs::path memdump_bin = "MEMDUMP.BIN";
-	FILE* f = fopen( memdump_bin.string( ).c_str( ), "wb" );
+	FILE *f = fopen( memdump_bin.string( ).c_str( ), "wb" );
 	if( !f ) {
 		DEBUG_ShowMsg( "DEBUG: Memory binary dump failed.\n" );
 		return;
 	}
-	DEBUG_ShowMsg( "DEBUG: Memory binary dump file '%s' created.\n",
-		std_fs::absolute( memdump_bin ).string( ).c_str( ) );
+	DEBUG_ShowMsg( "DEBUG: Memory binary dump file '%s' created.\n", std_fs::absolute( memdump_bin ).string( ).c_str( ) );
 
-	for( Bitu x = 0; x < num; x++ ) {
+	for( ; num; --num, ++address_pair.offset ) {
 		uint8_t val;
-		if( mem_readb_checked( GetAddress( seg, ofs1 + x ), &val ) ) {
-			val = 0;
-		}
+		if( mem_readb_checked( GetPhysicalAddress( address_pair ), &val ) )
+			val = 0U;
 		fwrite( &val, 1, 1, f );
 	}
-
 	fclose( f );
 	DEBUG_ShowMsg( "DEBUG: Memory dump binary success.\n" );
 }
 
-void OutputVecTable( char* filename ) {
+void OutputVecTable( char *filename ) {
 	const std_fs::path vec_table_file = filename;
-	FILE* f = fopen( vec_table_file.string( ).c_str( ), "wt" );
+	FILE *f = fopen( vec_table_file.string( ).c_str( ), "wt" );
 	if( !f ) {
 		DEBUG_ShowMsg( "DEBUG: Output of interrupt vector table failed.\n" );
 		return;
@@ -588,21 +540,20 @@ void OutputVecTable( char* filename ) {
 
 bool DEBUG_Breakpoint( void ) {
 	/* First get the physical address and check for a set Breakpoint */
-	if( !CBreakpoint::CheckBreakpoint( SegValue( cs ), reg_eip ) ) {
+	if( !CBreakpoint::CheckBreakpoint( { SegValue( cs ), reg_eip } ) ) {
 		return false;
 	}
 	// Found. Breakpoint is valid
-	// PhysPt where=GetAddress(SegValue(cs),reg_eip); -- "where" is unused
+	// PhysPt where=GetPhysicalAddress( {SegValue(cs),reg_eip} ); -- "where" is unused
 	CBreakpoint::DeactivateBreakpoints( ); // Deactivate all breakpoints
 	return true;
 }
 
 bool DEBUG_IntBreakpoint( uint8_t intNum ) {
 	/* First get the physical address and check for a set Breakpoint */
-	PhysPt where = GetAddress( SegValue( cs ), reg_eip );
-	if( !CBreakpoint::CheckIntBreakpoint( where, intNum, reg_ah, reg_al ) ) {
+	PhysPt where = GetPhysicalAddress( { SegValue( cs ), reg_eip } );
+	if( !CBreakpoint::CheckIntBreakpoint( where, intNum, reg_ah, reg_al ) )
 		return false;
-	}
 	// Found. Breakpoint is valid
 	CBreakpoint::DeactivateBreakpoints( ); // Deactivate all breakpoints
 	return true;
@@ -647,27 +598,24 @@ void DEBUG_HeavyLogInstruction( ) {
 							 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 0 };
 
 	char dline[128], *pOperands;
-	DasmI386( dline, pOperands, GetAddress( SegValue( cs ), reg_eip ), reg_eip, cpu.code.big, cpu.pmode );
-	char* res = empty;
+	DasmI386( dline, pOperands, GetPhysicalAddress( { SegValue( cs ), reg_eip } ), reg_eip, cpu.code.big, cpu.pmode );
+	char *res = empty;
 	if( showExtend ) {
 		res = const_cast<char *>( AnalyzeInstruction( dline, pOperands ) );
-		if( !res || !( *res ) ) {
+		if( !res || !( *res ) )
 			res = empty;
-		}
 		Bitu reslen = strlen( res );
-		if( reslen < 22 ) {
+		if( reslen < 22 )
 			memset( res + reslen, ' ', 22 - reslen );
-		}
 		res[22] = 0;
 	}
 
 	Bitu len = safe_strlen( dline );
-	if( len < 30 ) {
+	if( len < 30 )
 		memset( dline + len, ' ', 30 - len );
-	}
 	dline[30] = 0;
 
-	TLogInst& inst = logInst[logCount];
+	TLogInst &inst = logInst[logCount];
 	strcpy( inst.dline, dline );
 	inst.s_cs = SegValue( cs );
 	inst.eip = reg_eip;
@@ -693,15 +641,13 @@ void DEBUG_HeavyLogInstruction( ) {
 	inst.p = get_PF( ) > 0;
 	inst.i = GETFLAGBOOL( IF );
 
-	if( ++logCount >= LOGCPUMAX ) {
+	if( ++logCount >= LOGCPUMAX )
 		logCount = 0;
-	}
 }
 
 void DEBUG_HeavyWriteLogInstruction( ) {
-	if( !logHeavy ) {
+	if( !logHeavy )
 		return;
-	}
 	logHeavy = false;
 
 	DEBUG_ShowMsg( "DEBUG: Creating cpu log LOGCPU_INT_CD.TXT\n" );
@@ -715,7 +661,7 @@ void DEBUG_HeavyWriteLogInstruction( ) {
 	uint32_t startLog = logCount;
 	do {
 		// Write Instructions
-		TLogInst& inst = logInst[startLog];
+		TLogInst &inst = logInst[startLog];
 		using std::setw;
 		out << setw( 4 ) << inst.s_cs << ":" << setw( 8 ) << inst.eip << "  "
 			<< inst.dline << "  " << inst.res << " EAX:" << setw( 8 )
@@ -738,9 +684,8 @@ void DEBUG_HeavyWriteLogInstruction( ) {
 								logInst[startLog].s_cs,logInst[startLog].eip,logInst[startLog].dline,logInst[startLog].res,logInst[startLog].eax,logInst[startLog].ebx,logInst[startLog].ecx,logInst[startLog].edx,logInst[startLog].esi,logInst[startLog].edi,logInst[startLog].ebp,logInst[startLog].esp,
 								logInst[startLog].s_ds,logInst[startLog].s_es,logInst[startLog].s_fs,logInst[startLog].s_gs,logInst[startLog].s_ss,
 								logInst[startLog].c,logInst[startLog].z,logInst[startLog].s,logInst[startLog].o,logInst[startLog].a,logInst[startLog].p,logInst[startLog].i);*/
-		if( ++startLog >= LOGCPUMAX ) {
+		if( ++startLog >= LOGCPUMAX )
 			startLog = 0;
-		}
 	} while( startLog != logCount );
 
 	out.close( );
@@ -751,7 +696,7 @@ bool DEBUG_HeavyIsBreakpoint( void ) {
 	static Bitu zero_count = 0;
 	if( cpuLog ) {
 		if( cpuLogCounter > 0 ) {
-			LogInstruction( SegValue( cs ), reg_eip, cpuLogFile );
+			LogInstruction( { SegValue( cs ), reg_eip }, cpuLogFile );
 			cpuLogCounter--;
 		}
 		if( cpuLogCounter <= 0 ) {
@@ -764,31 +709,26 @@ bool DEBUG_HeavyIsBreakpoint( void ) {
 		}
 	}
 	// LogInstruction
-	if( logHeavy ) {
+	if( logHeavy )
 		DEBUG_HeavyLogInstruction( );
-	}
 	if( zeroProtect ) {
 		uint32_t value = 0;
 		if( !mem_readd_checked( SegPhys( cs ) + reg_eip, &value ) ) {
-			if( value == 0 ) {
-				zero_count++;
-			} else {
+			if( value == 0 )
+				++zero_count;
+			else
 				zero_count = 0;
-			}
 		}
-		if( zero_count == 10 ) {
+		if( zero_count == 10 )
 			E_Exit( "running zeroed code" );
-		}
 	}
 
 	if( skipFirstInstruction ) {
 		skipFirstInstruction = false;
 		return false;
 	}
-	if( BPoints.size( ) && CBreakpoint::CheckBreakpoint( SegValue( cs ), reg_eip ) ) {
+	if( BPoints.size( ) && CBreakpoint::CheckBreakpoint( { SegValue( cs ), reg_eip }  ) )
 		return true;
-	}
-
 	return false;
 }
 
@@ -797,7 +737,7 @@ void DEBUG_UpdateMemoryReadBreakpoints( const PhysPt addr ) {
 	static_assert( std::is_unsigned_v<T> );
 	static_assert( std::is_integral_v<T> );
 
-	for( CBreakpoint* bp : BPoints ) {
+	for( CBreakpoint *bp : BPoints ) {
 		if( bp->GetType( ) == BKPNT_MEMORY_READ ) {
 			const PhysPt location_begin = bp->GetLocation( );
 			const PhysPt location_end = location_begin + sizeof( T );

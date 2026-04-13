@@ -50,7 +50,7 @@ inline MNEMONIC_MASK &operator|=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexce
 }
 
 struct DecodedLine {
-    ZydisDecodedOperandPtr address;
+	ADDRESS_PAIR address;
     uint32_t base_offset;
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
@@ -61,8 +61,8 @@ struct DecodedLine {
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 
-	static const DecodedLine * find( uint32_t );
-	static const DecodedLine * find( uint16_t, uint32_t );
+	static const DecodedLine * find( const uint32_t );
+	static const DecodedLine * find( const ADDRESS_PAIR & );
 	static const DecodedLine & first( );
 	static const DecodedLine & last( );
 	static bool isStart( );
@@ -75,7 +75,7 @@ const DecodedLine & operator--( DecodedLine const & ); // Prefix decrement
 const DecodedLine operator--( DecodedLine const &, int ); // Postfix decrement
 
 extern bool AddressVisited( uint32_t );
-extern bool AddressVisited( uint16_t, uint32_t );
+extern bool AddressVisited( const ADDRESS_PAIR & );
 
 extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const bool, const bool );
 

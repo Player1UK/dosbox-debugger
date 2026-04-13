@@ -40,7 +40,7 @@ Bitu DEBUG_Loop( void ) {
 	PIC_runIRQs( );
 	Delay( 1 );
 	if( ( oldCS != SegValue( cs ) ) || ( oldEIP != reg_eip ) ) {
-		CBreakpoint::AddBreakpoint( oldCS, oldEIP, true );
+		CBreakpoint::AddBreakpoint( { oldCS, oldEIP }, true );
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
 		debugging = false;
 		DOSBOX_SetNormalLoop( );
@@ -171,9 +171,9 @@ void DEBUG_AddConfigSection( const ConfigPtr& conf ) {
 	conf->AddSection( "debug" );
 }
 
-void DEBUG_CheckExecuteBreakpoint( uint16_t seg, uint32_t off ) {
+void DEBUG_CheckExecuteBreakpoint( const ADDRESS_PAIR &address_pair ) {
 	if( pDebugcom && pDebugcom->IsActive( ) ) {
-		CBreakpoint::AddBreakpoint( seg, off, true );
+		CBreakpoint::AddBreakpoint( address_pair, true );
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
 		pDebugcom = nullptr;
 	}

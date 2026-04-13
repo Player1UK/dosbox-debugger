@@ -27,18 +27,18 @@ extern bool zeroProtect;
 extern bool logHeavy;
 #endif
 
-extern void SaveMemory( uint16_t, uint32_t, uint32_t );
-extern void SaveMemoryBin( uint16_t, uint32_t, uint32_t );
+extern void SaveMemory( ADDRESS_PAIR &, uint32_t );
+extern void SaveMemoryBin( ADDRESS_PAIR &, uint32_t );
 extern void LogMCBS( void );
 extern void LogGDT( void );
 extern void LogLDT( void );
 extern void LogIDT( void );
-extern void LogPages( char* );
+extern void LogPages( char * );
 extern void LogCPUInfo( void );
-extern void OutputVecTable( char* );
+extern void OutputVecTable( char * );
 
-bool ChangeRegister( char* str ) {
-	char* hex = str;
+bool ChangeRegister( char *str ) {
+	char *hex = str;
 	while( *hex == ' ' ) {
 		hex++;
 	}
@@ -71,49 +71,49 @@ bool ChangeRegister( char* str ) {
 		reg_eip = GetHexValue( hex );
 	} else if( strncmp( hex, "AX", 2 ) == 0 ) {
 		hex += 2;
-		reg_ax = (uint16_t) GetHexValue( hex );
+		reg_ax = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "BX", 2 ) == 0 ) {
 		hex += 2;
-		reg_bx = (uint16_t) GetHexValue( hex );
+		reg_bx = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "CX", 2 ) == 0 ) {
 		hex += 2;
-		reg_cx = (uint16_t) GetHexValue( hex );
+		reg_cx = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "DX", 2 ) == 0 ) {
 		hex += 2;
-		reg_dx = (uint16_t) GetHexValue( hex );
+		reg_dx = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "SI", 2 ) == 0 ) {
 		hex += 2;
-		reg_si = (uint16_t) GetHexValue( hex );
+		reg_si = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "DI", 2 ) == 0 ) {
 		hex += 2;
-		reg_di = (uint16_t) GetHexValue( hex );
+		reg_di = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "BP", 2 ) == 0 ) {
 		hex += 2;
-		reg_bp = (uint16_t) GetHexValue( hex );
+		reg_bp = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "SP", 2 ) == 0 ) {
 		hex += 2;
-		reg_sp = (uint16_t) GetHexValue( hex );
+		reg_sp = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "IP", 2 ) == 0 ) {
 		hex += 2;
-		reg_ip = (uint16_t) GetHexValue( hex );
+		reg_ip = static_cast<uint16_t>( GetHexValue( hex ) );
 	} else if( strncmp( hex, "CS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( cs, (uint16_t) GetHexValue( hex ) );
+		SegSet16( cs, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "DS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( ds, (uint16_t) GetHexValue( hex ) );
+		SegSet16( ds, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "ES", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( es, (uint16_t) GetHexValue( hex ) );
+		SegSet16( es, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "FS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( fs, (uint16_t) GetHexValue( hex ) );
+		SegSet16( fs, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "GS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( gs, (uint16_t) GetHexValue( hex ) );
+		SegSet16( gs, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "SS", 2 ) == 0 ) {
 		hex += 2;
-		SegSet16( ss, (uint16_t) GetHexValue( hex ) );
+		SegSet16( ss, static_cast<uint16_t>( GetHexValue( hex ) ) );
 	} else if( strncmp( hex, "AF", 2 ) == 0 ) {
 		hex += 2;
 		SETFLAGBIT( AF, GetHexValue( hex ) );
@@ -148,11 +148,10 @@ static void DEBUG_RaiseTimerIrq( void ) {
 	PIC_ActivateIRQ( 0 );
 }
 
-bool ParseCommand( char* str ) {
-	char* found = str;
-	for( char* idx = found; *idx != 0; idx++ ) {
+bool ParseCommand( char *str ) {
+	char *found = str;
+	for( char *idx = found; *idx != 0; ++idx )
 		*idx = ascii_to_upper( *idx );
-	}
 
 	found = trim( found );
 	std::string s_found( found );
@@ -164,125 +163,101 @@ bool ParseCommand( char* str ) {
 		next = command.size( );
 	}
 	( s_found.erase )( 0, next );
-	found = const_cast<char*>( s_found.c_str( ) );
+	found = const_cast<char *>( s_found.c_str( ) );
 
 	if( command == "MEMDUMP" ) { // Dump memory to file
-		auto seg = (uint16_t) GetHexValue( found );
-		found++;
-		uint32_t ofs = GetHexValue( found );
-		found++;
-		uint32_t num = GetHexValue( found );
-		found++;
-		SaveMemory( seg, ofs, num );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) };
+		auto num = GetHexValue( ++found );
+		SaveMemory( address_pair, num );
 		return true;
 	}
 
 	if( command == "MEMDUMPBIN" ) { // Dump memory to file binary
-		auto seg = (uint16_t) GetHexValue( found );
-		found++;
-		uint32_t ofs = GetHexValue( found );
-		found++;
-		uint32_t num = GetHexValue( found );
-		found++;
-		SaveMemoryBin( seg, ofs, num );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) };
+		auto num = GetHexValue( ++found );
+		SaveMemoryBin( address_pair, num );
 		return true;
 	}
 
 	if( command == "IV" ) { // Insert variable
-		auto seg = (uint16_t) GetHexValue( found );
-		found++;
-		uint32_t ofs = GetHexValue( found ); // Do not truncate; IV must support 32-bit addresses like SV/LV.
-		found++;
+		// Do not truncate offset; IV must support 32-bit addresses like SV/LV.
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) };
+		++found;
 		char name[16];
-		for( int i = 0; i < 16; i++ ) {
-			if( found[i] && ( found[i] != ' ' ) ) {
+		for( int i = 0; i < 16; ++i ) {
+			if( found[i] && found[i] != ' ' )
 				name[i] = found[i];
-			} else {
+			else {
 				name[i] = 0;
 				break;
 			}
 		}
 		name[15] = 0;
 
-		if( !name[0] ) {
+		if( !*name )
 			return false;
-		}
-		DEBUG_ShowMsg( "DEBUG: Created debug var %s at %04X:%04X\n", name, seg, ofs );
-		CDebugVar::InsertVariable( name, GetAddress( seg, ofs ) );
+		DEBUG_ShowMsg( "DEBUG: Created debug var %s at %04X:%04X\n", name, address_pair.segment, address_pair.offset );
+		CDebugVar::InsertVariable( name, GetPhysicalAddress( address_pair ) );
 		return true;
 	}
 
 	if( command == "SV" ) { // Save variables
 		char name[13];
-		for( int i = 0; i < 12; i++ ) {
-			if( found[i] && ( found[i] != ' ' ) ) {
+		for( int i = 0; i < 12; ++i ) {
+			if( found[i] && found[i] != ' ' )
 				name[i] = found[i];
-			} else {
+			else {
 				name[i] = 0;
 				break;
 			}
 		}
 		name[12] = 0;
-		if( !name[0] ) {
+		if( !*name )
 			return false;
-		}
-		DEBUG_ShowMsg( "DEBUG: Variable list save (%s) : %s.\n",
-			name,
-			( CDebugVar::SaveVars( name ) ? "ok" : "failure" ) );
+		DEBUG_ShowMsg( "DEBUG: Variable list save (%s) : %s.\n", name, ( CDebugVar::SaveVars( name ) ? "ok" : "failure" ) );
 		return true;
 	}
 
 	if( command == "LV" ) { // load variables
 		char name[13];
-		for( int i = 0; i < 12; i++ ) {
-			if( found[i] && ( found[i] != ' ' ) ) {
+		for( int i = 0; i < 12; ++i ) {
+			if( found[i] && found[i] != ' ' )
 				name[i] = found[i];
-			} else {
+			else {
 				name[i] = 0;
 				break;
 			}
 		}
 		name[12] = 0;
-		if( !name[0] ) {
+		if( !*name )
 			return false;
-		}
-		DEBUG_ShowMsg( "DEBUG: Variable list load (%s) : %s.\n",
-			name,
-			( CDebugVar::LoadVars( name ) ? "ok" : "failure" ) );
+		DEBUG_ShowMsg( "DEBUG: Variable list load (%s) : %s.\n", name, ( CDebugVar::LoadVars( name ) ? "ok" : "failure" ) );
 		return true;
 	}
 
 	if( command == "ADDLOG" ) {
-		if( found && *found ) {
+		if( found && *found )
 			DEBUG_ShowMsg( "NOTICE: %s\n", found );
-		}
 		return true;
 	}
 
 	if( command == "SR" ) { // Set register value
-		DEBUG_ShowMsg( "DEBUG: Set Register %s.\n",
-			( ChangeRegister( found ) ? "success" : "failure" ) );
+		DEBUG_ShowMsg( "DEBUG: Set Register %s.\n", ( ChangeRegister( found ) ? "success" : "failure" ) );
 		return true;
 	}
 
 	if( command == "SM" ) { // Set memory with following values
-		auto seg = (uint16_t) GetHexValue( found );
-		found++;
-		uint32_t ofs = GetHexValue( found );
-		found++;
-		uint16_t count = 0;
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		++found;
 		while( *found ) {
-			while( *found == ' ' ) {
-				found++;
-			}
+			while( *found == ' ' )
+				++found;
 			if( *found ) {
-				auto value = (uint8_t) GetHexValue( found );
-				if( *found ) {
-					found++;
-				}
-				mem_writeb_checked( GetAddress( seg, ofs + count ),
-					value );
-				count++;
+				auto value = static_cast<uint8_t>( GetHexValue( found ) );
+				if( *found )
+					++found;
+				mem_writeb_checked( GetPhysicalAddress( address_pair ), value );
+				++address_pair.offset;
 			}
 		}
 		DEBUG_ShowMsg( "DEBUG: Memory changed.\n" );
@@ -290,75 +265,60 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BP" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found );
-		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found );
-		CBreakpoint::AddBreakpoint( seg, ofs, false );
-		DEBUG_ShowMsg( "DEBUG: Set breakpoint at %04X:%04X\n", seg, ofs );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		CBreakpoint::AddBreakpoint( address_pair, false );
+		DEBUG_ShowMsg( "DEBUG: Set breakpoint at %04X:%04X\n", address_pair.segment, address_pair.offset );
 		return true;
 	}
 
 #if C_HEAVY_DEBUGGER
-
 	if( command == "BPM" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found );
-		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found );
-		CBreakpoint::AddMemBreakpoint( seg, ofs );
-		DEBUG_ShowMsg( "DEBUG: Set memory breakpoint at %04X:%04X\n", seg, ofs );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		CBreakpoint::AddMemBreakpoint( address_pair );
+		DEBUG_ShowMsg( "DEBUG: Set memory breakpoint at %04X:%04X\n", address_pair.segment, address_pair.offset );
 		return true;
 	}
 
 	if( command == "BPMR" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found );
-		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found );
-		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( seg, ofs );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		CBreakpoint *bp = CBreakpoint::AddMemBreakpoint( address_pair );
 		bp->SetType( BKPNT_MEMORY_READ );
 		bp->FlagMemoryAsUnread( );
-		DEBUG_ShowMsg( "DEBUG: Set memory read breakpoint at %04X:%04X\n",
-			seg,
-			ofs );
+		DEBUG_ShowMsg( "DEBUG: Set memory read breakpoint at %04X:%04X\n", address_pair.segment, address_pair.offset );
 		return true;
 	}
 
 	if( command == "BPPM" ) { // Add new breakpoint
-		auto seg = (uint16_t) GetHexValue( found );
-		found++; // skip ":"
-		uint32_t ofs = GetHexValue( found );
-		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( seg, ofs );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		CBreakpoint *bp = CBreakpoint::AddMemBreakpoint( address_pair );
 		if( bp ) {
 			bp->SetType( BKPNT_MEMORY_PROT );
-			DEBUG_ShowMsg( "DEBUG: Set prot-mode memory breakpoint at %04X:%08X\n",
-				seg,
-				ofs );
+			DEBUG_ShowMsg( "DEBUG: Set prot-mode memory breakpoint at %04X:%08X\n", address_pair.segment, address_pair.offset );
 		}
 		return true;
 	}
 
 	if( command == "BPLM" ) { // Add new breakpoint
-		uint32_t ofs = GetHexValue( found );
-		CBreakpoint* bp = CBreakpoint::AddMemBreakpoint( 0, ofs );
-		if( bp ) {
+		ADDRESS_PAIR address_pair = { 0U,  GetHexValue( found ) };
+		CBreakpoint *bp = CBreakpoint::AddMemBreakpoint( address_pair );
+		if( bp )
 			bp->SetType( BKPNT_MEMORY_LINEAR );
-		}
-		DEBUG_ShowMsg( "DEBUG: Set linear memory breakpoint at %08X\n", ofs );
+		DEBUG_ShowMsg( "DEBUG: Set linear memory breakpoint at %08X\n", address_pair.offset );
 		return true;
 	}
-
 #endif
 
 	if( command == "BPINT" ) { // Add Interrupt Breakpoint
-		auto intNr = (uint8_t) GetHexValue( found );
+		auto intNr = static_cast<uint8_t>( GetHexValue( found ) );
 		bool all = !( *found );
-		auto valAH = (uint8_t) GetHexValue( found );
+		auto valAH = static_cast<uint8_t>( GetHexValue( found ) );
 		if( ( valAH == 0x00 ) && ( *found == '*' || all ) ) {
 			CBreakpoint::AddIntBreakpoint( intNr, BPINT_ALL, BPINT_ALL, false );
 			DEBUG_ShowMsg( "DEBUG: Set interrupt breakpoint at INT %02X\n",
 				intNr );
 		} else {
 			all = !( *found );
-			auto valAL = (uint8_t) GetHexValue( found );
+			auto valAL = static_cast<uint8_t>( GetHexValue( found ) );
 			if( ( valAL == 0x00 ) && ( *found == '*' || all ) ) {
 				CBreakpoint::AddIntBreakpoint( intNr,
 					valAH,
@@ -386,7 +346,7 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "BPDEL" ) { // Delete Breakpoints
-		auto bpNr = (uint8_t) GetHexValue( found );
+		auto bpNr = static_cast<uint8_t>( GetHexValue( found ) );
 		if( ( bpNr == 0x00 ) && ( *found == '*' ) ) { // Delete all
 			CBreakpoint::DeleteAll( );
 			DEBUG_ShowMsg( "DEBUG: Breakpoints deleted.\n" );
@@ -400,24 +360,19 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "C" ) { // Set code overview
-		auto codeSeg = (uint16_t) GetHexValue( found );
-		++found;
-		uint32_t codeOfs = GetHexValue( found );
-		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", codeSeg, codeOfs );
-		codeView.Set( codeSeg, codeOfs );
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", address_pair.segment, address_pair.offset );
+		codeView.Set( address_pair );
 		return true;
 	}
 
 	if( command == "D" ) { // Set data overview
-		uint16_t segment = GetHexValue( found );
-		++found;
-		uint32_t offset = GetHexValue( found );
-		if( segment != dataSeg[dbg.active_data_view] || offset > 0xFFFF )
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		if( address_pair.segment != dataAddress[dbg.active_data_view].segment || address_pair.offset > 0xFFFF )
 			dbg.update_win[win_data_view[dbg.active_data_view]] = true;
 		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
-		dataSeg[dbg.active_data_view] = segment;
-		dataOfs[dbg.active_data_view] = offset;
-		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataSeg[dbg.active_data_view], dataOfs[dbg.active_data_view] );
+		dataAddress[dbg.active_data_view] = address_pair;
+		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataAddress[dbg.active_data_view].segment, dataAddress[dbg.active_data_view].offset );
 		return true;
 	}
 
@@ -426,22 +381,18 @@ bool ParseCommand( char* str ) {
 		cpuLogType = 1;
 		command = "logcode";
 	}
-
 	if( command == "LOGS" ) { // Create Cpu short log file
 		cpuLogType = 0;
 		command = "logcode";
 	}
-
 	if( command == "LOGL" ) { // Create Cpu long log file
 		cpuLogType = 2;
 		command = "logcode";
 	}
-
 	if( command == "LOGC" ) { // Create Cpu coverage log file
 		cpuLogType = 3;
 		command = "logcode";
 	}
-
 	if( command == "logcode" ) { // Shared code between all logs
 		DEBUG_ShowMsg( "DEBUG: Starting log\n" );
 		const std_fs::path log_cpu_txt = "LOGCPU.TXT";
@@ -466,7 +417,7 @@ bool ParseCommand( char* str ) {
 #endif
 
 	if( command == "INTT" ) { // trace int.
-		auto intNr = (uint8_t) GetHexValue( found );
+		auto intNr = static_cast<uint8_t>( GetHexValue( found ) );
 		DEBUG_ShowMsg( "DEBUG: Tracing INT %02X\n", intNr );
 		CPU_HW_Interrupt( intNr );
 		codeView.SetToEIP( );
@@ -474,9 +425,9 @@ bool ParseCommand( char* str ) {
 	}
 
 	if( command == "INT" ) { // start int.
-		auto intNr = (uint8_t) GetHexValue( found );
+		auto intNr = static_cast<uint8_t>( GetHexValue( found ) );
 		DEBUG_ShowMsg( "DEBUG: Starting INT %02X\n", intNr );
-		CBreakpoint::AddBreakpoint( SegValue( cs ), reg_eip, true );
+		CBreakpoint::AddBreakpoint( { SegValue( cs ), reg_eip }, true );
 		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip - 1 );
 		debugging = false;
 		DOSBOX_SetNormalLoop( );
@@ -536,9 +487,9 @@ bool ParseCommand( char* str ) {
 
 	if( command == "INTHAND" ) {
 		if( found[0] != 0 ) {
-			auto intNr = (uint8_t) GetHexValue( found );
+			auto intNr = static_cast<uint8_t>( GetHexValue( found ) );
 			DEBUG_ShowMsg( "DEBUG: Set code overview to interrupt handler %X\n", intNr );
-			codeView.Set( mem_readw( intNr * 4 + 2 ), mem_readw( intNr * 4 ) );
+			codeView.Set( { mem_readw( intNr * 4 + 2 ), mem_readw( intNr * 4 ) } );
 			return true;
 		}
 	}
@@ -632,11 +583,12 @@ bool ParseCommand( char* str ) {
 		DEBUG_ShowMsg( "PAGING [page]             - Display content of page table.\n" );
 		DEBUG_ShowMsg( "EXTEND                    - Toggle additional info.\n" );
 		DEBUG_ShowMsg( "TIMERIRQ                  - Run the system timer.\n" );
-		
+
 		DEBUG_ShowMsg( "TERMINATE / X             - Terminate the current executable.\n" );
 
 		//DEBUG_ShowMsg("HELP                      - Help\n");
 		DEBUG_ShowMsg( "Keys --------------------------------------------------------------------------\n" );
+		DEBUG_ShowMsg( "[SHIFT +] F1              - Expand [previous/]next code line.\n" );
 		DEBUG_ShowMsg( "F5                        - Run.\n" );
 		DEBUG_ShowMsg( "F6/F7/F8                  - Run to cursor.\n" );
 		DEBUG_ShowMsg( "F9                        - Set/Remove breakpoint.\n" );

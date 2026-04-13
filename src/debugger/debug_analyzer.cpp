@@ -97,15 +97,15 @@ uint16_t RealSegValue( const SegNames index ) {
 	return seg_value;
 }
 
-uint32_t GetAddress( uint16_t seg, uint32_t offset ) {
-	if( seg == SegValue( cs ) )
-		return SegPhys( cs ) + offset;
+uint32_t GetPhysicalAddress( const ADDRESS_PAIR &address_pair ) {
+	if( address_pair.segment == SegValue( cs ) )
+		return SegPhys( cs ) + address_pair.offset;
 	if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 		Descriptor desc;
-		if( cpu.gdt.GetDescriptor( seg, desc ) )
-			return desc.GetBase( ) + offset;
+		if( cpu.gdt.GetDescriptor( address_pair.segment, desc ) )
+			return desc.GetBase( ) + address_pair.offset;
 	}
-	return ( seg << 4 ) + offset;
+	return address_pair.offset + ( address_pair.segment << 4 );
 }
 
 void ResetHexValueSizeType( ) {
@@ -280,10 +280,16 @@ uint32_t GetHexValue( char *&hex, SIZE_TYPE &size_type ) {
 	return hex_value;
 }
 
+typedef enum Operand_Position : uint8_t {
+	OP_NONE		= 1u,
+	OP_LEFT		= 2u,
+	OP_RIGHT	= 4u
+} OPERAND_POSITION;
+
 static PTR_TYPE last_ptr_type = PTR_NONE;
-static char * AnalyzeOperand( char *, char *, char *, bool = false );
-static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS ) {
-	if( !RHS )
+static char * AnalyzeOperand( char *, char *, char *, OPERAND_POSITION = OP_NONE );
+static char * AnalyzeOperand( char *result, char *OPS, char *selector, OPERAND_POSITION position ) {
+	if( position != OP_RIGHT )
 		last_ptr_type = PTR_NONE;
 	char *pEnd = result;
 	char *pos = strchr( OPS, '[' );
@@ -303,9 +309,9 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 			ptr_type = PTR;
 			break;
 		}
-		if( !RHS )
+		if( position != OP_RIGHT )
 			last_ptr_type = ptr_type;
-		uint16_t segment;
+		ADDRESS_PAIR address_pair;
 		if( pos[-1] == ':' ) { // Segment prefix ?
 			char *segpos = &pos[-3];
 			if( cpu.pmode && selector ) {
@@ -313,34 +319,34 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 				selector[1] = tolower( segpos[1] );
 				selector[2] = 0;
 			}
-			segment = static_cast<uint16_t>( GetHexValue( segpos ) );
+			address_pair.segment = static_cast<uint16_t>( GetHexValue( segpos ) );
 		} else {
 			if( strstr( pos, "SP" ) || strstr( pos, "BP" ) ) {
-				segment = SegValue( ss );
+				address_pair.segment = SegValue( ss );
 				if( cpu.pmode && selector )
 					strcpy( selector, "ss" );
 			} else {
-				segment = SegValue( ds );
+				address_pair.segment = SegValue( ds );
 				if( cpu.pmode && selector )
 					strcpy( selector, "ds" );
 			}
 		}
 		++pos;
-		uint32_t offset = GetHexValue( pos );
+		address_pair.offset = GetHexValue( pos );
 		while( *pos != ']' ) {
 			if( *pos == '+' ) {
 				++pos;
-				offset += GetHexValue( pos );
+				address_pair.offset += GetHexValue( pos );
 			} else if( *pos == '-' ) {
 				++pos;
-				offset -= GetHexValue( pos );
+				address_pair.offset -= GetHexValue( pos );
 			} else
 				++pos;
 		}
-		uint32_t address = GetAddress( segment, offset );
+		uint32_t address = GetPhysicalAddress( address_pair );
 		if( !( get_tlb_readhandler( address )->flags & PFLAG_INIT ) ) {
-			pEnd += sprintf( result, "%04X:%04X", segment, offset );
-			if( RHS ) {
+			pEnd += sprintf( result, "%04X:%04X", address_pair.segment, address_pair.offset );
+			if( position != OP_LEFT ) {
 				switch( ptr_type ) {
 				case PTR_BYTE:
 					pEnd += sprintf( pEnd, "=%02X", mem_readb<MemOpMode::SkipBreakpoints>( address ) );
@@ -384,9 +390,9 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, bool RHS 
 			case ':':
 			case ',':
 			case 0:
-				if( hex_value_size_type == SIZE_DWORD || ( RHS && last_ptr_type == PTR_DWORD ) )
+				if( hex_value_size_type == SIZE_DWORD || ( position == OP_RIGHT && last_ptr_type == PTR_DWORD ) )
 					pEnd += sprintf( result, "%08X", value );
-				else if( hex_value_size_type == SIZE_WORD || ( RHS && last_ptr_type == PTR_WORD ) )
+				else if( hex_value_size_type == SIZE_WORD || ( position == OP_RIGHT && last_ptr_type == PTR_WORD ) )
 					pEnd += sprintf( result, "%04X", value );
 				else
 					pEnd += sprintf( result, "%02X", value );
@@ -420,10 +426,10 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 			*pos++ = 0;
 			if( *pos == ' ' )
 				++pos;
-			pEnd = AnalyzeOperand( result, OPS, selector );
+			pEnd = AnalyzeOperand( result, OPS, selector, OP_LEFT );
 			*pEnd++ = ',';
 			*pEnd++ = ' ';
-			pEnd = AnalyzeOperand( pEnd, pos, selector, true );
+			pEnd = AnalyzeOperand( pEnd, pos, selector, OP_RIGHT );
 		} else
 			pEnd = AnalyzeOperand( result, OPS, selector );
 	} else {
@@ -535,7 +541,7 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		break;
 	case 'P':
 		if( INST[1] == 'O' && INST[2] == 'P' ) {
-			uint32_t address = GetAddress( SegValue( ss ), reg_esp );
+			uint32_t address = GetPhysicalAddress( { SegValue( ss ), reg_esp } );
 			if( pEnd == result ) {
 				uint16_t value = mem_readw<MemOpMode::SkipBreakpoints>( address );
 				sprintf( pEnd, "%04X", value );

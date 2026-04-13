@@ -51,6 +51,8 @@ void DBGUI_Render( );
 void DBGUI_Reset( );
 void DBGUI_Resize( );
 
+extern int32_t DEBUG_Run( const RUN_TYPE, const ADDRESS_PAIR & = { 0U, 0U } );
+
 void DEBUG_NewInstruction( );
 void DEBUG_SaveCurrentState( );
 
@@ -59,7 +61,7 @@ void DEBUG_HideDOSBox( );
 
 extern const char * AnalyzeInstruction( const char *, const char *, char * = nullptr );
 extern bool ParseCommand( char * );
-extern uint32_t GetAddress( uint16_t, uint32_t );
+extern uint32_t GetPhysicalAddress( const ADDRESS_PAIR & );
 static SIZE_TYPE hex_value_size_type = SIZE_BYTE;
 static uint32_t hex_value = 0U;
 extern uint32_t GetHexValue( char *&, SIZE_TYPE & = hex_value_size_type );
@@ -124,8 +126,7 @@ struct DBGBlock {
 	uint16_t segment[NUM_SEG_TYPES];
 };
 
-extern uint16_t dataSeg[NUM_DATA_VIEWS];
-extern uint32_t dataOfs[NUM_DATA_VIEWS];
+extern ADDRESS_PAIR dataAddress[NUM_DATA_VIEWS];
 extern WINDOW_ID win_data_view[NUM_DATA_VIEWS];
 extern WINDOW_ID win_diff_view[NUM_DATA_VIEWS];
 
@@ -137,16 +138,14 @@ extern bool showExtend;
 
 #define MAXCMDLEN 254
 struct SCodeView {
-	uint16_t segment = 0;
-	uint32_t offset = 0;
+	ADDRESS_PAIR realAddress;
 	uint32_t address = 0;
-	uint16_t cursorSegment = 0;
-	uint32_t cursorOffset = 0;
+	ADDRESS_PAIR cursorRealAddress;
 	uint32_t cursorAddress = 0;
 
-	void Set( const uint16_t, const uint32_t, const bool = true, const bool = true );
+	void Set( const ADDRESS_PAIR &, const bool = true, const bool = true );
 	void SetToEIP( );
-	void SetCursor( const uint16_t, const uint32_t );
+	void SetCursor( const ADDRESS_PAIR & );
 };
 extern SCodeView codeView;
 

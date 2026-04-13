@@ -61,12 +61,12 @@ const DecodedLine &DecodedLine::last( ) {
     return currentLine->extra;
 }
 
-const DecodedLine * DecodedLine::find( uint32_t address ) {
+const DecodedLine * DecodedLine::find( const uint32_t address ) {
     const auto it = ordered_code.find( { address, {} } );
     return ( it != ordered_code.end( ) ) ? &it->extra : nullptr;
 }
-const DecodedLine * DecodedLine::find( uint16_t segment, uint32_t offset ) {
-    return find( offset + ( segment << 4 ) );
+const DecodedLine * DecodedLine::find( const ADDRESS_PAIR &address_pair ) {
+    return find( address_pair.offset + ( address_pair.segment << 4 ) );
 }
 
 bool DecodedLine::isStart( ) {
@@ -83,8 +83,8 @@ bool AddressVisited( uint32_t address ) {
     return visited.count( address );
 }
 
-bool AddressVisited( uint16_t segment, uint32_t offset ) {
-    return AddressVisited( offset + ( segment << 4 ) );
+bool AddressVisited( const ADDRESS_PAIR &address_pair ) {
+    return AddressVisited( address_pair.offset + ( address_pair.segment << 4 ) );
 }
 
 uint8_t DasmI386( char *decodedInstruction, char *&pOperands, const uint32_t pc, const uint32_t ip, const bool f32bit, const bool fProtected ) {
@@ -162,13 +162,13 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
     const size_t binarySize = MEM_TotalPages( ) * 4096; // DosPageSize
 
     uint32_t segment0 = startOffset - ip;
-    std::vector<ZydisDecodedOperandPtr> toVisit{ { static_cast<ZyanU16>( ( segment0 ) >> 4 ), ip } };
+    std::vector<ADDRESS_PAIR> toVisit{ { static_cast<uint16_t>( ( segment0 ) >> 4 ), ip } };
     std::unordered_set<uint32_t> added;
 
     uint8_t ah = 0U; // for int 21h tracking
 
     while( !toVisit.empty( ) ) {
-        ZydisDecodedOperandPtr address = toVisit.back( );
+        ADDRESS_PAIR address = toVisit.back( );
         toVisit.pop_back( );
 
         if( !ordered_segments.count( { address.segment, {} } ) )
@@ -289,7 +289,7 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 if( dline.instruction.attributes & ZYDIS_ATTRIB_HAS_SEGMENT )
                     dline.mnemonicMask |= MM_Has_Segment;
                 if( dline.mnemonicMask & MM_Branch ) {
-                    ZydisDecodedOperandPtr ptr = { static_cast<ZyanU16>( -1 ), static_cast<ZyanU32>( -1 ) };
+                    ADDRESS_PAIR ptr = { static_cast<uint16_t>( -1 ), static_cast<uint32_t>( -1 ) };
                     for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
                         auto& op = dline.operands[i];
                         switch( op.type ) {
@@ -301,13 +301,13 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                                 ptr.offset = ( op.imm.is_signed ? op.imm.value.s : op.imm.value.u );
                             break;
                         case ZYDIS_OPERAND_TYPE_POINTER:
-                            ptr = op.ptr;
+                            ptr = { op.ptr.segment, op.ptr.offset };
                             break;
                         default:
                             break;
                         }
                     }
-                    if( ptr.segment != static_cast<ZyanU16>( -1 ) && ptr.offset != static_cast<ZyanU32>( -1 ) ) {
+                    if( ptr.segment != static_cast<uint16_t>( -1 ) && ptr.offset != static_cast<uint32_t>( -1 ) ) {
                         uint32_t addr = ptr.offset + ( ptr.segment << 4 );
                         if( addr < segment0 || addr >= binarySize ) { // Skip invalid
                             Descriptor desc;
