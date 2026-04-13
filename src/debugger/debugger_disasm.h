@@ -37,7 +37,7 @@ typedef enum Mnemonic_Mask : uint16_t {
 	MM_Call_Label		= 0x1000,
 	MM_Jump_Label		= 0x2000,
 	MM_Has_Segment		= 0x4000,
-	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL,
+	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL | MM_LOOP,
 	MM_Label			= MM_Call_Label | MM_Jump_Label,
 } MNEMONIC_MASK;
 constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
