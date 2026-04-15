@@ -313,43 +313,43 @@ static void DrawCode( ) {
 		uint16_t currentSegment = 0U;
 		for( auto dline = DecodedLine::first( ); !DecodedLine::isEnd( ); ++dline, ++i ) {
 			static uint8_t addressColorIndex = 0U;
-			if( dbg.update_win_scroll[WIN_CODE] && dline.address.segment >= codeView.realAddress.segment && dline.address.offset >= codeView.realAddress.offset ) {
+			if( dbg.update_win_scroll[WIN_CODE] && dline.realAddress.segment >= codeView.realAddress.segment && dline.realAddress.offset >= codeView.realAddress.offset ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
 				ImGui::SetScrollHereY( );
 				if( selectedIndex == static_cast<uint32_t>( -1 ) )
 					setFocus = true;
 				selectedIndex = i;
 			}
-			if( currentSegment != dline.address.segment ) { // match segment to defined segments
-				currentSegment = dline.address.segment;
+			if( currentSegment != dline.realAddress.segment ) { // match segment to defined segments
+				currentSegment = dline.realAddress.segment;
 				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
 				if( ordered_segment != ordered_segments.end( ) )
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			char id[12];
 			if( dline.mnemonicMask & MM_Label ) {
-				sprintf( id, "##L%08X", dline.base_offset );
+				sprintf( id, "##L%08X", dline.address );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick ) ) {
 					selectedIndex = i;
-					codeView.SetCursor( dline.address );
-					labelView.Set( dline.address, true );
+					codeView.SetCursor( dline.realAddress );
+					labelView.Set( dline.realAddress, true );
 				}
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
-			} else if( start_address == dline.base_offset ) {
+			} else if( start_address == dline.address ) {
 				ImGui::SetCursorPosX( 21 * char_width );
 				ImGui::TextColored( green_color, "start:" );
 			}
-			const bool is_current_ip = ( dline.address.segment == RealSegValue( cs ) ) && ( dline.address.offset == reg_eip );
-			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.address );
-			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.address, true );
+			const bool is_current_ip = ( dline.realAddress.segment == RealSegValue( cs ) ) && ( dline.realAddress.offset == reg_eip );
+			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress );
+			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
 			const bool isSelected = ( selectedIndex == i );
-			sprintf( id, "##%08X", dline.base_offset );
+			sprintf( id, "##%08X", dline.address );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = i;
-				codeView.SetCursor( dline.address );
-				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Memory ) )
-					labelView.Set( dline.address, ( dline.mnemonicMask & MM_Branch ) ? false : true );
+				codeView.SetCursor( dline.realAddress );
+				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Memory_Access ) )
+					labelView.Set( dline.realAddress, ( dline.mnemonicMask & MM_Branch ) ? false : true );
 			}
 			if( setFocus ) {
 				setFocus = false;
@@ -357,12 +357,12 @@ static void DrawCode( ) {
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color : 
-				( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.address.segment );
+				( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.realAddress.segment );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( ( is_current_ip ? green_color : ( is_temporary_breakpoint ? light_grey_color :
-				( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.address.offset,
+				( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.realAddress.offset,
 				is_breakpoint && is_temporary_breakpoint ? '+' : is_breakpoint ? '*' : is_temporary_breakpoint ? '-' : ' ' );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( is_current_ip ? light_grey_color : grey_color, "%s", dline.szOpcode );

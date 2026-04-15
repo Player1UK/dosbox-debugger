@@ -127,12 +127,9 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		break;
 	case SDLK_F1:
 		if( key.mod & SDL_KMOD_SHIFT )
-			codeView.Set( { codeView.cursorRealAddress.segment, 0U } );
-		else {
-			auto dline = DecodedLine::find( codeView.cursorAddress );
-			if( dline )
-				codeView.Set( { dline->address.segment, dline->address.offset + dline->instruction.length } );
-		}
+			DasmUnDisassemble( codeView.cursorAddress );
+		else
+			codeView.Set( codeView.cursorRealAddress, true, false );
 		break;
 	case SDLK_F6: case SDLK_F7: case SDLK_F8: // Run to cursor
 		ret = DEBUG_Run( RUN_TO_TBP, codeView.cursorRealAddress );

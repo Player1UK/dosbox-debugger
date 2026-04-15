@@ -36,12 +36,11 @@ typedef enum Mnemonic_Mask : uint32_t {
 	MM_Stack	        = 0x00000800,
 	MM_Call_Label		= 0x00001000,
 	MM_Jump_Label		= 0x00002000,
-	MM_Has_Segment		= 0x00004000,
-	MM_Read				= 0x00008000,
-	MM_Write			= 0x00010000,
+	MM_Data_Label		= 0x00004000,
+	MM_Has_Segment		= 0x00008000,
+	MM_Memory_Access	= 0x00010000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL | MM_LOOP,
 	MM_Label			= MM_Call_Label | MM_Jump_Label,
-	MM_Memory			= MM_Read | MM_Write,
 } MNEMONIC_MASK;
 constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
 	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
@@ -53,14 +52,14 @@ inline MNEMONIC_MASK &operator|=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexce
 }
 
 struct DecodedLine {
-	ADDRESS_PAIR address;
-    uint32_t base_offset;
+	ADDRESS_PAIR realAddress;
+    uint32_t address;
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
 	cs_insn *cs_instruction = nullptr;
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
-	char szOpcode[25];
-	char szInstruction[32];
+	char szOpcode[25] = "";
+	char szInstruction[32] = "";
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 	MEM_ACCESS mem_access[NUM_MEM_OPS];
@@ -85,6 +84,7 @@ extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const 
 
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t, const uint32_t, const bool, const bool );
+extern void DasmUnDisassemble( const uint32_t );
 
 struct SegmentInfo {
 	const SEGTYPE type;
