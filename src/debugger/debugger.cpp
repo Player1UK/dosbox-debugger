@@ -25,6 +25,7 @@ bool debugging = false;
 bool forceDraw = false;
 bool exitNormalLoop = false;
 bool exitDebugLoop = false;
+bool skipInterrupts = false;
 
 // Event queue
 std::queue<DebuggerInputEvent> debugger_event_queue = {};
@@ -34,16 +35,17 @@ Bitu DEBUG_Loop( void ) {
 	if( !GFX_PollAndHandleEvents( ) )
 		return -1;
 
-	// Interrupt started ? - then skip it
-	uint16_t oldCS = SegValue( cs );
-	uint32_t oldEIP = reg_eip;
-	PIC_runIRQs( );
-	Delay( 1 );
-	if( ( oldCS != SegValue( cs ) ) || ( oldEIP != reg_eip ) ) {
-		CBreakpoint::AddBreakpoint( { oldCS, oldEIP }, true );
-		CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
-		debugging = false;
-		DOSBOX_SetNormalLoop( );
+	if( skipInterrupts ) { // Interrupt started ? - then skip it
+		uint16_t oldCS = SegValue( cs );
+		uint32_t oldEIP = reg_eip;
+		PIC_runIRQs( );
+		Delay( 1 );
+		if( ( oldCS != SegValue( cs ) ) || ( oldEIP != reg_eip ) ) {
+			CBreakpoint::AddBreakpoint( { oldCS, oldEIP }, true );
+			CBreakpoint::ActivateBreakpointsExceptAt( SegPhys( cs ) + reg_eip );
+			debugging = false;
+			DOSBOX_SetNormalLoop( );
+		}
 	}
 	Bitu ret = 0;
 	// Check event queue
@@ -88,13 +90,18 @@ Bitu DEBUG_Loop( void ) {
 }
 
 void DEBUG_ShowDOSBox( ) {
-	const auto graphics_window = GFX_GetWindow( );
-	SDL_ShowWindow( graphics_window );
-	SDL_RaiseWindow( graphics_window );
+	if( nullptr == dbg.graphics_window )
+		dbg.graphics_window = GFX_GetWindow( );
+	SDL_ShowWindow( dbg.graphics_window );
+	SDL_RaiseWindow( dbg.graphics_window );
+	dbg.graphics_window_hidden = false;
 }
 void DEBUG_HideDOSBox( ) {
+	if( nullptr == dbg.graphics_window )
+		dbg.graphics_window = GFX_GetWindow( );
 	GFX_LosingFocus( ); // Defocus the graphical UI...
-	SDL_HideWindow( GFX_GetWindow( ) );
+	SDL_HideWindow( dbg.graphics_window );
+	dbg.graphics_window_hidden = true;
 }
 
 void DEBUG_Enable( bool pressed ) {
@@ -102,9 +109,10 @@ void DEBUG_Enable( bool pressed ) {
 		return;
 
 	static bool was_ui_started = false;
-	if( !was_ui_started )
+	if( !was_ui_started ) {
 		was_ui_started = DBGUI_StartUp( );
-	else
+		dbg.graphics_window = GFX_GetWindow( );
+	} else
 		SDL_ShowWindow( dbg.win_main );
 
 	if( !was_ui_started ) { // The debugger is run in release mode so cannot use asserts

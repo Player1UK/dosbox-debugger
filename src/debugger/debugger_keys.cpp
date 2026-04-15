@@ -12,6 +12,7 @@
 #include "debugger_disasm.h"
 #include "gui/common.h"
 #include "hardware/pic.h"
+#include "hardware/timer.h"
 #include "shell/shell.h"
 
 extern bool forceDraw;
@@ -69,11 +70,11 @@ int32_t DEBUG_Run( const RUN_TYPE run_type, const ADDRESS_PAIR &breakpoint_addre
 	else {
 		debugging = false;
 		CBreakpoint::ActivateBreakpoints( ); // ensure all breakpoints are activated
+		normalLoopTickCount = GetTicks( );
 		DOSBOX_SetNormalLoop( );
-		if( RUN_FOREVER == run_type || RUN_TO_TBP == run_type ) {
-			forceDraw = true;
+		forceDraw = true;
+		if( RUN_FOREVER == run_type )
 			DEBUG_ShowDOSBox( );
-		}
 	}
 	return ret;
 }

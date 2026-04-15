@@ -104,6 +104,8 @@ uint8_t DasmI386( char *decodedInstruction, char *&pOperands, const uint32_t pc,
 }
 
 static uint32_t lastProcessedCount = 0U;
+static uint32_t segment0 = 0U;
+static uint32_t binarySize = static_cast<uint32_t>( -1 );
 
 void DasmReset( ) {
     labels.clear( );
@@ -112,14 +114,31 @@ void DasmReset( ) {
     ordered_code.clear( );
     currentLine = ordered_code.end( );
     lastProcessedCount = 0U;
+    segment0 = 0U;
+    binarySize = static_cast<uint32_t>( -1 );
 }
 
+static bool InvalidAddress( uint32_t &address, const ADDRESS_PAIR &ptr ) {
+    if( address < segment0 || address >= binarySize ) { // Skip invalid
+        Descriptor desc;
+        if( cpu.gdt.GetDescriptor( ptr.segment, desc ) )
+            address = ptr.offset + ( desc.GetBase( ) << 4 );
+        if( address < segment0 || address >= binarySize ) // Still invalid, skip
+            return true;
+    }
+    return false;
+}
+
+static ZydisDecodedInstruction data_instruction = {
+    ZYDIS_MACHINE_MODE_REAL_16, ZYDIS_MNEMONIC_INVALID, // machine_mode, mnemonic
+    2U,                                 // length
+    ZYDIS_INSTRUCTION_ENCODING_LEGACY, ZYDIS_OPCODE_MAP_DEFAULT, // encoding, opcode_map
+    0x00, 0U, 2U, 0U, 1U, 1U, 0U, nullptr, nullptr, { }, { }, { } // opcode, stack_width, operand_width, address_width, operand_count, operand_count_visible, attributes, cpu_flags, fpu_flags, avx, meta, raw
+};
 static ZydisDecodedInstruction callback_instruction = {
-    ZYDIS_MACHINE_MODE_REAL_16,         // machine_mode
-    ZYDIS_MNEMONIC_INVALID,             // mnemonic
+    ZYDIS_MACHINE_MODE_REAL_16, ZYDIS_MNEMONIC_INVALID, // machine_mode, mnemonic
     4U,                                 // length
-    ZYDIS_INSTRUCTION_ENCODING_LEGACY,  // encoding
-    ZYDIS_OPCODE_MAP_DEFAULT,           // opcode_map
+    ZYDIS_INSTRUCTION_ENCODING_LEGACY, ZYDIS_OPCODE_MAP_DEFAULT, // encoding, opcode_map
     0xFE,                               // opcode
     0U,                                 // stack_width
     2U,                                 // operand_width
@@ -127,24 +146,16 @@ static ZydisDecodedInstruction callback_instruction = {
     1U,                                 // operand_count
     1U,                                 // operand_count_visible
     0U,                                 // attributes
-    nullptr,                            // cpu_flags
-    nullptr,                            // fpu_flags
-    { },                                // avx
-    { },                                // meta
-    { }                                 // raw
+    nullptr, nullptr, { }, { }, { } // cpu_flags, fpu_flags, avx, meta, raw
 };
 static ZydisDecodedOperand callback_operand = {
-    0U,                                 // id
-    ZYDIS_OPERAND_VISIBILITY_EXPLICIT,  // visibility
-    0U,                                 // actions
-    ZYDIS_OPERAND_ENCODING_UIMM16,      // encoding
-    16U,                                // size
-    ZYDIS_ELEMENT_TYPE_UINT,            // element_type
+    0U, ZYDIS_OPERAND_VISIBILITY_EXPLICIT, // id, visibility
+    0U, ZYDIS_OPERAND_ENCODING_UIMM16,  // actions, encoding
+    16U, ZYDIS_ELEMENT_TYPE_UINT,       // size, element_type
     2U,                                 // element_size
     1U,                                 // element_count
     0U,                                 // attributes
-    ZYDIS_OPERAND_TYPE_IMMEDIATE,       // type
-    { }
+    ZYDIS_OPERAND_TYPE_IMMEDIATE, { }   // type
 };
 
 // Recursive disassembly function (credit: CoPilot)
@@ -159,10 +170,11 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
     cs_open( CS_ARCH_X86, CS_MODE_16, &cs_handle );
 
     const auto binary = MemBase;
-    const size_t binarySize = MEM_TotalPages( ) * 4096; // DosPageSize
+    binarySize = MEM_TotalPages( ) * 4096; // DOS page size
 
-    uint32_t segment0 = startOffset - ip;
-    std::vector<ADDRESS_PAIR> toVisit{ { static_cast<uint16_t>( ( segment0 ) >> 4 ), ip } };
+    if( ordered_code.empty( ) )
+        segment0 = startOffset - ip;
+    std::vector<ADDRESS_PAIR> toVisit{ { static_cast<uint16_t>( ( startOffset - ip ) >> 4 ), ip } };
     std::unordered_set<uint32_t> added;
 
     uint8_t ah = 0U; // for int 21h tracking
@@ -290,8 +302,8 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     dline.mnemonicMask |= MM_Has_Segment;
                 if( dline.mnemonicMask & MM_Branch ) {
                     ADDRESS_PAIR ptr = { static_cast<uint16_t>( -1 ), static_cast<uint32_t>( -1 ) };
-                    for( uint8_t i = 0; i < dline.instruction.operand_count; ++i ) {
-                        auto& op = dline.operands[i];
+                    for( uint8_t i = 0U; i < dline.instruction.operand_count; ++i ) {
+                        const auto& op = dline.operands[i];
                         switch( op.type ) {
                         case ZYDIS_OPERAND_TYPE_IMMEDIATE:
                             ptr.segment = address.segment;
@@ -309,13 +321,8 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                     if( ptr.segment != static_cast<uint16_t>( -1 ) && ptr.offset != static_cast<uint32_t>( -1 ) ) {
                         uint32_t addr = ptr.offset + ( ptr.segment << 4 );
-                        if( addr < segment0 || addr >= binarySize ) { // Skip invalid
-                            Descriptor desc;
-                            if( cpu.gdt.GetDescriptor( ptr.segment, desc ) )
-                                addr = ptr.offset + ( desc.GetBase( ) << 4 );
-                            if( addr < segment0 || addr >= binarySize ) // Still invalid, skip
-                                continue;
-                        }
+                        if( InvalidAddress( addr, ptr ) )
+                            continue;
                         bool existingLabel = true;
                         if( !added.count( addr ) ) {
                             added.insert( addr );
@@ -341,17 +348,6 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                     if( dline.mnemonicMask & MM_JMP )
                         break;
-                } else if( dline.mnemonicMask & MM_MOV ) {
-                    if( dline.instruction.operand_count == 2 ) {
-                        if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER && ( dline.operands[0].reg.value == ZYDIS_REGISTER_AH || dline.operands[0].reg.value == ZYDIS_REGISTER_AX ) ) {
-                            if( dline.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE ) {
-                                if( dline.operands[0].reg.value == ZYDIS_REGISTER_AH )
-                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u );
-                                else
-                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
-                            }
-                        }
-                    }
                 } else if( dline.mnemonicMask & MM_INT ) {
                     if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_IMMEDIATE && dline.operands[0].imm.value.u == 0x21 && ah == 0x4C ) {
                         sprintf( dline.szComment, "DOS Exit" );
@@ -359,6 +355,82 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                     }
                 } else if( dline.mnemonicMask & MM_RET ) {
                     break;
+                } else {
+                    if( dline.mnemonicMask & MM_MOV ) {
+                        if( dline.instruction.operand_count == 2 ) {
+                            if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER && ( dline.operands[0].reg.value == ZYDIS_REGISTER_AH || dline.operands[0].reg.value == ZYDIS_REGISTER_AX ) ) {
+                                if( dline.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE ) {
+                                    if( dline.operands[0].reg.value == ZYDIS_REGISTER_AH )
+                                        ah = static_cast<uint8_t>( dline.operands[1].imm.value.u );
+                                    else
+                                        ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
+                                }
+                            }
+                        }
+                    }
+                    for( uint8_t i = 0U; i < NUM_MEM_OPS && i < dline.instruction.operand_count; ++i ) {
+                        const auto &op = dline.operands[i];
+                        if( ZYDIS_OPERAND_TYPE_MEMORY == op.type ) {
+                            dline.mem_access[i].size = op.element_size;
+                            dline.mem_access[i].segment_id = op.mem.segment;
+                            dline.mem_access[i].base_id = op.mem.base;
+                            dline.mem_access[i].disp.has_displacement = op.mem.disp.has_displacement;
+                            dline.mem_access[i].disp.value = op.mem.disp.value;
+
+                            if( ZYDIS_REGISTER_CS == op.mem.segment && ZYDIS_REGISTER_NONE == op.mem.base && op.mem.disp.has_displacement ) {
+                                ADDRESS_PAIR ptr = { dline.address.segment, static_cast<uint32_t>( op.mem.disp.value ) };
+                                uint32_t addr = ptr.offset + ( ptr.segment << 4 );
+                                if( InvalidAddress( addr, ptr ) )
+                                    continue;
+                                std::set<Pair<uint32_t, uint16_t>> callers, *pcallers = nullptr;
+                                auto label = labels.find( { addr, { LABEL_BOTH, ptr.segment, callers } } );
+                                if( label != labels.end( ) )
+                                    pcallers = &label->extra.callers;
+                                else {
+                                    auto label = labels.insert( { addr, LabelInfo( LABEL_DATA, ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+                                    if( label.second ) // insert success
+                                        pcallers = &label.first->extra.callers;
+                                }
+                                if( pcallers )
+                                    pcallers->insert( { dline.base_offset, dline.address.segment } );
+
+                                const auto it = ordered_code.find( { addr, {} } );
+                                if( it == ordered_code.end( ) ) {
+                                    auto entry = ordered_code.insert( { addr, DecodedLine( ptr, addr ) } );
+                                    if( entry.second ) { // insert successful
+                                        added.insert( addr );
+                                        visited.insert( addr );
+                                        DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
+                                        dlineData.instruction = data_instruction;
+                                        dlineData.instruction.length = op.element_size >> 3U;
+                                        dlineData.instruction.operand_width = op.element_size;
+                                        dlineData.operands[0] = callback_operand;
+                                        dlineData.operands[0].imm = { false, false, { 0U } };
+                                        dlineData.mnemonicMask = MM_Memory;
+
+                                        char *pOpCode = dlineData.szOpcode;
+                                        for( auto i = 0; i < dlineData.instruction.length; ++i )
+                                            pOpCode += sprintf( pOpCode, "%02X ", binary[addr + i] );
+                                        switch( op.element_size ) {
+                                        case 0x10:
+                                            sprintf_s( dlineData.szInstruction, sizeof( dlineData.szInstruction ), "dw 0x%02X%02X", binary[addr], binary[addr + 1U] );
+                                            dlineData.operands[0].imm.value.u = reinterpret_cast<uint16_t &>( binary[addr] );
+                                            break;
+                                        case 0x20:
+                                            sprintf_s( dlineData.szInstruction, sizeof( dlineData.szInstruction ), "dd 0x%02X%02X%02X%02X", binary[addr], binary[addr + 1U], binary[addr + 2U], binary[addr + 3U] );
+                                            dlineData.operands[0].imm.value.u = reinterpret_cast<uint32_t &>( binary[addr] );
+                                            break;
+                                        default:
+                                            sprintf_s( dlineData.szInstruction, sizeof( dlineData.szInstruction ), "db 0x%02X", binary[addr] );
+                                            dlineData.operands[0].imm.value.u = binary[addr];
+                                        }
+                                        dlineData.szInstruction[2] = 0;
+                                        dlineData.pOperands = &dlineData.szInstruction[3];
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             } else { // Decode failed...
                 if( binary[base_offset] == 0xFE && ( ( binary[base_offset + 1] >> 3 ) == 0x07 ) ) { // DOSBox internal callback

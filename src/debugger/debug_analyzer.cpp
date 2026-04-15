@@ -89,7 +89,7 @@ bool GetDescriptorInfo( char *selname, char *out1, char *out2 ) {
 
 uint16_t RealSegValue( const SegNames index ) {
 	uint16_t seg_value = SegValue( index );
-	if( ( cpu.pmode || seg_value < 32U ) && !( reg_flags & FLAG_VM ) ) {
+	if( ( cpu.pmode || seg_value < dbg.segment[SEG_ENV] ) && !( reg_flags & FLAG_VM ) ) {
 		Descriptor desc;
 		if( cpu.gdt.GetDescriptor( seg_value, desc ) )
 			return desc.GetBase( ) >> 4;

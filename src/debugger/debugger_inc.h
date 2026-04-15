@@ -53,7 +53,6 @@ void DBGUI_Resize( );
 
 extern int32_t DEBUG_Run( const RUN_TYPE, const ADDRESS_PAIR & = { 0U, 0U } );
 
-void DEBUG_NewInstruction( );
 void DEBUG_SaveCurrentState( );
 
 void DEBUG_ShowDOSBox( );
@@ -68,6 +67,8 @@ extern uint32_t GetHexValue( char *&, SIZE_TYPE & = hex_value_size_type );
 extern void ResetHexValueSizeType( );
 extern uint16_t RealSegValue( const SegNames index );
 extern bool GetDescriptorInfo( char *, char *, char * );
+
+extern int64_t normalLoopTickCount;
 
 // GUI layout and styling constants
 namespace DBGUI {
@@ -104,8 +105,10 @@ typedef struct ColumnRows {
 static const uint8_t NUM_COLUMNS = 4U;
 
 struct DBGBlock {
-	SDL_Window* win_main = nullptr;
-	SDL_GPUDevice* gpu_device = nullptr;
+	SDL_Window *win_main = nullptr;
+	SDL_Window *graphics_window = nullptr;
+	bool graphics_window_hidden = false;
+	SDL_GPUDevice *gpu_device = nullptr;
 	DATA_ID active_data_view = DATA_VIEW;    /* Current active data window */
 	bool update_win[NUM_WINDOWS] = { true, true, true, true, true, true, false, true, true };
 	bool update_win_frame[NUM_WINDOWS] = { false, false, false, false, false, false, false, false, false };
@@ -115,11 +118,11 @@ struct DBGBlock {
 	uint32_t input_y = 0U;
 	uint32_t global_mask = 0U;
 	/* Window column selection and height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 66U }, { 1U, 4U }, { 1U, 4U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 0U }, { 2U, 67U }, { 2U, 40U } };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 66U }, { 1U, 4U }, { 1U, 4U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 0U }, { 2U, 74U }, { 2U, 33U } };
 
 	// Window dimensions (in characters)
-	const uint8_t window_cols[NUM_COLUMNS] = { ( DBGUI::DefaultWindowCols >> 2 ), DBGUI::DefaultWindowCols + 5U, DBGUI::DefaultWindowCols, ( DBGUI::DefaultWindowCols >> 2 ) };
-	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 69, 0 };
+	const uint8_t window_cols[NUM_COLUMNS] = { 12U, DBGUI::DefaultWindowCols + 14U, DBGUI::DefaultWindowCols - 1U, 19U };
+	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 73, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	SDL_Rect window_rect;

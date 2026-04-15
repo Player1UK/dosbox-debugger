@@ -16,9 +16,12 @@
 #include "cpu/paging.h"
 #include "debugger_disasm.h"
 #include "debugvar.h"
+#include "hardware/timer.h"
 #include "utils/string_utils.h"
 
 #include "IBM_VGA_8x16.h"
+
+int64_t normalLoopTickCount;
 
 extern FILE *debuglog;
 extern std::vector<CDebugVar*> varList;
@@ -27,11 +30,13 @@ SCodeView codeView = {};
 Bitu cycle_count = 0;
 char curSelectorName[3] = "";
 
+static std::vector<uint8_t> data_buffer;
+
 static bool imgui_initialized = false;
 static float display_scale = 1.0f;
 
 static uint32_t start_address = 0U;
-static float char_width, digit_width, space_width, address_width, scrollbar_width, cursor_width;
+static float char_width, digit_width, space_width, tab_width, scrollbar_width, cursor_width;
 static float line_height;
 static float line_height_no_spacing;
 static ImVec2 padding;
@@ -159,11 +164,43 @@ static bool UpdateOrderedSegments( ) {
 	return true;
 }
 
+static uint32_t data_buffer_size = 0U;
+static uint32_t savedMemorySize = 0U;
+static void SaveMemoryState( ) {
+	if( data_buffer.size( ) != data_buffer_size ) {
+		data_buffer.clear( );
+		data_buffer.resize( data_buffer_size );
+		data_buffer_size = data_buffer.size( );
+	}
+	uint32_t *mem32 = reinterpret_cast<uint32_t *>( MemBase );
+	uint32_t *data32 = reinterpret_cast<uint32_t *>( &data_buffer[0] );
+	for( uint32_t count = data_buffer.size( ) >> 2; count; --count )
+		*data32++ = *mem32++;
+	savedMemorySize = data_buffer.size( );
+}
+
 static void CheckSegmentRegisters( ) {
 	for( SegNames seg_name = static_cast<SegNames>( 0 ); seg_name <= SegNames::gs; seg_name = static_cast<SegNames>( seg_name + 1 ) ) {
 		uint16_t seg_val = RealSegValue( seg_name );
-		if( !ordered_segments.count( { seg_val, {} } ) )
-			ordered_segments.insert( { seg_val, { ( seg_val < dbg.segment[SEG_PSP] ? SEG_BASE : seg_name == cs ? SEG_CODE : seg_name == ss ? SEG_STACK : SEG_DATA ), 0U } } );
+		if( seg_val > dbg.segment[SEG_CODE] ) {
+			const auto it = ordered_segments.find( { seg_val, {} } );
+			if( it != ordered_segments.end( ) ) {
+				if( cs == seg_name && it->extra.type != SEG_CODE )
+					const_cast<SEGTYPE &>( it->extra.type ) = SEG_CODE;
+			} else {
+				ordered_segments.insert( { seg_val, { ( cs == seg_name ? SEG_CODE : ss == seg_name ? SEG_STACK : SEG_DATA ), 0U } } );
+				if( ss == seg_name ) {
+					uint16_t seg_end = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
+					if( !ordered_segments.count( { seg_end, {} } ) )
+						ordered_segments.insert( { seg_end, { SEG_STACK_END, 0U } } );
+				}
+				if( seg_val > dbg.segment[SEG_HEAP] ) {
+					uint32_t phys_seg_val = 0xFFFF + ( seg_val << 4U );
+					if( data_buffer_size < phys_seg_val )
+						data_buffer_size = phys_seg_val;
+				}
+			}
+		}
 	}
 }
 
@@ -172,10 +209,10 @@ void SCodeView::Set( const ADDRESS_PAIR &address_pair, const bool update_code, c
 	address = cursorAddress = address_pair.offset + ( address_pair.segment << 4 );
 	if( update_code && !AddressVisited( address ) ) { // address not already disassembled
 		DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
-		if( UpdateOrderedSegments( ) )
+		if( debugging && UpdateOrderedSegments( ) )
 			UpdateMemoryViews( );
 	}
-	dbg.update_win_scroll[WIN_CODE] = update_scroll;
+	dbg.update_win_scroll[WIN_CODE] = debugging && update_scroll;
 }
 
 void SCodeView::SetToEIP( ) {
@@ -311,7 +348,7 @@ static void DrawCode( ) {
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = i;
 				codeView.SetCursor( dline.address );
-				if( dline.mnemonicMask & ( MM_Branch | MM_Label ) )
+				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Memory ) )
 					labelView.Set( dline.address, ( dline.mnemonicMask & MM_Branch ) ? false : true );
 			}
 			if( setFocus ) {
@@ -387,15 +424,6 @@ static void DrawCode( ) {
 		}
 	}
 	EndSubWindow( WIN_CODE );
-}
-
-static std::vector<uint8_t> data_buffer;
-
-static void SaveMemoryState( ) {
-	uint32_t *mem32 = reinterpret_cast<uint32_t *>( MemBase );
-	uint32_t *data32 = reinterpret_cast<uint32_t *>( &data_buffer[0] );
-	for( uint32_t count = data_buffer.size( ) >> 2; count; --count )
-		*data32++ = *mem32++;
 }
 
 struct Cursor {
@@ -480,8 +508,8 @@ static void DrawData( ) {
 			uint32_t line_segment = address_pair.segment;
 			const uint32_t data_base = address_pair.segment << 4;
 			auto mem = &MemBase[data_base];
-			const auto mem_compare_end = &MemBase[data_buffer.size( )];
-			if( data_base >= data_buffer.size( ) )
+			const auto mem_compare_end = &MemBase[savedMemorySize];
+			if( data_base >= savedMemorySize )
 				const_cast<uint32_t &>( data_base ) = 0U;
 			auto data = &data_buffer[data_base];
 			data_diff[DATA_VIEW].clear( );
@@ -607,10 +635,12 @@ static void DrawStack( ) {
 			}
 			const uint32_t data_base = address_pair.segment << 4;
 			auto mem = &MemBase[data_base + address_pair.offset];
-			const auto mem_compare_end = &MemBase[data_buffer.size( )];
+			const auto mem_compare_end = &MemBase[savedMemorySize];
 			const_cast<uint32_t &>( data_base ) += address_pair.offset;
-			if( data_base >= data_buffer.size( ) )
-				const_cast<uint32_t &>( data_base ) = data_buffer.size( ) - 1U;
+			if( data_buffer.empty( ) )
+				const_cast<uint32_t &>( data_base ) = 0U;
+			else if( data_base >= savedMemorySize )
+				const_cast<uint32_t &>( data_base ) = savedMemorySize - 1U;
 			auto data = &data_buffer[data_base];
 			data_diff[STACK_VIEW].clear( );
 			stack_lines = line_segment - stack_segment;
@@ -621,7 +651,7 @@ static void DrawStack( ) {
 			char *line = &stack_text_buffer[0];
 			float yPos = 0.0f;
 			sp_cursor.visible = false;
-			sp_cursor.realAddress = { dbg.segment[SEG_STACK], reg_esp };
+			sp_cursor.realAddress = { RealSegValue( ss ), reg_esp };
 			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;
@@ -952,9 +982,16 @@ static void DrawSegments( ) {
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { text_width, 0.0f } ) ) {
 				if( info.type == SEG_CODE )
 					codeView.Set( { segment, 0U }, false );
-				dataAddress[DATA_VIEW] = { segment, 0U };
-				dbg.update_win[WIN_DATA] = data_segment != segment;
-				dbg.update_win_scroll[WIN_DATA] = true;
+				if( info.type == SEG_STACK ) {
+					const auto it = ++ordered_segments.find( { segment, {} } );
+					dataAddress[STACK_VIEW] = { segment, static_cast<uint32_t>( it->value - segment ) << 4 };
+					dbg.update_win[WIN_STACK] = stack_segment != segment;
+					dbg.update_win_scroll[WIN_STACK] = true;
+				} else {
+					dataAddress[DATA_VIEW] = { segment, 0U };
+					dbg.update_win[WIN_DATA] = data_segment != segment;
+					dbg.update_win_scroll[WIN_DATA] = true;
+				}
 			}
 			ImGui::SameLine( );
 			if( ImGui::GetCursorPosX( ) + ( text_width + space_width ) > window_size[WIN_SEG].x )
@@ -1010,7 +1047,7 @@ static void DrawLabels( ) {
 				const auto &ordered_segment = ordered_segments.find( { segment, {} } );
 				if( ordered_segment != ordered_segments.end( ) )
 					color_index = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
-				ImGui::SameLine( address_width );
+				ImGui::SameLine( tab_width );
 				ImGui::TextColored( address_colors[color_index][0], "%04X", segment );
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( grey_color, ":" );
@@ -1361,7 +1398,7 @@ bool DBGUI_StartUp( ) {
 
 	start_address = GetPhysicalAddress( { SegValue( cs ), reg_eip } );
 
-	data_buffer.resize( dbg.segment[SEG_HEAP] << 4 );
+	data_buffer_size = 0xFFFF + ( dbg.segment[SEG_HEAP] << 4 );
 	SaveMemoryState( ); // Required to prevent every difference from zero being incorrectly identified.
 
 	char program_name[debugger_title_length + 11U] = "";
@@ -1381,7 +1418,7 @@ bool DBGUI_StartUp( ) {
 	space_width = ImGui::CalcTextSize( "                                ", NULL, false, 0.0f ).x * 0.03125f;
 	scrollbar_width = style.ScrollbarSize;
 	cursor_width = space_width * 0.8f;
-	address_width = char_width * 10.0f;
+	tab_width = char_width * 2.0f;
 	line_height = ImGui::GetTextLineHeightWithSpacing( );
 	line_height_no_spacing = ImGui::GetTextLineHeight( );
 	title_bar_height = ImGui::GetFrameHeight( );
@@ -1503,7 +1540,7 @@ void DBGUI_Render( ) {
 }
 
 static uint32_t last_ip = static_cast<uint32_t>( -1 );
-void DEBUG_AnalyzeCurrentInstruction( ) {
+static void AnalyzeCurrentInstruction( ) {
 	if( reg_eip == last_ip )
 		return;
 	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
@@ -1516,11 +1553,16 @@ void DEBUG_AnalyzeCurrentInstruction( ) {
 }
 
 void DEBUG_NewInstruction( ) {
+	if( !imgui_initialized )
+		return;
 	CheckSegmentRegisters( );
 	codeView.SetToEIP( );
-	UpdateOrderedSegments( );
-	UpdateMemoryViews( );
-	DEBUG_AnalyzeCurrentInstruction( );
+	if( debugging ) {
+		UpdateOrderedSegments( );
+		UpdateMemoryViews( );
+	} else if( dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
+		DEBUG_ShowDOSBox( );
+	AnalyzeCurrentInstruction( );
 }
 
 void DEBUG_SaveCurrentState( ) {

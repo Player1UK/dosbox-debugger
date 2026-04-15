@@ -14,9 +14,26 @@ typedef struct Address_Pair {
 	}
 } ADDRESS_PAIR;
 
+typedef struct Mem_Access {
+	uint8_t		size = 8U;
+	uint16_t	segment_id = 0U;
+	uint16_t	base_id = 0U;
+	struct Mem_Access_Disp {
+		bool	has_displacement = false;
+		int		value = 0;
+	} disp;
+} MEM_ACCESS;
+
+typedef enum Mem_Op : uint8_t {
+	MEM_OP0 = 0U,
+	MEM_OP1,
+	NUM_MEM_OPS
+} MEM_OP;
+
 typedef enum Label_Mask : unsigned __int8 {
 	LABEL_CALL		= 0x1u,
 	LABEL_JUMP		= 0x2u,
+	LABEL_DATA		= 0x4u,
 	LABEL_BOTH		= LABEL_CALL | LABEL_JUMP
 } LABEL_MASK;
 
