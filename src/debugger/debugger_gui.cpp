@@ -311,7 +311,7 @@ static void DrawCode( ) {
 		static bool setFocus = false;
 		uint32_t i = 0;
 		uint16_t currentSegment = 0U;
-		for( auto dline = DecodedLine::first( ); !DecodedLine::isEnd( ); ++dline, ++i ) {
+		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ); previous_dline = dline, ++dline, ++i ) {
 			static uint8_t addressColorIndex = 0U;
 			if( dbg.update_win_scroll[WIN_CODE] && dline.realAddress.segment >= codeView.realAddress.segment && dline.realAddress.offset >= codeView.realAddress.offset ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
@@ -327,6 +327,11 @@ static void DrawCode( ) {
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			char id[12];
+			if( i && !( dline.mnemonicMask & MM_Data_Label ) && ( previous_dline.mnemonicMask & MM_Data_Label ) ) {
+				ImGui::Spacing( );
+				ImGui::Separator( );
+				ImGui::Spacing( );
+			}
 			if( dline.mnemonicMask & MM_Label ) {
 				sprintf( id, "##L%08X", dline.address );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick ) ) {
@@ -336,6 +341,11 @@ static void DrawCode( ) {
 				}
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
+			} else if( dline.mnemonicMask & MM_Data_Label ) {
+				if( i && !( previous_dline.mnemonicMask & MM_Data_Label ) ) {
+					ImGui::Separator( );
+					ImGui::Spacing( );
+				}
 			} else if( start_address == dline.address ) {
 				ImGui::SetCursorPosX( 21 * char_width );
 				ImGui::TextColored( green_color, "start:" );
@@ -348,8 +358,8 @@ static void DrawCode( ) {
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				selectedIndex = i;
 				codeView.SetCursor( dline.realAddress );
-				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Memory_Access ) )
-					labelView.Set( dline.realAddress, ( dline.mnemonicMask & MM_Branch ) ? false : true );
+				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
+					labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
 			}
 			if( setFocus ) {
 				setFocus = false;

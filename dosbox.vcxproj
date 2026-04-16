@@ -64,9 +64,11 @@
     <VcpkgConfiguration>Debug</VcpkgConfiguration>
     <VcpkgAdditionalInstallOptions>
     </VcpkgAdditionalInstallOptions>
+    <VcpkgUseMD>false</VcpkgUseMD>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgUseStatic>true</VcpkgUseStatic>
+    <VcpkgUseMD>false</VcpkgUseMD>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -114,7 +116,7 @@
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
     </Lib>
     <Link>
-      <AdditionalDependencies>capstone.lib;iir_static.lib;libfluidsynth-3.lib;libpng16d.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlibd.lib;zlibstatic-ngd.lib;Zydis.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalDependencies>libdosbox.lib;capstone.lib;iir_static.lib;libfluidsynth-3.lib;libpng16d.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlibd.lib;zlibstatic-ngd.lib;Zydis.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>src\libs\Debug;vcpkg_installed\x64-windows-static\x64-windows-static\debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention>
@@ -186,7 +188,7 @@
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
     </Lib>
     <Link>
-      <AdditionalDependencies>capstone.lib;iir_static.lib;libfluidsynth-3.lib;libpng16.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlib.lib;zlibstatic-ng.lib;Zydis.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
+      <AdditionalDependencies>libdosbox.lib;capstone.lib;iir_static.lib;libfluidsynth-3.lib;libpng16.lib;mt32emu.lib;ogg.lib;opus.lib;opusfile.lib;SDL3_image-static.lib;SDL3-static.lib;speexdsp.lib;zlib.lib;zlibstatic-ng.lib;Zydis.lib;imgui.lib;libdecoders.lib;libesfmu.lib;libglad.lib;libmanymouse.lib;libnuked.lib;libresidfp.lib;libtalchorus.lib;libwhereami.lib;libym7128bemu.lib;loguru.lib;zmbv.lib;opengl32.lib;Shlwapi.lib;shell32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;Imm32.lib;setupapi.lib;Version.lib;Dsound.lib;Ksuser.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>src\libs\Release;vcpkg_installed\x64-windows-static\x64-windows-static\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <DataExecutionPrevention>
@@ -214,29 +216,6 @@
     <ClCompile Include="src\debugger\debugvar.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\dosbox.cpp" />
-    <ClCompile Include="src\audio\clap\event_list.cpp" />
-    <ClCompile Include="src\audio\clap\library.cpp" />
-    <ClCompile Include="src\audio\clap\plugin.cpp" />
-    <ClCompile Include="src\audio\clap\plugin_manager.cpp" />
-    <ClCompile Include="src\audio\disk_noise.cpp" />
-    <ClCompile Include="src\audio\compressor.cpp" />
-    <ClCompile Include="src\audio\envelope.cpp" />
-    <ClCompile Include="src\audio\mixer.cpp">
-      <ObjectFileName>$(IntDir)/src/audio/mixer.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\audio\noise_gate.cpp" />
-    <ClCompile Include="src\audio\opl_capture.cpp" />
-    <ClCompile Include="src\capture\capture.cpp" />
-    <ClCompile Include="src\capture\capture_audio.cpp" />
-    <ClCompile Include="src\capture\capture_midi.cpp" />
-    <ClCompile Include="src\capture\capture_video.cpp" />
-    <ClCompile Include="src\capture\image\image_capturer.cpp" />
-    <ClCompile Include="src\capture\image\image_saver.cpp" />
-    <ClCompile Include="src\capture\image\image_scaler.cpp" />
-    <ClCompile Include="src\capture\image\png_writer.cpp" />
-    <ClCompile Include="src\config\config.cpp" />
-    <ClCompile Include="src\config\setup.cpp" />
-    <ClCompile Include="src\cpu\callback.cpp" />
     <ClCompile Include="src\cpu\core_dyn_x86.cpp" />
     <ClCompile Include="src\cpu\core_dynrec.cpp" />
     <ClCompile Include="src\cpu\core_full.cpp" />
@@ -246,14 +225,7 @@
     <ClCompile Include="src\cpu\cpu.cpp">
       <ObjectFileName>$(IntDir)/src/cpu/cpu.cpp.obj</ObjectFileName>
     </ClCompile>
-    <ClCompile Include="src\cpu\flags.cpp" />
-    <ClCompile Include="src\cpu\mmx.cpp" />
-    <ClCompile Include="src\cpu\modrm.cpp" />
     <ClCompile Include="src\cpu\paging.cpp" />
-    <ClCompile Include="src\dos\cdrom.cpp" />
-    <ClCompile Include="src\dos\cdrom_image.cpp" />
-    <ClCompile Include="src\dos\cdrom_ioctl_linux.cpp" />
-    <ClCompile Include="src\dos\cdrom_win32.cpp" />
     <ClCompile Include="src\debugger\breakpoint.cpp" />
     <ClCompile Include="src\debugger\debugger.cpp" />
     <ClCompile Include="src\debugger\debugger_command.cpp" />
@@ -261,221 +233,19 @@
     <ClCompile Include="src\debugger\debugger_gui.cpp" />
     <ClCompile Include="src\debugger\debugger_keys.cpp" />
     <ClCompile Include="src\debugger\debugger_log.cpp" />
-    <ClCompile Include="src\dos\dos.cpp">
-      <ObjectFileName>$(IntDir)/src/dos/dos.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\dos\dos_classes.cpp" />
-    <ClCompile Include="src\dos\dos_code_page.cpp" />
-    <ClCompile Include="src\dos\dos_devices.cpp" />
     <ClCompile Include="src\dos\dos_execute.cpp" />
-    <ClCompile Include="src\dos\dos_files.cpp" />
-    <ClCompile Include="src\dos\dos_ioctl.cpp" />
-    <ClCompile Include="src\dos\dos_keyboard_layout.cpp" />
-    <ClCompile Include="src\dos\dos_locale.cpp" />
-    <ClCompile Include="src\dos\dos_locale_data.cpp" />
-    <ClCompile Include="src\dos\dos_memory.cpp" />
-    <ClCompile Include="src\dos\dos_misc.cpp" />
-    <ClCompile Include="src\dos\dos_mscdex.cpp" />
-    <ClCompile Include="src\dos\dos_programs.cpp" />
-    <ClCompile Include="src\dos\dos_tables.cpp" />
-    <ClCompile Include="src\dos\dos_windows.cpp" />
-    <ClCompile Include="src\dos\drive_cache.cpp" />
-    <ClCompile Include="src\dos\drive_fat.cpp" />
-    <ClCompile Include="src\dos\drive_iso.cpp" />
-    <ClCompile Include="src\dos\drive_local.cpp" />
-    <ClCompile Include="src\dos\drive_overlay.cpp" />
-    <ClCompile Include="src\dos\drive_virtual.cpp" />
-    <ClCompile Include="src\dos\drives.cpp" />
-    <ClCompile Include="src\dos\programs.cpp" />
-    <ClCompile Include="src\dos\programs\attrib.cpp" />
-    <ClCompile Include="src\dos\programs\autotype.cpp" />
-    <ClCompile Include="src\dos\programs\biostest.cpp" />
-    <ClCompile Include="src\dos\programs\boot.cpp" />
-    <ClCompile Include="src\dos\programs\choice.cpp" />
-    <ClCompile Include="src\dos\programs\clip.cpp" />
-    <ClCompile Include="src\dos\programs\help.cpp" />
-    <ClCompile Include="src\dos\programs\makeimg.cpp" />
-    <ClCompile Include="src\dos\programs\imgmount.cpp" />
-    <ClCompile Include="src\dos\programs\intro.cpp" />
-    <ClCompile Include="src\dos\programs\keyb.cpp" />
-    <ClCompile Include="src\dos\programs\loadfix.cpp" />
-    <ClCompile Include="src\dos\programs\loadrom.cpp" />
-    <ClCompile Include="src\dos\programs\ls.cpp" />
-    <ClCompile Include="src\dos\programs\mem.cpp" />
-    <ClCompile Include="src\dos\programs\mixer.cpp">
-      <ObjectFileName>$(IntDir)/src/dos/programs/mixer.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\dos\programs\mode.cpp" />
-    <ClCompile Include="src\dos\programs\more.cpp" />
-    <ClCompile Include="src\dos\programs\more_output.cpp" />
-    <ClCompile Include="src\dos\programs\mount.cpp" />
-    <ClCompile Include="src\dos\programs\mount_common.cpp" />
-    <ClCompile Include="src\dos\programs\mouse.cpp">
-      <ObjectFileName>$(IntDir)/src/dos/programs/mouse.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\dos\programs\mousectl.cpp" />
-    <ClCompile Include="src\dos\programs\move.cpp" />
-    <ClCompile Include="src\dos\programs\rescan.cpp" />
-    <ClCompile Include="src\dos\programs\serial.cpp" />
-    <ClCompile Include="src\dos\programs\setver.cpp" />
-    <ClCompile Include="src\dos\programs\showpic.cpp" />
-    <ClCompile Include="src\dos\programs\subst.cpp" />
-    <ClCompile Include="src\dos\programs\tree.cpp" />
-    <ClCompile Include="src\fpu\fpu.cpp" />
-    <ClCompile Include="src\gui\auto_image_adjustments.cpp" />
-    <ClCompile Include="src\gui\clipboard.cpp" />
-    <ClCompile Include="src\gui\mapper.cpp" />
-    <ClCompile Include="src\gui\sdl_gui.cpp" />
-    <ClCompile Include="src\gui\shader_manager.cpp" />
-    <ClCompile Include="src\gui\titlebar.cpp" />
-    <ClCompile Include="src\gui\render\deinterlacer.cpp" />
-    <ClCompile Include="src\gui\render\opengl_renderer.cpp" />
-    <ClCompile Include="src\gui\render\render.cpp" />
-    <ClCompile Include="src\gui\render\scaler\scalers.cpp" />
-    <ClCompile Include="src\gui\render\sdl_renderer.cpp" />
-    <ClCompile Include="src\hardware\audio\adlib_gold.cpp" />
-    <ClCompile Include="src\hardware\audio\cms.cpp" />
-    <ClCompile Include="src\hardware\audio\covox.cpp" />
-    <ClCompile Include="src\hardware\audio\disney.cpp" />
-    <ClCompile Include="src\hardware\audio\gus.cpp" />
-    <ClCompile Include="src\hardware\audio\imfc.cpp" />
-    <ClCompile Include="src\hardware\audio\innovation.cpp" />
-    <ClCompile Include="src\hardware\audio\lpt_dac.cpp" />
-    <ClCompile Include="src\hardware\audio\mame\saa1099.cpp" />
-    <ClCompile Include="src\hardware\audio\mame\sn76496.cpp" />
-    <ClCompile Include="src\hardware\audio\mpu401.cpp" />
-    <ClCompile Include="src\hardware\audio\opl.cpp" />
-    <ClCompile Include="src\hardware\audio\pcspeaker.cpp" />
-    <ClCompile Include="src\hardware\audio\pcspeaker_discrete.cpp" />
-    <ClCompile Include="src\hardware\audio\pcspeaker_impulse.cpp" />
-    <ClCompile Include="src\hardware\audio\ps1audio.cpp" />
-    <ClCompile Include="src\hardware\audio\soundblaster.cpp" />
-    <ClCompile Include="src\hardware\audio\speaker.cpp" />
-    <ClCompile Include="src\hardware\audio\ston1_dac.cpp" />
-    <ClCompile Include="src\hardware\audio\tandy_sound.cpp" />
-    <ClCompile Include="src\hardware\input\intel8042.cpp" />
-    <ClCompile Include="src\hardware\input\intel8255.cpp" />
-    <ClCompile Include="src\hardware\input\joystick.cpp" />
-    <ClCompile Include="src\hardware\input\keyboard.cpp" />
-    <ClCompile Include="src\hardware\input\keyboard_scancodes.cpp" />
-    <ClCompile Include="src\hardware\input\mouse.cpp">
-      <ObjectFileName>$(IntDir)/src/hardware/input/mouse.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\hardware\input\mouse_common.cpp" />
-    <ClCompile Include="src\hardware\input\mouse_config.cpp" />
-    <ClCompile Include="src\hardware\input\mouse_interfaces.cpp" />
-    <ClCompile Include="src\hardware\input\mouse_manymouse.cpp" />
-    <ClCompile Include="src\hardware\input\mouseif_dos_driver.cpp" />
-    <ClCompile Include="src\hardware\input\mouseif_dos_driver_state.cpp" />
-    <ClCompile Include="src\hardware\input\mouseif_ps2_bios.cpp" />
-    <ClCompile Include="src\hardware\input\mouseif_virtual_machines.cpp" />
     <ClCompile Include="src\hardware\network\ipx.cpp" />
-    <ClCompile Include="src\hardware\network\ipxserver.cpp" />
-    <ClCompile Include="src\hardware\network\ne2000.cpp" />
-    <ClCompile Include="src\hardware\serialport\misc_util.cpp" />
-    <ClCompile Include="src\hardware\serialport\nullmodem.cpp" />
-    <ClCompile Include="src\hardware\serialport\serialdummy.cpp" />
-    <ClCompile Include="src\hardware\serialport\serialmouse.cpp" />
-    <ClCompile Include="src\hardware\serialport\serialport.cpp" />
-    <ClCompile Include="src\hardware\serialport\softmodem.cpp" />
-    <ClCompile Include="src\hardware\video\reelmagic\driver.cpp" />
-    <ClCompile Include="src\hardware\video\reelmagic\player.cpp" />
-    <ClCompile Include="src\hardware\video\reelmagic\video_mixer.cpp" />
-    <ClCompile Include="src\hardware\video\vga.cpp" />
-    <ClCompile Include="src\hardware\video\vga_attr.cpp" />
     <ClCompile Include="src\hardware\video\vga_crtc.cpp" />
-    <ClCompile Include="src\hardware\video\vga_dac.cpp" />
-    <ClCompile Include="src\hardware\video\vga_draw.cpp" />
-    <ClCompile Include="src\hardware\video\vga_gfx.cpp" />
     <ClCompile Include="src\hardware\video\vga_memory.cpp" />
-    <ClCompile Include="src\hardware\video\vga_misc.cpp" />
-    <ClCompile Include="src\hardware\video\vga_other.cpp" />
-    <ClCompile Include="src\hardware\video\vga_paradise.cpp" />
-    <ClCompile Include="src\hardware\video\vga_s3.cpp" />
-    <ClCompile Include="src\hardware\video\vga_seq.cpp" />
-    <ClCompile Include="src\hardware\video\vga_tseng.cpp" />
-    <ClCompile Include="src\hardware\video\vga_xga.cpp" />
     <ClCompile Include="src\hardware\video\voodoo.cpp" />
-    <ClCompile Include="src\hardware\cmos.cpp" />
     <ClCompile Include="src\hardware\dma.cpp" />
-    <ClCompile Include="src\hardware\ide.cpp" />
     <ClCompile Include="src\hardware\memory.cpp">
       <ObjectFileName>$(IntDir)/src/hardware/memory.cpp.obj</ObjectFileName>
     </ClCompile>
     <ClCompile Include="src\hardware\pci_bus.cpp" />
-    <ClCompile Include="src\hardware\pic.cpp" />
-    <ClCompile Include="src\hardware\port.cpp" />
-    <ClCompile Include="src\hardware\port_containers.cpp" />
-    <ClCompile Include="src\hardware\timer.cpp" />
-    <ClCompile Include="src\hardware\virtualbox.cpp" />
-    <ClCompile Include="src\hardware\vmware.cpp" />
-    <ClCompile Include="src\ints\bios.cpp" />
-    <ClCompile Include="src\ints\bios_disk.cpp" />
-    <ClCompile Include="src\ints\bios_keyboard.cpp" />
-    <ClCompile Include="src\ints\bios_pci.cpp" />
     <ClCompile Include="src\ints\ems.cpp" />
-    <ClCompile Include="src\ints\int10.cpp" />
-    <ClCompile Include="src\ints\int10_char.cpp" />
-    <ClCompile Include="src\ints\int10_memory.cpp" />
-    <ClCompile Include="src\ints\int10_misc.cpp" />
-    <ClCompile Include="src\ints\int10_modes.cpp" />
-    <ClCompile Include="src\ints\int10_pal.cpp" />
-    <ClCompile Include="src\ints\int10_put_pixel.cpp" />
-    <ClCompile Include="src\ints\int10_vesa.cpp" />
-    <ClCompile Include="src\ints\int10_video_state.cpp" />
-    <ClCompile Include="src\ints\int10_vptable.cpp" />
-    <ClCompile Include="src\ints\xms.cpp" />
-    <ClCompile Include="src\midi\alsa.cpp" />
-    <ClCompile Include="src\midi\coreaudio.cpp" />
-    <ClCompile Include="src\midi\coremidi.cpp" />
-    <ClCompile Include="src\midi\fluidsynth.cpp" />
-    <ClCompile Include="src\midi\midi.cpp" />
-    <ClCompile Include="src\midi\mt32.cpp" />
-    <ClCompile Include="src\midi\mt32_lasynth_model.cpp" />
-    <ClCompile Include="src\midi\soundcanvas.cpp" />
-    <ClCompile Include="src\midi\win32.cpp" />
-    <ClCompile Include="src\network\ethernet.cpp" />
-    <ClCompile Include="src\network\ethernet_slirp.cpp" />
-    <ClCompile Include="src\misc\ansi_code_markup.cpp" />
-    <ClCompile Include="src\misc\console.cpp" />
-    <ClCompile Include="src\misc\cross.cpp" />
-    <ClCompile Include="src\misc\dos_rwops.cpp" />
-    <ClCompile Include="src\misc\fs_utils.cpp" />
-    <ClCompile Include="src\misc\fs_utils_posix.cpp" />
-    <ClCompile Include="src\misc\fs_utils_win32.cpp" />
-    <ClCompile Include="src\misc\help_util.cpp" />
-    <ClCompile Include="src\misc\host_locale.cpp" />
-    <ClCompile Include="src\misc\host_locale_macos.cpp" />
-    <ClCompile Include="src\misc\host_locale_posix.cpp" />
-    <ClCompile Include="src\misc\host_locale_win32.cpp" />
-    <ClCompile Include="src\misc\image_decoder.cpp" />
-    <ClCompile Include="src\misc\iso_locale_codes.cpp" />
-    <ClCompile Include="src\misc\messages.cpp" />
-    <ClCompile Include="src\misc\messages_adjust.cpp" />
-    <ClCompile Include="src\misc\messages_po_entry.cpp" />
-    <ClCompile Include="src\misc\rwqueue.cpp" />
     <ClCompile Include="src\misc\support.cpp" />
-    <ClCompile Include="src\misc\unicode.cpp" />
-    <ClCompile Include="src\misc\unicode_encodings.cpp" />
-    <ClCompile Include="src\misc\video.cpp" />
-    <ClCompile Include="src\shell\autoexec.cpp" />
-    <ClCompile Include="src\shell\command_line.cpp" />
-    <ClCompile Include="src\shell\file_reader.cpp" />
-    <ClCompile Include="src\shell\shell.cpp" />
-    <ClCompile Include="src\shell\shell_batch.cpp" />
     <ClCompile Include="src\shell\shell_cmds.cpp" />
-    <ClCompile Include="src\shell\shell_history.cpp" />
-    <ClCompile Include="src\shell\shell_misc.cpp" />
-    <ClCompile Include="src\utils\env_utils.cpp" />
-    <ClCompile Include="src\utils\string_utils.cpp" />
-    <ClCompile Include="src\webserver\bridge.cpp" />
-    <ClCompile Include="src\webserver\webserver.cpp" />
-    <ClCompile Include="src\webserver\cpu.cpp">
-      <ObjectFileName>$(IntDir)/src/webserver/cpu.cpp.obj</ObjectFileName>
-    </ClCompile>
-    <ClCompile Include="src\webserver\memory.cpp">
-      <ObjectFileName>$(IntDir)/src/webserver/memory.cpp.obj</ObjectFileName>
-    </ClCompile>
     <ClCompile Include="src\webserver\dos.cpp">
       <ObjectFileName>$(IntDir)/src/webserver/dos.cpp.obj</ObjectFileName>
     </ClCompile>
@@ -538,30 +308,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\dosbox_config.h" />
-    <ClInclude Include="include\unistd.h" />
-    <ClInclude Include="src\audio\audio_frame.h" />
-    <ClInclude Include="src\audio\channel_names.h" />
-    <ClInclude Include="src\audio\clap\event_list.h" />
-    <ClInclude Include="src\audio\clap\library.h" />
-    <ClInclude Include="src\audio\clap\plugin.h" />
-    <ClInclude Include="src\audio\clap\plugin_manager.h" />
-    <ClInclude Include="src\audio\disk_noise.h" />
-    <ClInclude Include="src\audio\mixer.h" />
-    <ClInclude Include="src\audio\opl_capture.h" />
-    <ClInclude Include="src\audio\private\compressor.h" />
-    <ClInclude Include="src\audio\private\envelope.h" />
-    <ClInclude Include="src\audio\private\noise_gate.h" />
-    <ClInclude Include="src\capture\capture.h" />
-    <ClInclude Include="src\capture\image\image_capturer.h" />
-    <ClInclude Include="src\capture\image\image_saver.h" />
-    <ClInclude Include="src\capture\image\image_scaler.h" />
-    <ClInclude Include="src\capture\image\png_writer.h" />
-    <ClInclude Include="src\capture\private\capture_audio.h" />
-    <ClInclude Include="src\capture\private\capture_midi.h" />
-    <ClInclude Include="src\capture\private\capture_video.h" />
-    <ClInclude Include="src\config\config.h" />
-    <ClInclude Include="src\config\setup.h" />
-    <ClInclude Include="src\cpu\callback.h" />
     <ClInclude Include="src\cpu\core_dynrec\decoder.h" />
     <ClInclude Include="src\cpu\core_dynrec\decoder_basic.h" />
     <ClInclude Include="src\cpu\core_dynrec\decoder_opcodes.h" />
@@ -624,204 +370,11 @@
     <ClInclude Include="src\debugger\debugvar.h" />
     <ClInclude Include="src\debugger\IBM_VGA_8x16.h" />
     <ClInclude Include="src\dosbox.h" />
-    <ClInclude Include="src\dos\cdrom.h" />
-    <ClInclude Include="src\dos\cdrom_image.h" />
-    <ClInclude Include="src\dos\cdrom_mds.h" />
-    <ClInclude Include="src\dos\dev_con.h" />
-    <ClInclude Include="src\dos\dos.h" />
-    <ClInclude Include="src\dos\dos_code_page.h" />
-    <ClInclude Include="src\dos\dos_files.h" />
-    <ClInclude Include="src\dos\dos_keyboard_layout.h" />
-    <ClInclude Include="src\dos\dos_locale.h" />
-    <ClInclude Include="src\dos\dos_memory.h" />
-    <ClInclude Include="src\dos\dos_mscdex.h" />
-    <ClInclude Include="src\dos\dos_system.h" />
-    <ClInclude Include="src\dos\dos_windows.h" />
-    <ClInclude Include="src\dos\drives.h" />
-    <ClInclude Include="src\dos\drive_local.h" />
-    <ClInclude Include="src\dos\programs.h" />
-    <ClInclude Include="src\dos\programs\attrib.h" />
-    <ClInclude Include="src\dos\programs\autotype.h" />
-    <ClInclude Include="src\dos\programs\biostest.h" />
-    <ClInclude Include="src\dos\programs\boot.h" />
-    <ClInclude Include="src\dos\programs\choice.h" />
-    <ClInclude Include="src\dos\programs\clip.h" />
-    <ClInclude Include="src\dos\programs\help.h" />
-    <ClInclude Include="src\dos\programs\imgmount.h" />
-    <ClInclude Include="src\dos\programs\intro.h" />
-    <ClInclude Include="src\dos\programs\keyb.h" />
-    <ClInclude Include="src\dos\programs\loadfix.h" />
-    <ClInclude Include="src\dos\programs\loadrom.h" />
-    <ClInclude Include="src\dos\programs\ls.h" />
-    <ClInclude Include="src\dos\programs\makeimg.h" />
-    <ClInclude Include="src\dos\programs\mem.h" />
-    <ClInclude Include="src\dos\programs\mixer.h" />
-    <ClInclude Include="src\dos\programs\mode.h" />
-    <ClInclude Include="src\dos\programs\more.h" />
-    <ClInclude Include="src\dos\programs\more_output.h" />
-    <ClInclude Include="src\dos\programs\mount.h" />
-    <ClInclude Include="src\dos\programs\mount_common.h" />
-    <ClInclude Include="src\dos\programs\mouse.h" />
-    <ClInclude Include="src\dos\programs\mousectl.h" />
-    <ClInclude Include="src\dos\programs\move.h" />
-    <ClInclude Include="src\dos\programs\rescan.h" />
-    <ClInclude Include="src\dos\programs\serial.h" />
-    <ClInclude Include="src\dos\programs\setver.h" />
-    <ClInclude Include="src\dos\programs\showpic.h" />
-    <ClInclude Include="src\dos\programs\subst.h" />
-    <ClInclude Include="src\dos\programs\tree.h" />
-    <ClInclude Include="src\fpu\fpu.h" />
-    <ClInclude Include="src\fpu\fpu_instructions.h" />
-    <ClInclude Include="src\fpu\fpu_instructions_x86.h" />
-    <ClInclude Include="src\gui\clipboard.h" />
-    <ClInclude Include="src\gui\common.h" />
-    <ClInclude Include="src\gui\mapper.h" />
-    <ClInclude Include="src\gui\private\auto_image_adjustments.h" />
-    <ClInclude Include="src\gui\private\common.h" />
-    <ClInclude Include="src\gui\private\sdl_gui.h" />
-    <ClInclude Include="src\gui\private\shader_manager.h" />
-    <ClInclude Include="src\gui\render\opengl_renderer.h" />
-    <ClInclude Include="src\gui\render\private\deinterlacer.h" />
-    <ClInclude Include="src\gui\render\render.h" />
-    <ClInclude Include="src\gui\render\render_backend.h" />
-    <ClInclude Include="src\gui\render\scaler\scalers.h" />
-    <ClInclude Include="src\gui\render\scaler\simple.h" />
-    <ClInclude Include="src\gui\render\scaler\templates.h" />
-    <ClInclude Include="src\gui\render\sdl_renderer.h" />
-    <ClInclude Include="src\gui\titlebar.h" />
-    <ClInclude Include="src\hardware\audio\gus.h" />
-    <ClInclude Include="src\hardware\audio\imfc.h" />
-    <ClInclude Include="src\hardware\audio\innovation.h" />
-    <ClInclude Include="src\hardware\audio\lpt_dac.h" />
-    <ClInclude Include="src\hardware\audio\mpu401.h" />
-    <ClInclude Include="src\hardware\audio\opl.h" />
-    <ClInclude Include="src\hardware\audio\pcspeaker.h" />
-    <ClInclude Include="src\hardware\audio\private\adlib_gold.h" />
-    <ClInclude Include="src\hardware\audio\private\cms.h" />
-    <ClInclude Include="src\hardware\audio\private\covox.h" />
-    <ClInclude Include="src\hardware\audio\private\disney.h" />
-    <ClInclude Include="src\hardware\audio\private\gus.h" />
-    <ClInclude Include="src\hardware\audio\private\innovation.h" />
-    <ClInclude Include="src\hardware\audio\private\lpt_dac.h" />
-    <ClInclude Include="src\hardware\audio\private\mame\emu.h" />
-    <ClInclude Include="src\hardware\audio\private\mame\saa1099.h" />
-    <ClInclude Include="src\hardware\audio\private\mame\sn76496.h" />
-    <ClInclude Include="src\hardware\audio\private\pcspeaker.h" />
-    <ClInclude Include="src\hardware\audio\private\pcspeaker_discrete.h" />
-    <ClInclude Include="src\hardware\audio\private\pcspeaker_impulse.h" />
-    <ClInclude Include="src\hardware\audio\private\ps1audio.h" />
-    <ClInclude Include="src\hardware\audio\private\soundblaster.h" />
-    <ClInclude Include="src\hardware\audio\private\ston1_dac.h" />
-    <ClInclude Include="src\hardware\audio\private\tandy_sound.h" />
-    <ClInclude Include="src\hardware\audio\ps1audio.h" />
-    <ClInclude Include="src\hardware\audio\soundblaster.h" />
-    <ClInclude Include="src\hardware\audio\speaker.h" />
-    <ClInclude Include="src\hardware\audio\tandy_sound.h" />
-    <ClInclude Include="src\hardware\cmos.h" />
-    <ClInclude Include="src\hardware\dma.h" />
-    <ClInclude Include="src\hardware\ide.h" />
-    <ClInclude Include="src\hardware\input\joystick.h" />
-    <ClInclude Include="src\hardware\input\keyboard.h" />
-    <ClInclude Include="src\hardware\input\mouse.h" />
-    <ClInclude Include="src\hardware\input\private\intel8042.h" />
-    <ClInclude Include="src\hardware\input\private\intel8255.h" />
-    <ClInclude Include="src\hardware\input\private\mouseif_dos_driver_state.h" />
-    <ClInclude Include="src\hardware\input\private\mouse_common.h" />
-    <ClInclude Include="src\hardware\input\private\mouse_config.h" />
-    <ClInclude Include="src\hardware\input\private\mouse_interfaces.h" />
-    <ClInclude Include="src\hardware\input\private\mouse_manymouse.h" />
-    <ClInclude Include="src\hardware\lpt.h" />
-    <ClInclude Include="src\hardware\memory.h" />
     <ClInclude Include="src\hardware\network\ipx.h" />
     <ClInclude Include="src\hardware\network\ipxserver.h" />
-    <ClInclude Include="src\hardware\network\ne2000.h" />
-    <ClInclude Include="src\hardware\network\net_defs.h" />
     <ClInclude Include="src\hardware\pci_bus.h" />
-    <ClInclude Include="src\hardware\pic.h" />
-    <ClInclude Include="src\hardware\port.h" />
-    <ClInclude Include="src\hardware\serialport\misc_util.h" />
-    <ClInclude Include="src\hardware\serialport\nullmodem.h" />
-    <ClInclude Include="src\hardware\serialport\serialdummy.h" />
-    <ClInclude Include="src\hardware\serialport\serialmouse.h" />
-    <ClInclude Include="src\hardware\serialport\serialport.h" />
-    <ClInclude Include="src\hardware\serialport\softmodem.h" />
     <ClInclude Include="src\hardware\timer.h" />
-    <ClInclude Include="src\hardware\video\reelmagic\player.h" />
-    <ClInclude Include="src\hardware\video\reelmagic\reelmagic.h" />
-    <ClInclude Include="src\hardware\video\vga.h" />
-    <ClInclude Include="src\hardware\video\voodoo.h" />
-    <ClInclude Include="src\hardware\virtualbox.h" />
-    <ClInclude Include="src\hardware\vmware.h" />
-    <ClInclude Include="src\ints\bios.h" />
-    <ClInclude Include="src\ints\bios_disk.h" />
-    <ClInclude Include="src\ints\ems.h" />
-    <ClInclude Include="src\ints\int10.h" />
-    <ClInclude Include="src\ints\xms.h" />
-    <ClInclude Include="src\midi\midi.h" />
-    <ClInclude Include="src\midi\private\alsa.h" />
-    <ClInclude Include="src\midi\private\coreaudio.h" />
-    <ClInclude Include="src\midi\private\coremidi.h" />
-    <ClInclude Include="src\midi\private\fluidsynth.h" />
-    <ClInclude Include="src\midi\private\midi_device.h" />
-    <ClInclude Include="src\midi\private\mt32.h" />
-    <ClInclude Include="src\midi\private\mt32_lasynth_model.h" />
-    <ClInclude Include="src\midi\private\soundcanvas.h" />
-    <ClInclude Include="src\midi\private\win32.h" />
-    <ClInclude Include="src\misc\ansi_code_markup.h" />
-    <ClInclude Include="src\misc\compiler.h" />
-    <ClInclude Include="src\misc\console.h" />
-    <ClInclude Include="src\misc\cross.h" />
-    <ClInclude Include="src\misc\dos_rwops.h" />
-    <ClInclude Include="src\misc\help_util.h" />
-    <ClInclude Include="src\misc\host_locale.h" />
-    <ClInclude Include="src\misc\image_decoder.h" />
-    <ClInclude Include="src\misc\iso_locale_codes.h" />
-    <ClInclude Include="src\misc\logging.h" />
-    <ClInclude Include="src\misc\messages.h" />
-    <ClInclude Include="src\misc\notifications.h" />
-    <ClInclude Include="src\misc\private\messages_adjust.h" />
-    <ClInclude Include="src\misc\private\messages_po_entry.h" />
-    <ClInclude Include="src\misc\private\unicode_encodings.h" />
-    <ClInclude Include="src\misc\rendered_image.h" />
-    <ClInclude Include="src\misc\std_filesystem.h" />
     <ClInclude Include="src\misc\support.h" />
-    <ClInclude Include="src\misc\types.h" />
-    <ClInclude Include="src\misc\unicode.h" />
-    <ClInclude Include="src\misc\video.h" />
-    <ClInclude Include="src\network\ethernet.h" />
-    <ClInclude Include="src\network\ethernet_slirp.h" />
-    <ClInclude Include="src\platform\windows\visualc\unistd.h" />
-    <ClInclude Include="src\shell\autoexec.h" />
-    <ClInclude Include="src\shell\command_line.h" />
-    <ClInclude Include="src\shell\file_reader.h" />
-    <ClInclude Include="src\shell\shell.h" />
-    <ClInclude Include="src\utils\ascii.h" />
-    <ClInclude Include="src\utils\bgrx8888.h" />
-    <ClInclude Include="src\utils\bitops.h" />
-    <ClInclude Include="src\utils\bit_view.h" />
-    <ClInclude Include="src\utils\byteorder.h" />
-    <ClInclude Include="src\utils\checks.h" />
-    <ClInclude Include="src\utils\dynlib.h" />
-    <ClInclude Include="src\utils\env_utils.h" />
-    <ClInclude Include="src\utils\fraction.h" />
-    <ClInclude Include="src\utils\fs_utils.h" />
-    <ClInclude Include="src\utils\math_utils.h" />
-    <ClInclude Include="src\utils\mem_host.h" />
-    <ClInclude Include="src\utils\mem_unaligned.h" />
-    <ClInclude Include="src\utils\rect.h" />
-    <ClInclude Include="src\utils\rgb.h" />
-    <ClInclude Include="src\utils\rgb555.h" />
-    <ClInclude Include="src\utils\rgb565.h" />
-    <ClInclude Include="src\utils\rgb666.h" />
-    <ClInclude Include="src\utils\rgb888.h" />
-    <ClInclude Include="src\utils\ring_buffer.h" />
-    <ClInclude Include="src\utils\rwqueue.h" />
-    <ClInclude Include="src\utils\string_utils.h" />
-    <ClInclude Include="src\webserver\bridge.h" />
-    <ClInclude Include="src\webserver\cpu.h" />
-    <ClInclude Include="src\webserver\dos.h" />
-    <ClInclude Include="src\webserver\memory.h" />
-    <ClInclude Include="src\webserver\webserver.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

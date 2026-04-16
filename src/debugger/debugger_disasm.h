@@ -59,7 +59,7 @@ struct DecodedLine {
 	cs_insn *cs_instruction = nullptr;
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
 	char szOpcode[25] = "";
-	char szInstruction[32] = "";
+	char szInstruction[128] = "";
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 	MEM_ACCESS mem_access[NUM_MEM_OPS];
