@@ -31,14 +31,15 @@ typedef enum Mnemonic_Mask : uint32_t {
 	MM_CMP		        = 0x00000040,
 	MM_LOOP				= 0x00000080,
 	MM_REP				= 0x00000100,
-	MM_Logical	        = 0x00000200,
-	MM_Math				= 0x00000400,
-	MM_Stack	        = 0x00000800,
-	MM_Call_Label		= 0x00001000,
-	MM_Jump_Label		= 0x00002000,
-	MM_Data_Label		= 0x00004000,
-	MM_Has_Segment		= 0x00008000,
-	MM_Memory_Access	= 0x00010000,
+	MM_ALIGN	        = 0x00000200,
+	MM_Logical	        = 0x00000400,
+	MM_Math				= 0x00000800,
+	MM_Stack	        = 0x00001000,
+	MM_Call_Label		= 0x00002000,
+	MM_Jump_Label		= 0x00004000,
+	MM_Data_Label		= 0x00008000,
+	MM_Has_Segment		= 0x00010000,
+	MM_Memory_Access	= 0x00020000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL | MM_LOOP,
 	MM_Label			= MM_Call_Label | MM_Jump_Label,
 } MNEMONIC_MASK;
@@ -59,7 +60,7 @@ struct DecodedLine {
 	cs_insn *cs_instruction = nullptr;
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
 	char szOpcode[25] = "";
-	char szInstruction[128] = "";
+	char szInstruction[265] = "";
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 	MEM_ACCESS mem_access[NUM_MEM_OPS];
