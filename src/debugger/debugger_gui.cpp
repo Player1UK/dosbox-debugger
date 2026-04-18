@@ -179,6 +179,8 @@ static void SaveMemoryState( ) {
 	savedMemorySize = data_buffer.size( );
 }
 
+static bool fTemporaryDataSegment = false;
+
 static void CheckSegmentRegisters( ) {
 	for( SegNames seg_name = static_cast<SegNames>( 0 ); seg_name <= SegNames::gs; seg_name = static_cast<SegNames>( seg_name + 1 ) ) {
 		uint16_t seg_val = RealSegValue( seg_name );
@@ -187,7 +189,14 @@ static void CheckSegmentRegisters( ) {
 			if( it != ordered_segments.end( ) ) {
 				if( cs == seg_name && it->extra.type != SEG_CODE )
 					const_cast<SEGTYPE &>( it->extra.type ) = SEG_CODE;
+				else if( ds == seg_name && fTemporaryDataSegment )
+					fTemporaryDataSegment = false;
 			} else {
+				if( fTemporaryDataSegment && ds == seg_name ) {
+					fTemporaryDataSegment = false;
+					ordered_segments.extract( { dbg.segment[SEG_DATA], {} } );
+					dbg.segment[SEG_DATA] = seg_val;
+				}
 				ordered_segments.insert( { seg_val, { ( cs == seg_name ? SEG_CODE : ss == seg_name ? SEG_STACK : SEG_DATA ), 0U } } );
 				if( ss == seg_name ) {
 					uint16_t seg_end = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
@@ -321,6 +330,11 @@ static void DrawCode( ) {
 				selectedIndex = i;
 			}
 			if( currentSegment != dline.realAddress.segment ) { // match segment to defined segments
+				if( currentSegment ) {
+					ImGui::Spacing( );
+					ImGui::Separator( );
+					ImGui::Spacing( );
+				}
 				currentSegment = dline.realAddress.segment;
 				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
 				if( ordered_segment != ordered_segments.end( ) )
@@ -972,7 +986,7 @@ static void DrawRegisters( ) {
 	EndSubWindow( WIN_REG );
 }
 
-const char seg_label[NUM_SEG_TYPES][4] = { "   ", "CS:", "DS:", "SS:", "SP:", "HP:", "PS:", "En:", "   " };
+const char seg_label[NUM_SEG_TYPES][4] = { "   ", "En:", "PS:", "CS:", "SS:", "SP:", "HP:", "DS:", "   " };
 
 static void DrawSegments( ) {
 	if( BeginSubWindow( WIN_SEG, "Segments", ImGuiWindowFlags_NoNav ) ) {
@@ -1391,6 +1405,7 @@ bool DBGUI_StartUp( ) {
 	dbg.segment[SEG_BASE] = 0U;
 	dbg.segment[SEG_MAX] = static_cast<uint16_t>( -1 );
 	dbg.segment[SEG_CODE] = RealSegValue( cs );
+	dbg.segment[SEG_DATA] = RealSegValue( ds );
 	dbg.segment[SEG_PSP] = RealSegValue( es ); // could also use es or ds segments, or dos.psp( )
 	dbg.segment[SEG_STACK] = RealSegValue( ss );
 	dbg.segment[SEG_STACK_END] = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
@@ -1474,11 +1489,23 @@ bool DBGUI_StartUp( ) {
 	return imgui_initialized;
 }
 
+void TemporaryDataSegment( ) {
+	if( dbg.segment[SEG_DATA] && dbg.segment[SEG_DATA] != dbg.segment[SEG_PSP] )
+		return;
+	auto dline = DecodedLine::last( );
+	uint32_t address = dline.address + dline.instruction.length;
+	dbg.segment[SEG_DATA] = ( address >> 4U ) + ( address & 0x0000000F ? 1U : 0U );
+	ordered_segments.insert( { dbg.segment[SEG_DATA], { SEG_DATA, 0U } } );
+	fTemporaryDataSegment = true;
+}
+
 void DBGUI_Shutdown( ) {
 	if( !imgui_initialized )
 		return;
 
 	DBGUI_Reset( );
+
+	DasmShutdown( );
 
 	ImGui_ImplSDLGPU3_Shutdown( );
 	ImGui_ImplSDL3_Shutdown( );

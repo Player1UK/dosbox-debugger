@@ -256,9 +256,6 @@
     <ClCompile Include="src\gui\mapper.cpp">
       <Filter>Source Files\gui</Filter>
     </ClCompile>
-    <ClCompile Include="src\gui\sdl_gui.cpp">
-      <Filter>Source Files\gui</Filter>
-    </ClCompile>
     <ClCompile Include="src\gui\shader_manager.cpp">
       <Filter>Source Files\gui</Filter>
     </ClCompile>

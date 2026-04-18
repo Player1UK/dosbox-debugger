@@ -86,6 +86,7 @@ extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const 
 extern void DasmReset( );
 extern void DasmRecursiveDisassemble( const uint32_t, const uint32_t, const bool, const bool );
 extern void DasmUnDisassemble( const uint32_t );
+extern void DasmShutdown( );
 
 struct SegmentInfo {
 	const SEGTYPE type;

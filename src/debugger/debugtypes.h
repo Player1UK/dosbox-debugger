@@ -4,13 +4,23 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
-
 typedef struct Address_Pair {
 	uint16_t segment = 0U;
 	uint32_t offset = 0U;
 
 	bool operator==( const Address_Pair &other ) const {
 		return this->segment == other.segment && this->offset == other.offset;
+	}
+	Address_Pair &operator++( ) { // Prefix increment
+		++offset;
+		return *this;
+	}
+	Address_Pair &operator+=( const uint32_t value ) {
+		offset += value;
+		return *this;
+	}
+	uint32_t address( ) const {
+		return offset + ( segment << 4U );
 	}
 } ADDRESS_PAIR;
 
@@ -55,13 +65,13 @@ typedef enum Run_Type : uint8_t {
 
 typedef enum SegType : uint8_t {
 	SEG_BASE = 0U,
+	SEG_ENV,
+	SEG_PSP,
 	SEG_CODE,
-	SEG_DATA,
 	SEG_STACK,
 	SEG_STACK_END,
 	SEG_HEAP,
-	SEG_PSP,
-	SEG_ENV,
+	SEG_DATA,
 	SEG_MAX,
 	NUM_SEG_TYPES
 } SEGTYPE;
@@ -73,7 +83,6 @@ typedef enum Size_Type : uint8_t {
 	SIZE_WORD		= 2u,
 	SIZE_DWORD		= 4u
 } SIZE_TYPE;
-
 #endif // C_DEBUGGER
 
 #endif // DOSBOX_DEBUGTYPES_H

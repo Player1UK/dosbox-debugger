@@ -30,6 +30,7 @@ bool skipInterrupts = false;
 // Event queue
 std::queue<DebuggerInputEvent> debugger_event_queue = {};
 const int64_t frameInterval = 1000 / 60;
+static int64_t tickCounter = 0;
 
 Bitu DEBUG_Loop( void ) {
 	if( !GFX_PollAndHandleEvents( ) )
@@ -71,13 +72,12 @@ Bitu DEBUG_Loop( void ) {
 			break;
 		}
 	}
-	static auto tickCounter = GetTicks( );
 	if( forceDraw || ( debugging && GetTicksSince( tickCounter ) > frameInterval ) ) {
 		forceDraw = false;
 		DBGUI_NewFrame( ); // Start a new ImGui frame
 		DBGUI_DrawScreen( ); // Draw debugger windows
 		DBGUI_Render( ); // Render ImGui
-		tickCounter += frameInterval;
+		tickCounter = GetTicks( );
 	}
 	if( exitDebugLoop ) {
 		exitDebugLoop = false;
@@ -104,6 +104,8 @@ void DEBUG_HideDOSBox( ) {
 	dbg.graphics_window_hidden = true;
 }
 
+extern void TemporaryDataSegment( );
+
 void DEBUG_Enable( bool pressed ) {
 	if( !pressed )
 		return;
@@ -128,11 +130,13 @@ void DEBUG_Enable( bool pressed ) {
 		was_help_shown = true;
 	}
 	debugging = true;
+	tickCounter = GetTicks( );
 	DOSBOX_SetLoop( &DEBUG_Loop ); // Start the debugging loop
 
 	KEYBOARD_ClrBuffer( );
 
 	DEBUG_NewInstruction( );
+	TemporaryDataSegment( );
 }
 
 void DEBUG_Close( ) {

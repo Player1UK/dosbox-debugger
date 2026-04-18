@@ -64,6 +64,9 @@
     <ClCompile Include="src\dos\dos_execute.cpp">
       <Filter>Source Files\dos</Filter>
     </ClCompile>
+    <ClCompile Include="src\gui\sdl_gui.cpp">
+      <Filter>Source Files\gui</Filter>
+    </ClCompile>
     <ClCompile Include="src\hardware\network\ipx.cpp">
       <Filter>Source Files\hardware\network</Filter>
     </ClCompile>
@@ -122,6 +125,9 @@
     </Filter>
     <Filter Include="Source Files\dos">
       <UniqueIdentifier>{bbdb6f3c-96d7-41cf-97e4-742eb118f75c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\gui">
+      <UniqueIdentifier>{d4f28efe-61f1-4009-a19b-f4e932210b5f}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\hardware">
       <UniqueIdentifier>{ed75fc0a-7ef1-42b1-89af-70314e667a25}</UniqueIdentifier>

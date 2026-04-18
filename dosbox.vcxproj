@@ -234,6 +234,7 @@
     <ClCompile Include="src\debugger\debugger_keys.cpp" />
     <ClCompile Include="src\debugger\debugger_log.cpp" />
     <ClCompile Include="src\dos\dos_execute.cpp" />
+    <ClCompile Include="src\gui\sdl_gui.cpp" />
     <ClCompile Include="src\hardware\network\ipx.cpp" />
     <ClCompile Include="src\hardware\video\vga_crtc.cpp" />
     <ClCompile Include="src\hardware\video\vga_memory.cpp" />

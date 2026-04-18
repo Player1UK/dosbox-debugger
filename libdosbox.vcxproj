@@ -256,7 +256,6 @@
     <ClCompile Include="src\gui\auto_image_adjustments.cpp" />
     <ClCompile Include="src\gui\clipboard.cpp" />
     <ClCompile Include="src\gui\mapper.cpp" />
-    <ClCompile Include="src\gui\sdl_gui.cpp" />
     <ClCompile Include="src\gui\shader_manager.cpp" />
     <ClCompile Include="src\gui\titlebar.cpp" />
     <ClCompile Include="src\gui\render\deinterlacer.cpp" />

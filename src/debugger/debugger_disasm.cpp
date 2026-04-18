@@ -55,7 +55,7 @@ const DecodedLine & DecodedLine::first( ) {
     currentLine = ordered_code.begin( );
     return currentLine->extra;
 }
-const DecodedLine &DecodedLine::last( ) {
+const DecodedLine & DecodedLine::last( ) {
     currentLine = ordered_code.end( );
     --currentLine;
     return currentLine->extra;
@@ -158,7 +158,11 @@ static ZydisDecodedOperand imm_operand = {
     ZYDIS_OPERAND_TYPE_IMMEDIATE, { }   // type
 };
 
-static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const csh &cs_handle, const ZydisDecoder &decoder, const ZydisFormatter &formatter ) {
+static csh cs_handle = 0U;
+static ZydisDecoder decoder;
+static ZydisFormatter formatter;
+
+static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t ip ) {
     uint32_t primary_length = 0U;
     std::vector<ADDRESS_PAIR> toVisit{ { static_cast<uint16_t>( ( startOffset - ip ) >> 4 ), ip } };
     std::unordered_set<uint32_t> added;
@@ -182,9 +186,8 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
 
             if( binary[address] == 0 && binary[address + 1] == 0 ) // 00 00
                 break;
-            {
-                const auto nh = ordered_code.extract( { address, {} } );
-            }
+
+            ordered_code.extract( { address, {} } );
             auto entry = ordered_code.insert( { address, DecodedLine( realAddress, address ) } );
             if( !entry.second ) // insert failed
                 break;
@@ -194,15 +197,15 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
                 for( auto i = 0; i < dline.instruction.length; ++i ) {
                     pOpCode += sprintf( pOpCode, "%02X ", binary[address + i] );
                     if( i ) {
-                        const auto nh = ordered_code.extract( { address + i, {} } );
-                        const auto nhv = visited.extract( address + i );
+                        ordered_code.extract( { address + i, {} } );
+                        visited.extract( address + i );
                     }
                 }
                 cs_disasm( cs_handle, &binary[address], binarySize - address, realAddress.offset, 1, &dline.cs_instruction );
                 //ZydisFormatterFormatInstruction( &formatter, &dline.instruction, dline.operands, ZYDIS_MAX_OPERAND_COUNT, dline.szInstruction, sizeof( dline.szInstruction ), realAddress.offset, ZYAN_NULL );
                 strcpy( dline.szInstruction, dline.cs_instruction->mnemonic );
                 dline.pOperands = dline.cs_instruction->op_str;
-                realAddress.offset += dline.instruction.length;
+                realAddress += dline.instruction.length;
                 address += dline.instruction.length;
 
                 // Handle recursion for jumps/calls
@@ -323,9 +326,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
                                 pcallers->insert( { dline.address, dline.realAddress.segment } );
 
                             if( !visited.count( addr ) ) {
-                                {
-                                    const auto nh = ordered_code.extract( { addr, {} } );
-                                }
+                                ordered_code.extract( { addr, {} } );
                                 const auto it = ordered_code.find( { addr, {} } );
                                 if( it == ordered_code.end( ) ) {
                                     auto entry = ordered_code.insert( { addr, DecodedLine( ptr, addr ) } );
@@ -344,8 +345,8 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
                                         for( auto i = 0; i < dlineData.instruction.length; ++i ) {
                                             pOpCode += sprintf( pOpCode, "%02X ", binary[addr + i] );
                                             if( i ) {
-                                                const auto nh = ordered_code.extract( { addr + i, {} } );
-                                                const auto nhv = visited.extract( addr + i );
+                                                ordered_code.extract( { addr + i, {} } );
+                                                visited.extract( addr + i );
                                             }
                                         }
                                         switch( op.element_size ) {
@@ -447,12 +448,12 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
                         pOpCode += sprintf( pOpCode, "%02X ", binary[address + i] );
                     sprintf_s( dline.szInstruction, sizeof( dline.szInstruction ), "callback 0x%02X", dw );
                     strcat( dline.szComment, CALLBACK_GetDescription( dw ) );
-                    realAddress.offset += dline.instruction.length;
+                    realAddress += dline.instruction.length;
                     address += dline.instruction.length;
                 } else { // Treat as data; step forward 1 byte
                     sprintf( dline.szOpcode, "%02X", binary[address] );
                     ++address;
-                    ++realAddress.offset;
+                    ++realAddress;
                 }
             }
         }
@@ -470,149 +471,187 @@ struct Unknown {
     uint16_t segment;
 };
 
-// Recursive disassembly function (credit: CoPilot)
-void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
-    csh cs_handle;
-    ZydisDecoder decoder;
-    ZydisFormatter formatter;
-    ZydisDecoderInit( &decoder,
-        ( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
-        ( f32bit ? ZYDIS_STACK_WIDTH_32 : ZYDIS_STACK_WIDTH_16 ) );
-    ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL );
-    cs_open( CS_ARCH_X86, ( f32bit ? CS_MODE_32 : CS_MODE_16 ), &cs_handle );
+static bool FindNextSegment( uint16_t segment, std::set<Pair<uint16_t, SegmentInfo>>::iterator &nextSegment ) {
+    nextSegment = ordered_segments.find( { segment, {} } );
+    if( ordered_segments.end( ) == nextSegment )
+        return false;
+    ++nextSegment;
+    if( ordered_segments.end( ) == nextSegment )
+        return false;
+    return true;
+}
 
-    binarySize = MEM_TotalPages( ) * 4096; // DOS page size
+static const uint16_t DOSBOX_SEGMENT = 0xC887;
 
-    if( ordered_code.empty( ) )
-        segment0_phys = startOffset - ip;
-    RecursiveDisassemble( startOffset, ip, cs_handle, decoder, formatter );
-    // attempt to identify non-disassembled parts...
+static bool CheckAdvanceNextSegment( uint32_t &address, ADDRESS_PAIR &realAddress, uint32_t &nextSegmentAddress, std::set<Pair<uint16_t, SegmentInfo>>::iterator &nextSegment ) {
+    if( address >= nextSegmentAddress ) {
+        while( SEG_CODE != nextSegment->extra.type ) {
+            ++nextSegment;
+            if( ordered_segments.end( ) == nextSegment )
+                return false;
+        }
+        if( nextSegment->value >= DOSBOX_SEGMENT )
+            return false;
+        realAddress = { nextSegment->value, 0U };
+        address = realAddress.address( );
+        ++nextSegment;
+        if( ordered_segments.end( ) == nextSegment )
+            return false;
+        nextSegmentAddress = nextSegment->value << 4U;
+    }
+    return true;
+}
+
+static void CheckUnknown( const bool fIdentify ) { // attempt to identify non-disassembled parts...
     for( bool fIdentifyLoop = true; fIdentifyLoop; ) {
         fIdentifyLoop = false;
         const auto binary = MemBase;
-        auto nextSegment = ++( ordered_segments.find( { static_cast<uint16_t>( segment0_phys >> 4 ), {} } ) );
-        uint32_t nextPhysicalSegment = nextSegment->value << 4U;
-        ADDRESS_PAIR address_pair = { static_cast<uint16_t>( segment0_phys >> 4 ), 0U };
-        uint32_t address = segment0_phys;
+        std::set<Pair<uint16_t, SegmentInfo>>::iterator nextSegment;
+        if( !FindNextSegment( static_cast<uint16_t>( segment0_phys >> 4 ), nextSegment ) )
+            break;
+        uint32_t nextSegmentAddress = nextSegment->value << 4U;
+        ADDRESS_PAIR realAddress = { static_cast<uint16_t>( segment0_phys >> 4 ), 0U };
+        uint32_t address = realAddress.address( );
         std::vector<Unknown> unknowns;
-        for( const auto &[code_address, dline] : ordered_code ) {
-            uint32_t unknown = address;
-            while( code_address > address ) {
-                uint8_t count = binary[address];
-                char szOpcode[25] = "";
-                auto pOpcode = szOpcode;
-                pOpcode += sprintf( pOpcode, "%02X ", count );
-                if( count > 1U ) {
-                    uint8_t increment = count;
-                    auto pOpcodeEnd = &szOpcode[sizeof( szOpcode ) - ( pOpcode - szOpcode ) - 3U];
-                    auto pBin = &binary[address + 1U];
-                    char szOperand[256] = "";
-                    auto pOperand = szOperand;
-                    while( count ) {
-                        if( isprint( *pBin ) ) {
-                            pOperand += sprintf( pOperand, "%c", *pBin );
-                            if( pOpcode < pOpcodeEnd )
-                                pOpcode += sprintf( pOpcode, "%02X ", *pBin );
-                            ++pBin;
-                        } else
-                            break;
-                        --count;
-                    }
-                    if( !count ) {
-                        visited.insert( address );
-                        auto entry = ordered_code.insert( { address, DecodedLine( address_pair, address ) } );
-                        if( entry.second ) { // insert successful
-                            DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
-                            dlineData.instruction = data_instruction;
-                            dlineData.mnemonicMask = MM_Data_Label;
-                            dlineData.instruction.length = increment + 1U;
-                            dlineData.instruction.operand_width = 8U;
-                            dlineData.operands[0] = imm_operand;
-                            dlineData.operands[0].imm = { false, false, { increment } };
-                            sprintf( dlineData.szInstruction, "db %u,'%s'", increment, szOperand );
-                            dlineData.szInstruction[2] = 0;
-                            dlineData.pOperands = &dlineData.szInstruction[3];
-                            if( increment > 6U ) {
-                                pOpcode[-4] = '.';
-                                pOpcode[-3] = '.';
-                                pOpcode[-2] = '.';
-                            }
-                            strcpy( dlineData.szOpcode, szOpcode );
+        for( const auto &code : ordered_code ) {
+            if( code.extra.realAddress.segment > realAddress.segment && ( SEG_STACK == nextSegment->extra.type || code.extra.realAddress.segment >= DOSBOX_SEGMENT ) )
+                address = nextSegmentAddress;
+            uint32_t unknown_address = address;
+            while( code.value > address && nextSegmentAddress > address ) {
+                if( fIdentify ) {
+                    uint8_t count = binary[address];
+                    char szOpcode[25] = "";
+                    auto pOpcode = szOpcode;
+                    pOpcode += sprintf( pOpcode, "%02X ", count );
+                    if( count > 1U ) {
+                        uint8_t increment = count;
+                        auto pOpcodeEnd = &szOpcode[sizeof( szOpcode ) - ( pOpcode - szOpcode ) - 3U];
+                        auto pBin = &binary[address + 1U];
+                        char szOperand[256] = "";
+                        auto pOperand = szOperand;
+                        while( count ) {
+                            if( isprint( *pBin ) ) {
+                                pOperand += sprintf( pOperand, "%c", *pBin );
+                                if( pOpcode < pOpcodeEnd )
+                                    pOpcode += sprintf( pOpcode, "%02X ", *pBin );
+                                ++pBin;
+                            } else
+                                break;
+                            --count;
                         }
-                        if( unknown < address )
-                            unknowns.push_back( { unknown, address, address_pair.segment } );
-                        address += increment;
-                        address_pair.offset += increment;
-                        unknown = address + 1U;
-                    }
-                } else if( !count && nextPhysicalSegment - address < 0x10 ) {
-                    count = static_cast<uint8_t>( nextPhysicalSegment - address );
-                    uint8_t increment = count - 1U;
-                    auto pOpcodeEnd = &szOpcode[sizeof( szOpcode ) - ( pOpcode - szOpcode ) - 3U];
-                    auto pBin = &binary[address + 1U];
-                    while( --count ) {
-                        if( !*pBin ) {
-                            if( pOpcode < pOpcodeEnd )
-                                pOpcode += sprintf( pOpcode, "%02X ", *pBin );
-                            ++pBin;
-                        } else
-                            break;
-                    }
-                    if( !count ) {
-                        visited.insert( address );
-                        auto entry = ordered_code.insert( { address, DecodedLine( address_pair, address ) } );
-                        if( entry.second ) { // insert successful
-                            DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
-                            dlineData.instruction = data_instruction;
-                            dlineData.mnemonicMask = MM_ALIGN;
-                            dlineData.instruction.length = increment + 1U;
-                            dlineData.instruction.operand_count = dlineData.instruction.operand_count_visible = 0U;
-                            strcpy( dlineData.szInstruction, "align" );
-                            if( increment > 6U ) {
-                                pOpcode[-4] = '.';
-                                pOpcode[-3] = '.';
-                                pOpcode[-2] = '.';
+                        if( !count ) {
+                            visited.insert( address );
+                            auto entry = ordered_code.insert( { address, DecodedLine( realAddress, address ) } );
+                            if( entry.second ) { // insert successful
+                                DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
+                                dlineData.instruction = data_instruction;
+                                dlineData.mnemonicMask = MM_Data_Label;
+                                dlineData.instruction.length = increment + 1U;
+                                dlineData.instruction.operand_width = 8U;
+                                dlineData.operands[0] = imm_operand;
+                                dlineData.operands[0].imm = { false, false, { increment } };
+                                sprintf( dlineData.szInstruction, "db %u,'%s'", increment, szOperand );
+                                dlineData.szInstruction[2] = 0;
+                                dlineData.pOperands = &dlineData.szInstruction[3];
+                                if( increment > 6U ) {
+                                    pOpcode[-4] = '.';
+                                    pOpcode[-3] = '.';
+                                    pOpcode[-2] = '.';
+                                }
+                                strcpy( dlineData.szOpcode, szOpcode );
                             }
-                            strcpy( dlineData.szOpcode, szOpcode );
+                            if( unknown_address < address )
+                                unknowns.push_back( { unknown_address, address, realAddress.segment } );
+                            address += increment;
+                            realAddress += increment;
+                            unknown_address = address + 1U;
                         }
-                        if( unknown < address )
-                            unknowns.push_back( { unknown, address, address_pair.segment } );
-                        address += increment;
-                        address_pair.offset += increment;
-                        unknown = address + 1U;
+                    } else if( !count ) {
+                        if( ( nextSegmentAddress - address ) < 0x10 ) {
+                            count = static_cast<uint8_t>( nextSegmentAddress - address );
+                            uint8_t increment = count - 1U;
+                            auto pOpcodeEnd = &szOpcode[sizeof( szOpcode ) - ( pOpcode - szOpcode ) - 3U];
+                            auto pBin = &binary[address + 1U];
+                            while( --count ) {
+                                if( !*pBin ) {
+                                    if( pOpcode < pOpcodeEnd )
+                                        pOpcode += sprintf( pOpcode, "%02X ", *pBin );
+                                    ++pBin;
+                                } else
+                                    break;
+                            }
+                            if( !count ) {
+                                visited.insert( address );
+                                auto entry = ordered_code.insert( { address, DecodedLine( realAddress, address ) } );
+                                if( entry.second ) { // insert successful
+                                    DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
+                                    dlineData.instruction = data_instruction;
+                                    dlineData.mnemonicMask = MM_ALIGN;
+                                    dlineData.instruction.length = increment + 1U;
+                                    dlineData.instruction.operand_count = dlineData.instruction.operand_count_visible = 0U;
+                                    strcpy( dlineData.szInstruction, "align" );
+                                    if( increment > 6U ) {
+                                        pOpcode[-4] = '.';
+                                        pOpcode[-3] = '.';
+                                        pOpcode[-2] = '.';
+                                    }
+                                    strcpy( dlineData.szOpcode, szOpcode );
+                                }
+                                if( unknown_address < address )
+                                    unknowns.push_back( { unknown_address, address, realAddress.segment } );
+                                address += increment;
+                                realAddress += increment;
+                                unknown_address = address + 1U;
+                            }
+                        }
+                    }
+                } else {
+                    auto entry = ordered_code.insert( { address, DecodedLine( realAddress, address ) } );
+                    if( entry.second ) { // insert successful
+                        DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
+                        dlineData.instruction = data_instruction;
+                        dlineData.instruction.length = 1U;
+                        dlineData.instruction.operand_count = dlineData.instruction.operand_count_visible = 0U;
+                        dlineData.mnemonicMask = MM_NONE;
+
+                        auto pOpcode = dlineData.szOpcode;
+                        pOpcode += sprintf( pOpcode, "%02X ", binary[address] );
+                        if( isprint( binary[address] ) )
+                            sprintf( dlineData.szComment, "%c", binary[address] );
                     }
                 }
                 ++address;
-                ++address_pair.offset;
-                if( address >= nextPhysicalSegment ) {
-                    address_pair = { nextSegment->value, address - nextPhysicalSegment };
-                    ++nextSegment;
-                    nextPhysicalSegment = nextSegment->value << 4U;
-                }
+                ++realAddress;
             }
-            if( unknown < address )
-                unknowns.push_back( { unknown, address, address_pair.segment } );
-            address += dline.instruction.length;
-            address_pair.offset += dline.instruction.length;
-            if( address >= nextPhysicalSegment ) {
-                address_pair = { nextSegment->value, address - nextPhysicalSegment };
-                ++nextSegment;
-                nextPhysicalSegment = nextSegment->value << 4U;
+            if( fIdentify && unknown_address < address )
+                unknowns.push_back( { unknown_address, address, realAddress.segment } );
+            if( code.value == address ) {
+                address += code.extra.instruction.length;
+                realAddress += code.extra.instruction.length;
             }
+            if( !CheckAdvanceNextSegment( address, realAddress, nextSegmentAddress, nextSegment ) )
+                break;
         }
-        for( auto &[unknown_address, next_address, segment] : unknowns ) {
+        if( !fIdentify )
+            break;
+        for( const auto &unknown : unknowns ) {
+            auto unknown_address = unknown.address;
             while( !binary[unknown_address] )
                 ++unknown_address;
+            if( unknown_address >= unknown.next_address )
+                continue;
             address = unknown_address;
-            while( address < next_address ) {
+            while( address < unknown.next_address ) {
                 ZydisDecodedInstruction instruction;
                 ZydisDecoderContext context;
                 if( ZYAN_SUCCESS( ZydisDecoderDecodeInstruction( &decoder, &context, &binary[address], binarySize - address, &instruction ) ) )
                     address += instruction.length;
+                else
+                    break;
             }
-            if( address == next_address ) {
-                while( unknown_address < next_address ) {
-                    const auto run_length = RecursiveDisassemble( unknown_address, unknown_address - ( segment << 4U ), cs_handle, decoder, formatter );
+            if( address == unknown.next_address ) {
+                while( unknown_address < unknown.next_address ) {
+                    const auto run_length = RecursiveDisassemble( unknown_address, unknown_address - ( unknown.segment << 4U ) );
                     if( !run_length )
                         break;
                     unknown_address += run_length;
@@ -620,43 +659,28 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
                 fIdentifyLoop = true;
             }
         }
+        unknowns.clear( );
     }
-    const auto binary = MemBase;
-    auto nextSegment = ++( ordered_segments.find( { static_cast<uint16_t>( segment0_phys >> 4 ), {} } ) );
-    uint32_t nextPhysicalSegment = nextSegment->value << 4U;
-    ADDRESS_PAIR address_pair = { static_cast<uint16_t>( segment0_phys >> 4 ), 0U };
-    uint32_t address = segment0_phys;
-    for( const auto &[code_address, dline] : ordered_code ) {
-        while( code_address > address ) {
-            auto entry = ordered_code.insert( { address, DecodedLine( address_pair, address ) } );
-            if( entry.second ) { // insert successful
-                DecodedLine &dlineData = const_cast<DecodedLine &>( entry.first->extra );
-                dlineData.instruction = data_instruction;
-                dlineData.instruction.length = 1U;
-                dlineData.instruction.operand_count = dlineData.instruction.operand_count_visible = 0U;
-                dlineData.mnemonicMask = MM_NONE;
+}
 
-                auto pOpcode = dlineData.szOpcode;
-                pOpcode += sprintf( pOpcode, "%02X ", binary[address] );
-                if( isprint( binary[address] ) )
-                    sprintf( dlineData.szComment, "%c", binary[address] );
-            }
-            ++address;
-            ++address_pair.offset;
-            if( address >= nextPhysicalSegment ) {
-                address_pair = { nextSegment->value, address - nextPhysicalSegment };
-                ++nextSegment;
-                nextPhysicalSegment = nextSegment->value << 4U;
-            }
-        }
-        address += dline.instruction.length;
-        address_pair.offset += dline.instruction.length;
-        if( address >= nextPhysicalSegment ) {
-            address_pair = { nextSegment->value, address - nextPhysicalSegment };
-            ++nextSegment;
-            nextPhysicalSegment = nextSegment->value << 4U;
-        }
-    }
+// Recursive disassembly function (credit: CoPilot)
+void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, const bool f32bit, const bool fProtected ) {
+    ZydisDecoderInit( &decoder,
+        ( f32bit ? ZYDIS_MACHINE_MODE_LEGACY_32 : ( fProtected ? ZYDIS_MACHINE_MODE_LEGACY_16 : ZYDIS_MACHINE_MODE_REAL_16 ) ),
+        ( f32bit ? ZYDIS_STACK_WIDTH_32 : ZYDIS_STACK_WIDTH_16 ) );
+    ZydisFormatterInit( &formatter, ZYDIS_FORMATTER_STYLE_INTEL );
+    if( cs_handle )
+        cs_option( cs_handle, CS_OPT_MODE, ( f32bit ? CS_MODE_32 : CS_MODE_16 ) );
+    else
+        cs_open( CS_ARCH_X86, ( f32bit ? CS_MODE_32 : CS_MODE_16 ), &cs_handle );
+
+    binarySize = MEM_TotalPages( ) * 4096; // DOS page size
+
+    if( ordered_code.empty( ) )
+        segment0_phys = startOffset - ip;
+    RecursiveDisassemble( startOffset, ip );
+    CheckUnknown( true );
+    CheckUnknown( false );
     for( const auto &[address, info] : labels ) {
         auto it = ordered_code.find( { address, DecodedLine( ) } );
         if( it != ordered_code.end( ) ) {
@@ -669,10 +693,8 @@ void DasmRecursiveDisassemble( const uint32_t startOffset, const uint32_t ip, co
 }
 
 void DasmUnDisassemble( uint32_t address ) {
-    auto vnh = visited.extract( address );
-    if( vnh.empty( ) )
+    if( visited.extract( address ).empty( ) )
         return;
-    vnh = {};
     const auto nh = ordered_code.extract( { address, {} } );
     if( !nh.empty( ) ) {
         ADDRESS_PAIR address_pair = nh.value( ).extra.realAddress;
@@ -689,6 +711,13 @@ void DasmUnDisassemble( uint32_t address ) {
             ++address;
             ++address_pair.offset;
         }
+    }
+}
+
+void DasmShutdown( ) {
+    if( cs_handle ) {
+        cs_close( &cs_handle );
+        cs_handle = 0U;
     }
 }
 
