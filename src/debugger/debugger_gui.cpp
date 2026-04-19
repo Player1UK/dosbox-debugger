@@ -197,12 +197,13 @@ static void CheckSegmentRegisters( ) {
 					ordered_segments.extract( { dbg.segment[SEG_DATA], {} } );
 					dbg.segment[SEG_DATA] = seg_val;
 				}
-				ordered_segments.insert( { seg_val, { ( cs == seg_name ? SEG_CODE : ss == seg_name ? SEG_STACK : SEG_DATA ), 0U } } );
 				if( ss == seg_name ) {
 					uint16_t seg_end = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
+					ordered_segments.insert( { seg_val, { SEG_STACK, 0U, seg_end } } );
 					if( !ordered_segments.count( { seg_end, {} } ) )
-						ordered_segments.insert( { seg_end, { SEG_STACK_END, 0U } } );
-				}
+						ordered_segments.insert( { seg_end, { SEG_STACK_END, 0U, seg_val } } );
+				} else
+					ordered_segments.insert( { seg_val, { ( cs == seg_name ? SEG_CODE : SEG_DATA ), 0U } } );
 				if( seg_val > dbg.segment[SEG_HEAP] ) {
 					uint32_t phys_seg_val = 0xFFFF + ( seg_val << 4U );
 					if( data_buffer_size < phys_seg_val )
@@ -320,6 +321,10 @@ static void DrawCode( ) {
 		static bool setFocus = false;
 		uint32_t i = 0;
 		uint16_t currentSegment = 0U;
+		float yPosStart = ImGui::GetScrollY( );
+		float yPosEnd = yPosStart + window_size[WIN_CODE].y;
+		yPosStart -= window_size[WIN_CODE].y;
+		yPosEnd += window_size[WIN_CODE].y;
 		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ); previous_dline = dline, ++dline, ++i ) {
 			static uint8_t addressColorIndex = 0U;
 			if( dbg.update_win_scroll[WIN_CODE] && dline.realAddress.segment >= codeView.realAddress.segment && dline.realAddress.offset >= codeView.realAddress.offset ) {
@@ -364,85 +369,89 @@ static void DrawCode( ) {
 				ImGui::SetCursorPosX( 21 * char_width );
 				ImGui::TextColored( green_color, "start:" );
 			}
-			const bool is_current_ip = ( dline.realAddress.segment == RealSegValue( cs ) ) && ( dline.realAddress.offset == reg_eip );
-			const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress );
-			const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
-			const bool isSelected = ( selectedIndex == i );
-			sprintf( id, "##%08X", dline.address );
-			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				selectedIndex = i;
-				codeView.SetCursor( dline.realAddress );
-				if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
-					labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
-			}
-			if( setFocus ) {
-				setFocus = false;
-				ImGui::SetKeyboardFocusHere( -1 );
-			}
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color : 
-				( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.realAddress.segment );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( ( is_current_ip ? green_color : ( is_temporary_breakpoint ? light_grey_color :
-				( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.realAddress.offset,
-				is_breakpoint && is_temporary_breakpoint ? '+' : is_breakpoint ? '*' : is_temporary_breakpoint ? '-' : ' ' );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( is_current_ip ? light_grey_color : grey_color, "%s", dline.szOpcode );
-			if( is_current_ip ) {
-				ImGui::SameLine( 28 * char_width );
-				ImGui::TextColored( green_color, ">" );
-			}
-			const ImVec4 *operator_color = &purple_color;
-			if( dline.mnemonicMask & MM_CALL )
-				operator_color = &blue_color;
-			else if( dline.mnemonicMask & MM_INT )
-				operator_color = &yellow_color;
-			else if( dline.mnemonicMask & MM_JMP )
-				operator_color = &jmp_color;
-			else if( dline.mnemonicMask & MM_MOV )
-				operator_color = &green_color;
-			else if( dline.mnemonicMask & MM_RET )
-				operator_color = &ret_color;
-			else if( dline.mnemonicMask & MM_CMP )
-				operator_color = &gold_color;
-			else if( dline.mnemonicMask & MM_Logical )
-				operator_color = &violet_color;
-			else if( dline.mnemonicMask & MM_Math )
-				operator_color = &dark_purple_color;
-			else if( dline.mnemonicMask & MM_Stack )
-				operator_color = &light_grey_color;
-			else if( dline.mnemonicMask & MM_ConditionalJump )
-				operator_color = &yellow_color;
-			ImGui::SameLine( 30 * char_width );
-			ImGui::TextColored( *operator_color, "%s", dline.szInstruction );
-			const ImVec4 *operands_color = is_current_ip ? &green_color : &purple_color;
-			if( dline.pOperands ) {
-				ImGui::SameLine( );
-				if( ImGui::GetCursorPosX( ) < 36 * char_width )
-					ImGui::SetCursorPosX( 36 * char_width );
-				ImGui::TextColored( *operands_color, "%s", dline.pOperands );
-			}
-			if( dline.szComment[0] ) {
-				ImGui::SameLine( );
-				ImGui::SetCursorPosX( ImGui::GetCursorPosX( ) + 4 * char_width );
-				//ImGui::SameLine( 60 * char_width );
-				ImGui::TextColored( light_grey_color, "%s", dline.szComment );
-			}
-			if( is_current_ip ) {
-				ImGui::SameLine( window_width - char_width * 2 - scrollbar_width );
-				ImGui::TextColored( green_color, "<" );
-			}
-			if( is_breakpoint || is_temporary_breakpoint ) {
-				ImGui::SameLine( window_width - char_width - scrollbar_width );
-				if( is_breakpoint && is_temporary_breakpoint )
-					ImGui::TextColored( violet_color, "+" );
-				else if( is_breakpoint )
-					ImGui::TextColored( red_color, "*" );
-				else
-					ImGui::TextColored( light_grey_color, "-" );
-			}
+			float yPos = ImGui::GetCursorPosY( );
+			if( yPos >= yPosStart && yPos <= yPosEnd ) {
+				const bool is_current_ip = ( dline.realAddress.segment == RealSegValue( cs ) ) && ( dline.realAddress.offset == reg_eip );
+				const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress );
+				const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
+				const bool isSelected = ( selectedIndex == i );
+				sprintf( id, "##%08X", dline.address );
+				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
+					selectedIndex = i;
+					codeView.SetCursor( dline.realAddress );
+					if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
+						labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
+				}
+				if( setFocus ) {
+					setFocus = false;
+					ImGui::SetKeyboardFocusHere( -1 );
+				}
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color :
+					( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.realAddress.segment );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( ( is_current_ip ? green_color : ( is_temporary_breakpoint ? light_grey_color :
+					( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.realAddress.offset,
+					is_breakpoint && is_temporary_breakpoint ? '+' : is_breakpoint ? '*' : is_temporary_breakpoint ? '-' : ' ' );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( is_current_ip ? light_grey_color : grey_color, "%s", dline.szOpcode );
+				if( is_current_ip ) {
+					ImGui::SameLine( 28 * char_width );
+					ImGui::TextColored( green_color, ">" );
+				}
+				const ImVec4 *operator_color = &purple_color;
+				if( dline.mnemonicMask & MM_CALL )
+					operator_color = &blue_color;
+				else if( dline.mnemonicMask & MM_INT )
+					operator_color = &yellow_color;
+				else if( dline.mnemonicMask & MM_JMP )
+					operator_color = &jmp_color;
+				else if( dline.mnemonicMask & MM_MOV )
+					operator_color = &green_color;
+				else if( dline.mnemonicMask & MM_RET )
+					operator_color = &ret_color;
+				else if( dline.mnemonicMask & MM_CMP )
+					operator_color = &gold_color;
+				else if( dline.mnemonicMask & MM_Logical )
+					operator_color = &violet_color;
+				else if( dline.mnemonicMask & MM_Math )
+					operator_color = &dark_purple_color;
+				else if( dline.mnemonicMask & MM_Stack )
+					operator_color = &light_grey_color;
+				else if( dline.mnemonicMask & MM_ConditionalJump )
+					operator_color = &yellow_color;
+				ImGui::SameLine( 30 * char_width );
+				ImGui::TextColored( *operator_color, "%s", dline.szInstruction );
+				const ImVec4 *operands_color = is_current_ip ? &green_color : &purple_color;
+				if( dline.pOperands ) {
+					ImGui::SameLine( );
+					if( ImGui::GetCursorPosX( ) < 36 * char_width )
+						ImGui::SetCursorPosX( 36 * char_width );
+					ImGui::TextColored( *operands_color, "%s", dline.pOperands );
+				}
+				if( dline.szComment[0] ) {
+					ImGui::SameLine( );
+					ImGui::SetCursorPosX( ImGui::GetCursorPosX( ) + 4 * char_width );
+					//ImGui::SameLine( 60 * char_width );
+					ImGui::TextColored( light_grey_color, "%s", dline.szComment );
+				}
+				if( is_current_ip ) {
+					ImGui::SameLine( window_width - char_width * 2 - scrollbar_width );
+					ImGui::TextColored( green_color, "<" );
+				}
+				if( is_breakpoint || is_temporary_breakpoint ) {
+					ImGui::SameLine( window_width - char_width - scrollbar_width );
+					if( is_breakpoint && is_temporary_breakpoint )
+						ImGui::TextColored( violet_color, "+" );
+					else if( is_breakpoint )
+						ImGui::TextColored( red_color, "*" );
+					else
+						ImGui::TextColored( light_grey_color, "-" );
+				}
+			} else
+				ImGui::NewLine( );
 			if( dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET ) )
 				ImGui::Spacing( );
 		}
@@ -1415,7 +1424,7 @@ bool DBGUI_StartUp( ) {
 	SEGTYPE seg_type = SEG_BASE;
 	for( const auto &seg : dbg.segment ) {
 		if( !ordered_segments.count( { seg, {} } ) )
-			ordered_segments.insert( { seg, { seg_type } } );
+			ordered_segments.insert( { seg, { seg_type, 0U, ( SEG_STACK == seg_type ? dbg.segment[SEG_STACK_END] : SEG_STACK_END == seg_type ? dbg.segment[SEG_STACK] : static_cast<uint16_t>( 0U ) ) } } );
 		++seg_type;
 	}
 	// Point stack view to top of stack
@@ -1493,7 +1502,7 @@ void TemporaryDataSegment( ) {
 	if( dbg.segment[SEG_DATA] && dbg.segment[SEG_DATA] != dbg.segment[SEG_PSP] )
 		return;
 	auto dline = DecodedLine::last( );
-	uint32_t address = dline.address + dline.instruction.length;
+	uint32_t address = dline.address + dline.length;
 	dbg.segment[SEG_DATA] = ( address >> 4U ) + ( address & 0x0000000F ? 1U : 0U );
 	ordered_segments.insert( { dbg.segment[SEG_DATA], { SEG_DATA, 0U } } );
 	fTemporaryDataSegment = true;

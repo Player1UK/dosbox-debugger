@@ -47,20 +47,30 @@ constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexce
 	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
 	return static_cast<MNEMONIC_MASK>( static_cast<Underlying>( lhs ) | static_cast<Underlying>( rhs ) );
 }
-inline MNEMONIC_MASK &operator|=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexcept {
+inline MNEMONIC_MASK & operator|=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexcept {
 	lhs = lhs | rhs;
+	return lhs;
+}
+constexpr MNEMONIC_MASK operator&( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
+	return static_cast<MNEMONIC_MASK>( static_cast<Underlying>( lhs ) & static_cast<Underlying>( rhs ) );
+}
+inline MNEMONIC_MASK & operator&=( MNEMONIC_MASK &lhs, MNEMONIC_MASK rhs ) noexcept {
+	lhs = lhs & rhs;
 	return lhs;
 }
 
 struct DecodedLine {
 	ADDRESS_PAIR realAddress;
     uint32_t address;
+	uint8_t length;
     ZydisDecodedInstruction instruction;
     ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
 	cs_insn *cs_instruction = nullptr;
 	MNEMONIC_MASK mnemonicMask = MM_NONE;
+	uint8_t opCode[256];
 	char szOpcode[25] = "";
-	char szInstruction[265] = "";
+	char szInstruction[266] = "";
 	char szComment[128] = "";
 	char const *pOperands = nullptr;
 	MEM_ACCESS mem_access[NUM_MEM_OPS];
@@ -91,6 +101,7 @@ extern void DasmShutdown( );
 struct SegmentInfo {
 	const SEGTYPE type;
 	uint8_t	index = 0U;
+	const uint16_t partner = 0U;
 };
 
 struct LabelInfo {

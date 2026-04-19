@@ -44,7 +44,8 @@ typedef enum Label_Mask : unsigned __int8 {
 	LABEL_CALL		= 0x1u,
 	LABEL_JUMP		= 0x2u,
 	LABEL_DATA		= 0x4u,
-	LABEL_BOTH		= LABEL_CALL | LABEL_JUMP
+	LABEL_BOTH		= LABEL_CALL | LABEL_JUMP,
+	LABEL_ALL		= LABEL_BOTH | LABEL_DATA
 } LABEL_MASK;
 
 typedef enum Ptr_Type : uint8_t {
