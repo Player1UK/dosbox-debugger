@@ -98,14 +98,12 @@ uint16_t RealSegValue( const SegNames index ) {
 }
 
 uint32_t GetPhysicalAddress( const ADDRESS_PAIR &address_pair ) {
-	if( address_pair.segment == SegValue( cs ) )
-		return SegPhys( cs ) + address_pair.offset;
 	if( cpu.pmode && !( reg_flags & FLAG_VM ) ) {
 		Descriptor desc;
 		if( cpu.gdt.GetDescriptor( address_pair.segment, desc ) )
 			return desc.GetBase( ) + address_pair.offset;
 	}
-	return address_pair.offset + ( address_pair.segment << 4 );
+	return address_pair.address( );
 }
 
 void ResetHexValueSizeType( ) {

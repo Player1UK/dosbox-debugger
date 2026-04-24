@@ -25,7 +25,7 @@ bool debugging = false;
 bool forceDraw = false;
 bool exitNormalLoop = false;
 bool exitDebugLoop = false;
-bool skipInterrupts = false;
+bool skipInterrupts = true;
 
 // Event queue
 std::queue<DebuggerInputEvent> debugger_event_queue = {};

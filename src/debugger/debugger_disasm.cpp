@@ -395,6 +395,13 @@ static uint32_t RecursiveDisassemble( const uint32_t startOffset, const uint32_t
                 case ZYDIS_MNEMONIC_LOOPNE:
                     dline.mnemonicMask = MM_LOOP;
                     break;
+                case ZYDIS_MNEMONIC_IN:
+                case ZYDIS_MNEMONIC_OUT:
+                case ZYDIS_MNEMONIC_OUTSB:
+                case ZYDIS_MNEMONIC_OUTSD:
+                case ZYDIS_MNEMONIC_OUTSW:
+                    dline.mnemonicMask = MM_IO;
+                    break;
                 default:
                     break;
                 }
@@ -778,7 +785,8 @@ static void CheckUnknown( const bool fIdentify ) { // attempt to identify non-di
                         break;
                     unknown_address += run_length;
                 }
-                fIdentifyLoop = true;
+                if( unknown_address == unknown.next_address )
+                    fIdentifyLoop = true;
             }
         }
         unknowns.clear( );

@@ -88,8 +88,10 @@ const ImVec4 dark_green_color = ImVec4( 0.11f, 0.76f, 0.11f, 1.0f );
 const ImVec4 blue_color = ImVec4( 0.0f, 0.64f, 0.91f, 1.0f );
 const ImVec4 yellow_color = ImVec4( 1.0f, 0.99f, 0.33f, 1.0f );
 const ImVec4 gold_color = ImVec4( 0.97f, 0.69f, 0.17f, 1.0f );
+const ImVec4 light_pink_color = ImVec4( 1.0f, 0.68f, 0.79f, 1.0f );
+const ImVec4 pink_color = ImVec4( 0.93f, 0.54f, 0.97f, 1.0f );
 const ImVec4 purple_color = ImVec4( 0.75f, 0.72f, 1.0f, 1.0f );
-const ImVec4 dark_purple_color = ImVec4( 0.74f, 0.38f, 0.97f, 1.0f );
+//const ImVec4 dark_purple_color = ImVec4( 0.74f, 0.38f, 0.97f, 1.0f );
 const ImVec4 violet_color = ImVec4( 0.97f, 0.38f, 0.64f, 1.0f );
 const ImVec4 jmp_color = ImVec4( 1.0f, 1.0f, 0.57f, 1.0f );
 const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
@@ -216,7 +218,7 @@ static void CheckSegmentRegisters( ) {
 
 void SCodeView::Set( const ADDRESS_PAIR &address_pair, const bool update_code, const bool update_scroll ) {
 	realAddress = cursorRealAddress = address_pair;
-	address = cursorAddress = address_pair.offset + ( address_pair.segment << 4 );
+	address = cursorAddress = address_pair.address( );
 	if( update_code && !AddressVisited( address ) ) { // address not already disassembled
 		DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
 		if( debugging && UpdateOrderedSegments( ) )
@@ -365,6 +367,8 @@ static void DrawCode( ) {
 					ImGui::Separator( );
 					ImGui::Spacing( );
 				}
+			} else if( dline.mnemonicMask & MM_IO ) {
+				ImGui::Spacing( );
 			} else if( start_address == dline.address ) {
 				ImGui::SetCursorPosX( 21 * char_width );
 				ImGui::TextColored( green_color, "start:" );
@@ -414,10 +418,12 @@ static void DrawCode( ) {
 					operator_color = &ret_color;
 				else if( dline.mnemonicMask & MM_CMP )
 					operator_color = &gold_color;
+				else if( dline.mnemonicMask & MM_IO )
+					operator_color = &light_pink_color;
 				else if( dline.mnemonicMask & MM_Logical )
 					operator_color = &violet_color;
 				else if( dline.mnemonicMask & MM_Math )
-					operator_color = &dark_purple_color;
+					operator_color = &pink_color;
 				else if( dline.mnemonicMask & MM_Stack )
 					operator_color = &light_grey_color;
 				else if( dline.mnemonicMask & MM_ConditionalJump )
@@ -452,7 +458,7 @@ static void DrawCode( ) {
 				}
 			} else
 				ImGui::NewLine( );
-			if( dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET ) )
+			if( dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET | MM_IO ) )
 				ImGui::Spacing( );
 		}
 	}
@@ -1598,11 +1604,31 @@ static void AnalyzeCurrentInstruction( ) {
 	}
 }
 
+constexpr const uint8_t MAX_RECENT_IP = 128U;
+static uint32_t recent_ip_addresses[MAX_RECENT_IP] = {};
+static uint8_t recent_ip_index = 0U;
+
 void DEBUG_NewInstruction( ) {
 	if( !imgui_initialized )
 		return;
+	const ADDRESS_PAIR ip_address_pair = { RealSegValue( cs ), reg_eip };
+	if( !debugging ) {
+		const uint32_t ip_address = ip_address_pair.address( );
+		uint8_t count = 0U;
+		for( const auto &recent_ip_address : recent_ip_addresses ) {
+			if( recent_ip_address == ip_address ) {
+				++count;
+				break;
+			}
+		}
+		recent_ip_addresses[recent_ip_index] = ip_address;
+		if( MAX_RECENT_IP == ++recent_ip_index )
+			recent_ip_index = 0U;
+		if( count )
+			return;
+	}
 	CheckSegmentRegisters( );
-	codeView.SetToEIP( );
+	codeView.Set( ip_address_pair );
 	if( debugging ) {
 		UpdateOrderedSegments( );
 		UpdateMemoryViews( );
