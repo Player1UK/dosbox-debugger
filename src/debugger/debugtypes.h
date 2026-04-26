@@ -37,6 +37,18 @@ typedef struct Address_Pair {
 	static Address_Pair RealAddress( const uint32_t address, const uint16_t segment ) {
 		return { segment, address - ( segment << 4U ) };
 	}
+	static uint32_t Address( const Address_Pair &other ) {
+		return other.offset + ( other.segment << 4U );
+	}
+	static uint32_t Address( const uint16_t segment ) {
+		return ( segment << 4U );
+	}
+	static uint32_t Offset( const uint32_t address, const uint16_t segment ) {
+		return address - ( segment << 4U );
+	}
+	static uint32_t Segment( const uint32_t address ) {
+		return ( address >> 4U );
+	}
 } ADDRESS_PAIR;
 
 typedef struct Mem_Access {
