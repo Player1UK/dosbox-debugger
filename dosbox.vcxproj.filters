@@ -159,6 +159,9 @@
     <Filter Include="Header Files">
       <UniqueIdentifier>{b9cc7deb-801c-49e9-9178-6cb887943282}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\debugger\header files">
+      <UniqueIdentifier>{a932962d-81f1-44f3-9997-a2b9d23d9143}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />
@@ -166,9 +169,6 @@
   <ItemGroup>
     <ClInclude Include="src\dosbox.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\cpu\callback.h">
-      <Filter>Source Files\cpu</Filter>
     </ClInclude>
     <ClInclude Include="src\cpu\core_dynrec\decoder.h">
       <Filter>Source Files\cpu\core_dynrec</Filter>
@@ -329,30 +329,6 @@
     <ClInclude Include="src\cpu\string_ops.h">
       <Filter>Source Files\cpu</Filter>
     </ClInclude>
-    <ClInclude Include="src\debugger\breakpoint.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debugger.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debugger_inc.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debugger_disasm.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debug.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debugvar.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\debugtypes.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
-    <ClInclude Include="src\debugger\IBM_VGA_8x16.h">
-      <Filter>Source Files\debugger</Filter>
-    </ClInclude>
     <ClInclude Include="src\hardware\network\ipx.h">
       <Filter>Source Files\hardware\network</Filter>
     </ClInclude>
@@ -371,11 +347,34 @@
     <ClInclude Include="include\dosbox_config.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\unistd.h" />
+    <ClInclude Include="src\debugger\breakpoint.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debug.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugger.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugger_disasm.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugger_inc.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugtypes.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugvar.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\IBM_VGA_8x16.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\platform\windows\winres.rc">
       <Filter>Source Files\platform\windows</Filter>
-	</ResourceCompile>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

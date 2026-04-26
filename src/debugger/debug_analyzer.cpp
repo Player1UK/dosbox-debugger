@@ -404,7 +404,7 @@ static char * AnalyzeOperand( char *result, char *OPS, char *selector, OPERAND_P
 const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *selector ) {
 	static char result[128];
 	char *pEnd = result;
-	char INST[16] = "", OPS[128] = "";
+	char INST[16] = "", OPS[263] = "";
 	if( selector )
 		*selector = 0;
 
@@ -417,26 +417,27 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		}  else
 			strcpy( INST, inst );
 		upcase( INST );
-		strcpy( OPS, pOperands );
-		upcase( OPS );
-		char *pos = strchr( OPS, ',' );
-		if( pos ) {
-			*pos++ = 0;
-			if( *pos == ' ' )
-				++pos;
-			pEnd = AnalyzeOperand( result, OPS, selector, OP_LEFT );
-			*pEnd++ = ',';
-			*pEnd++ = ' ';
-			pEnd = AnalyzeOperand( pEnd, pos, selector, OP_RIGHT );
-		} else
-			pEnd = AnalyzeOperand( result, OPS, selector );
+		if( 'D' != *INST && !( 'B' == INST[1] || 'W' == INST[1] || 'D' == INST[1] ) ) {
+			strcpy( OPS, pOperands );
+			upcase( OPS );
+			char *pos = strchr( OPS, ',' );
+			if( pos ) {
+				*pos++ = 0;
+				if( *pos == ' ' )
+					++pos;
+				pEnd = AnalyzeOperand( result, OPS, selector, OP_LEFT );
+				*pEnd++ = ',';
+				*pEnd++ = ' ';
+				pEnd = AnalyzeOperand( pEnd, pos, selector, OP_RIGHT );
+			} else
+				pEnd = AnalyzeOperand( result, OPS, selector );
+		}
 	} else {
 		strcpy( INST, inst );
 		upcase( INST );
 	}
-	char *pos = strstr( INST, "CALLBACK" );
-	if( pos ) { // If it is a callback add additional info
-		pos += 9;
+	if( !strncmp( INST, "CALLBACK", 8U ) ) { // If it is a callback add additional info
+		char *pos = &INST[9];
 		Bitu nr = GetHexValue( pos );
 		const char *descr = CALLBACK_GetDescription( nr );
 		if( descr )
@@ -519,7 +520,7 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 			break;
 		}
 		if( jmp ) {
-			pos = strchr( OPS, '$' );
+			char *pos = strchr( OPS, '$' );
 			if( pos ) {
 				if( pos[1] == '+' || pos[2] == '+' )
 					strcpy( pEnd, " ->" );

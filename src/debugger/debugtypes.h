@@ -11,6 +11,18 @@ typedef struct Address_Pair {
 	bool operator==( const Address_Pair &other ) const {
 		return this->segment == other.segment && this->offset == other.offset;
 	}
+	bool operator>=( const Address_Pair &other ) const {
+		return this->segment >= other.segment && this->offset >= other.offset;
+	}
+	bool operator<=( const Address_Pair &other ) const {
+		return this->segment <= other.segment && this->offset <= other.offset;
+	}
+	bool operator>( const Address_Pair &other ) const {
+		return this->segment > other.segment && this->offset > other.offset;
+	}
+	bool operator<( const Address_Pair &other ) const {
+		return this->segment < other.segment && this->offset < other.offset;
+	}
 	Address_Pair &operator++( ) { // Prefix increment
 		++offset;
 		return *this;
@@ -21,6 +33,9 @@ typedef struct Address_Pair {
 	}
 	uint32_t address( ) const {
 		return offset + ( segment << 4U );
+	}
+	static Address_Pair RealAddress( const uint32_t address, const uint16_t segment ) {
+		return { segment, address - ( segment << 4U ) };
 	}
 } ADDRESS_PAIR;
 
@@ -47,6 +62,22 @@ typedef enum Label_Mask : unsigned __int8 {
 	LABEL_BOTH		= LABEL_CALL | LABEL_JUMP,
 	LABEL_ALL		= LABEL_BOTH | LABEL_DATA
 } LABEL_MASK;
+constexpr LABEL_MASK operator|( LABEL_MASK lhs, LABEL_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<LABEL_MASK>;
+	return static_cast<LABEL_MASK>( static_cast<Underlying>( lhs ) | static_cast<Underlying>( rhs ) );
+}
+inline LABEL_MASK & operator|=( LABEL_MASK &lhs, LABEL_MASK rhs ) noexcept {
+	lhs = lhs | rhs;
+	return lhs;
+}
+constexpr LABEL_MASK operator&( LABEL_MASK lhs, LABEL_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<LABEL_MASK>;
+	return static_cast<LABEL_MASK>( static_cast<Underlying>( lhs ) & static_cast<Underlying>( rhs ) );
+}
+inline LABEL_MASK & operator&=( LABEL_MASK &lhs, LABEL_MASK rhs ) noexcept {
+	lhs = lhs & rhs;
+	return lhs;
+}
 
 typedef enum Ptr_Type : uint8_t {
 	PTR_NONE		= 0U,

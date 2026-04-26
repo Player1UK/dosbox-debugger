@@ -319,22 +319,17 @@ static void DrawCode( ) {
 	if( dbg.update_win_frame[WIN_CODE] )
 		dbg.update_win_scroll[WIN_CODE] = true;
 	if( BeginSubWindow( WIN_CODE, "Code" , ImGuiWindowFlags_HorizontalScrollbar ) && !DecodedLine::isEmpty( ) ) {
-		static uint32_t selectedIndex = -1;
-		static bool setFocus = false;
-		uint32_t i = 0;
+		uint32_t index = 0U;
 		uint16_t currentSegment = 0U;
 		float yPosStart = ImGui::GetScrollY( );
 		float yPosEnd = yPosStart + window_size[WIN_CODE].y;
 		yPosStart -= window_size[WIN_CODE].y;
 		yPosEnd += window_size[WIN_CODE].y;
-		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ); previous_dline = dline, ++dline, ++i ) {
+		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ); previous_dline = dline, ++dline, ++index ) {
 			static uint8_t addressColorIndex = 0U;
-			if( dbg.update_win_scroll[WIN_CODE] && dline.realAddress.segment >= codeView.realAddress.segment && dline.realAddress.offset >= codeView.realAddress.offset ) {
+			if( dbg.update_win_scroll[WIN_CODE] && dline.realAddress >= codeView.realAddress ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
 				ImGui::SetScrollHereY( );
-				if( selectedIndex == static_cast<uint32_t>( -1 ) )
-					setFocus = true;
-				selectedIndex = i;
 			}
 			if( currentSegment != dline.realAddress.segment ) { // match segment to defined segments
 				if( currentSegment ) {
@@ -348,7 +343,7 @@ static void DrawCode( ) {
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			char id[12];
-			if( i && !( dline.mnemonicMask & MM_Data_Label ) && ( previous_dline.mnemonicMask & MM_Data_Label ) ) {
+			if( index && !( dline.mnemonicMask & MM_Data_Label ) && ( previous_dline.mnemonicMask & MM_Data_Label ) ) {
 				ImGui::Spacing( );
 				ImGui::Separator( );
 				ImGui::Spacing( );
@@ -356,14 +351,18 @@ static void DrawCode( ) {
 			if( dline.mnemonicMask & MM_Label ) {
 				sprintf( id, "##L%08X", dline.address );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick ) ) {
-					selectedIndex = i;
 					codeView.SetCursor( dline.realAddress );
 					labelView.Set( dline.realAddress, true );
 				}
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
 			} else if( dline.mnemonicMask & MM_Data_Label ) {
-				if( i && !( previous_dline.mnemonicMask & MM_Data_Label ) ) {
+				if( index && !( previous_dline.mnemonicMask & MM_Data_Label ) && dline.realAddress.offset ) {
+					ImGui::Separator( );
+					ImGui::Spacing( );
+				}
+			} else if( index && previous_dline.mnemonicMask & ( MM_RET | MM_JMP ) ) {
+				if( !( dline.mnemonicMask & ( MM_RET | MM_JMP ) ) ) {
 					ImGui::Separator( );
 					ImGui::Spacing( );
 				}
@@ -378,17 +377,11 @@ static void DrawCode( ) {
 				const bool is_current_ip = ( dline.realAddress.segment == RealSegValue( cs ) ) && ( dline.realAddress.offset == reg_eip );
 				const bool is_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress );
 				const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
-				const bool isSelected = ( selectedIndex == i );
 				sprintf( id, "##%08X", dline.address );
-				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-					selectedIndex = i;
+				if( ImGui::Selectable( id, dline.address == codeView.cursorAddress, ImGuiSelectableFlags_SelectOnClick ) ) {
 					codeView.SetCursor( dline.realAddress );
 					if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
 						labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
-				}
-				if( setFocus ) {
-					setFocus = false;
-					ImGui::SetKeyboardFocusHere( -1 );
 				}
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color :
@@ -1604,7 +1597,7 @@ static void AnalyzeCurrentInstruction( ) {
 	}
 }
 
-constexpr const uint8_t MAX_RECENT_IP = 128U;
+constexpr const uint8_t MAX_RECENT_IP = 64U;
 static uint32_t recent_ip_addresses[MAX_RECENT_IP] = {};
 static uint8_t recent_ip_index = 0U;
 
