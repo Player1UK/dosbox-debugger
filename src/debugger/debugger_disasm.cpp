@@ -189,7 +189,7 @@ static void RemoveCode( const Pair<uint32_t, DecodedLine> &code ) {
 static bool CheckCode( const Pair<uint32_t, DecodedLine> &code ) {
     if( !memcmp( &MemBase[code.extra.address], code.extra.opCode, code.extra.length ) )
         return true;
-    if( code.extra.mnemonicMask & MM_Data_Label ) {
+    if( ( code.extra.mnemonicMask & MM_Data_Label ) && code.extra.pOperands && visited.contains( code.value ) ) {
         auto &dline = const_cast<Pair<uint32_t, DecodedLine> &>( code ).extra;
         memcpy( dline.opCode, &MemBase[dline.address], dline.length );
         char *pOpCode = dline.szOpcode;
