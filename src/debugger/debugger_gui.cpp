@@ -432,8 +432,11 @@ static void DrawCode( ) {
 				}
 				if( dline.szComment[0] ) {
 					ImGui::SameLine( );
-					ImGui::SetCursorPosX( ImGui::GetCursorPosX( ) + 4 * char_width );
-					//ImGui::SameLine( 60 * char_width );
+					float xPos = ImGui::GetCursorPosX( );
+					if( xPos > 49 * char_width )
+						ImGui::SetCursorPosX( xPos + char_width );
+					else
+						ImGui::SetCursorPosX( 50 * char_width );
 					ImGui::TextColored( light_grey_color, "%s", dline.szComment );
 				}
 				if( is_current_ip ) {

@@ -417,7 +417,7 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		}  else
 			strcpy( INST, inst );
 		upcase( INST );
-		if( 'D' != *INST && !( 'B' == INST[1] || 'W' == INST[1] || 'D' == INST[1] ) ) {
+		if( !( 'D' == *INST && ( 'B' == INST[1] || 'W' == INST[1] || 'D' == INST[1] ) && ( 0 == INST[2] || ' ' == INST[2] ) ) ) {
 			strcpy( OPS, pOperands );
 			upcase( OPS );
 			char *pos = strchr( OPS, ',' );
@@ -557,6 +557,10 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		} else if( !strncmp( &INST[1], "USHF", 4U ) )
 			sprintf( pEnd, "%04X", reg_flags );
 		break;
+	}
+	if( !*result ) {
+		*result = '-';
+		result[1] = 0;
 	}
 	return result;
 }
