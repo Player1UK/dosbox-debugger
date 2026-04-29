@@ -46,7 +46,7 @@ typedef struct Address_Pair {
 	static uint32_t Offset( const uint32_t address, const uint16_t segment ) {
 		return address - ( segment << 4U );
 	}
-	static uint32_t Segment( const uint32_t address ) {
+	static uint16_t Segment( const uint32_t address ) {
 		return ( address >> 4U );
 	}
 } ADDRESS_PAIR;

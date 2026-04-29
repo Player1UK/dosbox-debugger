@@ -202,7 +202,7 @@ static void CheckSegmentRegisters( ) {
 				if( ss == seg_name ) {
 					uint16_t seg_end = GetPhysicalAddress( { SegValue( ss ), reg_sp } ) >> 4;
 					ordered_segments.insert( { seg_val, { SEG_STACK, 0U, seg_end } } );
-					if( !ordered_segments.count( { seg_end, {} } ) )
+					if( !ordered_segments.contains( { seg_end, {} } ) )
 						ordered_segments.insert( { seg_end, { SEG_STACK_END, 0U, seg_val } } );
 				} else
 					ordered_segments.insert( { seg_val, { ( cs == seg_name ? SEG_CODE : SEG_DATA ), 0U } } );
@@ -332,7 +332,7 @@ static void DrawCode( ) {
 				ImGui::SetScrollHereY( );
 			}
 			if( currentSegment != dline.realAddress.segment ) { // match segment to defined segments
-				if( currentSegment ) {
+				if( currentSegment && !( previous_dline.mnemonicMask & ( MM_Branch | MM_INT | MM_RET | MM_IO ) ) ) {
 					ImGui::Spacing( );
 					ImGui::Separator( );
 					ImGui::Spacing( );
@@ -343,7 +343,7 @@ static void DrawCode( ) {
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
 			char id[12];
-			if( index && !( dline.mnemonicMask & MM_Data_Label ) && ( previous_dline.mnemonicMask & MM_Data_Label ) ) {
+			if( index && dline.mnemonicMask && !( dline.mnemonicMask & MM_Data_Label ) && ( previous_dline.mnemonicMask & MM_Data_Label ) ) {
 				ImGui::Spacing( );
 				ImGui::Separator( );
 				ImGui::Spacing( );
@@ -357,7 +357,7 @@ static void DrawCode( ) {
 				ImGui::SameLine( ( ( dline.mnemonicMask & MM_Call_Label ) ? 16 : 21 ) * char_width );
 				ImGui::TextColored( ( dline.mnemonicMask & MM_Call_Label ) ? blue_color : yellow_color, ( dline.mnemonicMask & MM_Call_Label ) ? "Call label:" : "label:" );
 			} else if( dline.mnemonicMask & MM_Data_Label ) {
-				if( index && !( previous_dline.mnemonicMask & MM_Data_Label ) && dline.realAddress.offset ) {
+				if( index && previous_dline.mnemonicMask && !( previous_dline.mnemonicMask & MM_Data_Label ) && dline.realAddress.offset ) {
 					ImGui::Separator( );
 					ImGui::Spacing( );
 				}
@@ -1425,7 +1425,7 @@ bool DBGUI_StartUp( ) {
 	dbg.segment[SEG_ENV] = reinterpret_cast<uint16_t &>( psp[0x2C] ); // Environment segment
 	SEGTYPE seg_type = SEG_BASE;
 	for( const auto &seg : dbg.segment ) {
-		if( !ordered_segments.count( { seg, {} } ) )
+		if( !ordered_segments.contains( { seg, {} } ) )
 			ordered_segments.insert( { seg, { seg_type, 0U, ( SEG_STACK == seg_type ? dbg.segment[SEG_STACK_END] : SEG_STACK_END == seg_type ? dbg.segment[SEG_STACK] : static_cast<uint16_t>( 0U ) ) } } );
 		++seg_type;
 	}

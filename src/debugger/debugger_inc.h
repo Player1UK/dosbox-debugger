@@ -118,11 +118,11 @@ struct DBGBlock {
 	uint32_t input_y = 0U;
 	uint32_t global_mask = 0U;
 	/* Window column selection and height values in rows */
-	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 66U }, { 1U, 4U }, { 1U, 4U }, { 1U, 33U }, { 0U, 107U }, { 3U, 107U }, { 2U, 0U }, { 2U, 74U }, { 2U, 33U } };
+	COLUMNROWS columnRows[NUM_WINDOWS] = { { 1U, 66U }, { 1U, 4U }, { 1U, 8U }, { 1U, 29U }, { 0U, 107U }, { 3U, 107U }, { 2U, 0U }, { 2U, 74U }, { 2U, 33U } };
 
 	// Window dimensions (in characters)
 	const uint8_t window_cols[NUM_COLUMNS] = { 12U, DBGUI::DefaultWindowCols + 14U, DBGUI::DefaultWindowCols - 1U, 19U };
-	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -4, 0, 0, 0, -4, 73, 0 };
+	const int8_t height_ratio[NUM_WINDOWS] = { 65, -4, -8, 0, 0, 0, -4, 73, 0 };
 
 	// Computed window dimensions (in pixels, calculated from rows/cols)
 	SDL_Rect window_rect;
