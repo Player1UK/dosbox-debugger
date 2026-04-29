@@ -9,6 +9,8 @@
 
 #include <fstream>
 
+#include "Zydis/Utils.h"
+
 // Custom hash specialization for Pair<T1, T2>
 namespace std {
     template <typename T1, typename T2>
@@ -365,6 +367,18 @@ static void CreateDataWordEntry( const uint32_t address, const uint16_t segment,
     }
 }
 
+static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
+    std::set<Pair<uint16_t, SegmentInfo>>::iterator nextSegment;
+    if( FindNextSegment( segment, nextSegment ) ) {
+        uint32_t nextSegmentAddress = ADDRESS_PAIR::Address( nextSegment->value );
+        if( address < nextSegmentAddress && !ordered_code.contains( { address, {} } ) ) {
+            uint16_t nextSegmentOffset = ADDRESS_PAIR::Address( nextSegment->value ) - ADDRESS_PAIR::Address( segment );
+            for( uint16_t *word_offset = reinterpret_cast<uint16_t *>( &MemBase[address] ); *word_offset < nextSegmentOffset; ++word_offset, address += 2U )
+                CreateDataWordEntry( address, segment, true );
+        }
+    }
+}
+
 // Recursive disassembly function (initial foundation credit: CoPilot)
 static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_t startOffset, const bool fKeepUnknownData ) {
     uint32_t primary_length = 0U;
@@ -530,15 +544,19 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                             if( ZYDIS_REGISTER_NONE == op.mem.base ) {
                                 if( CreateDataEntry( addr, ptr.segment, dline.address, op ) )
                                     added.insert( address );
-                            } else if( op.mem.disp.value > dline.realAddress.offset ) {
-                                std::set<Pair<uint16_t, SegmentInfo>>::iterator nextSegment;
-                                if( FindNextSegment( ptr.segment, nextSegment ) ) {
-                                    uint32_t nextSegmentAddress = ADDRESS_PAIR::Address( nextSegment->value );
-                                    for( uint16_t *jmpList = reinterpret_cast<uint16_t *>( &MemBase[addr] ); *jmpList < nextSegmentAddress; ++jmpList, addr += 2U )
-                                        CreateDataWordEntry( addr, ptr.segment, true );
-                                }
-                            }
+                            } else if( op.mem.disp.value > dline.realAddress.offset )
+                                CreateDataWordSection( addr, ptr.segment );
                         }
+                    } if( i && ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type && ZYDIS_REGISTER_SI == dline.operands[0].reg.value ) {
+                        uint32_t imm_address;
+                        if( op.imm.is_relative ) {
+                            ZyanU64 result_address;
+                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &result_address );
+                            imm_address = static_cast<uint32_t>( result_address );
+                        } else
+                            imm_address = ADDRESS_PAIR::Address( ADDRESS_PAIR{ realAddress.segment, static_cast<uint32_t>( op.imm.value.u ) } );
+                        if( imm_address > dline.address )
+                            CreateDataWordSection( imm_address, realAddress.segment );
                     }
                 }
                 if( dline.mnemonicMask & MM_Branch ) {
