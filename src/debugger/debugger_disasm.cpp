@@ -367,14 +367,29 @@ static void CreateDataWordEntry( const uint32_t address, const uint16_t segment,
     }
 }
 
+constexpr const uint8_t MAX_DATA_WORD_SECTION_SIZE = 64U;
+
 static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     std::set<Pair<uint16_t, SegmentInfo>>::iterator nextSegment;
     if( FindNextSegment( segment, nextSegment ) ) {
         uint32_t nextSegmentAddress = ADDRESS_PAIR::Address( nextSegment->value );
-        if( address < nextSegmentAddress && !ordered_code.contains( { address, {} } ) ) {
+        if( address < nextSegmentAddress ) { 
+            uint32_t addresses[MAX_DATA_WORD_SECTION_SIZE] = {};
+            auto p_current_address = addresses;
             uint16_t nextSegmentOffset = ADDRESS_PAIR::Address( nextSegment->value ) - ADDRESS_PAIR::Address( segment );
-            for( uint16_t *word_offset = reinterpret_cast<uint16_t *>( &MemBase[address] ); *word_offset < nextSegmentOffset; ++word_offset, address += 2U )
-                CreateDataWordEntry( address, segment, true );
+            for( uint16_t *word_offset = reinterpret_cast<uint16_t *>( &MemBase[address] ), count = MAX_DATA_WORD_SECTION_SIZE; count && *word_offset < nextSegmentOffset; ++word_offset, address += 2U, --count, *++p_current_address = 0U ) {
+                if( !ordered_code.contains( { address, {} } ) )
+                    *p_current_address = address;
+                else {
+                    *addresses = 0U;
+                    break;
+                }
+            }
+            p_current_address = addresses;
+            while( *p_current_address ) {
+                CreateDataWordEntry( *p_current_address, segment, true );
+                ++p_current_address;
+            }
         }
     }
 }
@@ -997,8 +1012,12 @@ void DasmRecursiveDisassemble( const uint32_t startAddress, const uint32_t start
                 const_cast<DecodedLine &>( code_it->extra ).mnemonicMask |= ( ( label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE );
         }
     }
-    DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", visited.size( ) - lastProcessedCount );
-    lastProcessedCount = visited.size( );
+    uint32_t processedCount = visited.size( );
+    if( processedCount > lastProcessedCount )
+        DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", processedCount - lastProcessedCount );
+    else if( processedCount < lastProcessedCount )
+        DEBUG_ShowMsg( "DEBUG: Disassembly finished, removed %llu instruction offsets.", lastProcessedCount - processedCount );
+    lastProcessedCount = processedCount;
 }
 
 void DasmUnDisassemble( uint32_t address ) {
