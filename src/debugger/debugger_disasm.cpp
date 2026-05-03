@@ -374,21 +374,32 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     if( FindNextSegment( segment, nextSegment ) ) {
         uint32_t nextSegmentAddress = ADDRESS_PAIR::Address( nextSegment->value );
         if( address < nextSegmentAddress ) { 
-            uint32_t addresses[MAX_DATA_WORD_SECTION_SIZE] = {};
-            auto p_current_address = addresses;
-            uint16_t nextSegmentOffset = ADDRESS_PAIR::Address( nextSegment->value ) - ADDRESS_PAIR::Address( segment );
-            for( uint16_t *word_offset = reinterpret_cast<uint16_t *>( &MemBase[address] ), count = MAX_DATA_WORD_SECTION_SIZE; count && *word_offset < nextSegmentOffset; ++word_offset, address += 2U, --count, *++p_current_address = 0U ) {
-                if( !ordered_code.contains( { address, {} } ) )
-                    *p_current_address = address;
-                else {
-                    *addresses = 0U;
-                    break;
-                }
+            auto code_it = ordered_code.upper_bound( { address, {} } );
+            uint32_t address_max = static_cast<uint32_t>( -1 );
+            if( ordered_code.end( ) != code_it )
+                address_max = code_it->value - 1U;
+            uint32_t address_min = 0U;
+            if( ordered_code.begin( ) != code_it ) {
+                --code_it;
+                address_min = code_it->value + code_it->extra.length;
             }
-            p_current_address = addresses;
-            while( *p_current_address ) {
-                CreateDataWordEntry( *p_current_address, segment, true );
-                ++p_current_address;
+            if( address_min < address ) {
+                uint32_t addresses[MAX_DATA_WORD_SECTION_SIZE] = {};
+                auto p_current_address = addresses;
+                uint16_t nextSegmentOffset = ADDRESS_PAIR::Address( nextSegment->value ) - ADDRESS_PAIR::Address( segment );
+                for( uint16_t *word_offset = reinterpret_cast<uint16_t *>( &MemBase[address] ), count = MAX_DATA_WORD_SECTION_SIZE; count && *word_offset < nextSegmentOffset; ++word_offset, address += 2U, --count, *++p_current_address = 0U ) {
+                    if( address < address_max )
+                        *p_current_address = address;
+                    else {
+                        *addresses = 0U;
+                        break;
+                    }
+                }
+                p_current_address = addresses;
+                while( *p_current_address ) {
+                    CreateDataWordEntry( *p_current_address, segment, true );
+                    ++p_current_address;
+                }
             }
         }
     }
@@ -1014,9 +1025,9 @@ void DasmRecursiveDisassemble( const uint32_t startAddress, const uint32_t start
     }
     uint32_t processedCount = visited.size( );
     if( processedCount > lastProcessedCount )
-        DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %llu instruction offsets.", processedCount - lastProcessedCount );
+        DEBUG_ShowMsg( "DEBUG: Disassembly finished, processed %u instruction offsets.", processedCount - lastProcessedCount );
     else if( processedCount < lastProcessedCount )
-        DEBUG_ShowMsg( "DEBUG: Disassembly finished, removed %llu instruction offsets.", lastProcessedCount - processedCount );
+        DEBUG_ShowMsg( "DEBUG: Disassembly finished, removed %u instruction offsets.", lastProcessedCount - processedCount );
     lastProcessedCount = processedCount;
 }
 
