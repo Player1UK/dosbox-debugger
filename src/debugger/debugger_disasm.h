@@ -39,8 +39,9 @@ typedef enum Mnemonic_Mask : uint32_t {
 	MM_Call_Label		= 0x00004000,
 	MM_Jump_Label		= 0x00008000,
 	MM_Data_Label		= 0x00010000,
-	MM_Has_Segment		= 0x00020000,
-	MM_Memory_Access	= 0x00040000,
+	MM_Data_Segment		= 0x00020000,
+	MM_Has_Segment		= 0x00040000,
+	MM_Memory_Access	= 0x00080000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL | MM_LOOP,
 	MM_Label			= MM_Call_Label | MM_Jump_Label,
 } MNEMONIC_MASK;

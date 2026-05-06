@@ -285,7 +285,7 @@ static bool FindNextSegment( const uint16_t segment, std::set<Pair<uint16_t, Seg
     return true;
 }
 
-static bool CreateDataEntry( const uint32_t address, const uint16_t segment, const uint32_t call_address, const ZydisDecodedOperand &op ) {
+static bool CreateDataEntry( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const ZydisDecodedOperand &op ) {
     bool result = false;
     std::set<Pair<uint32_t, uint16_t>> callers, *pcallers = nullptr;
     auto label = labels.find( { address, { LABEL_ALL, segment, callers } } );
@@ -297,7 +297,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
             pcallers = &label.first->extra.callers;
     }
     if( pcallers ) {
-        pcallers->insert( { call_address, segment } );
+        pcallers->insert( { call_address, call_segment } );
         calls.insert( { call_address, address } );
     }
 
@@ -317,7 +317,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
             dline->operands[0] = imm_operand;
             dline->operands[0].imm = { false, false, { 0U } };
             dline->pOperands = &dline->szInstruction[3];
-            dline->mnemonicMask = MM_Data_Label;
+            dline->mnemonicMask = MM_Data_Label | ( segment != call_segment ? MM_Data_Segment : MM_NONE );
         }
     } else if( op.element_size > it->extra.instruction.operand_width ) {
         dline = &const_cast<DecodedLine &>( it->extra );
@@ -383,7 +383,7 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
                 --code_it;
                 address_min = code_it->value + code_it->extra.length;
             }
-            if( address_min < address ) {
+            if( address_min <= address ) {
                 uint32_t addresses[MAX_DATA_WORD_SECTION_SIZE] = {};
                 auto p_current_address = addresses;
                 uint16_t nextSegmentOffset = ADDRESS_PAIR::Address( nextSegment->value ) - ADDRESS_PAIR::Address( segment );
@@ -405,6 +405,8 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     }
 }
 
+uint16_t data_segment = 0U;
+
 // Recursive disassembly function (initial foundation credit: CoPilot)
 static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_t startOffset, const bool fKeepUnknownData ) {
     uint32_t primary_length = 0U;
@@ -412,6 +414,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
     std::unordered_set<uint32_t> added;
 
     uint8_t ah = 0U; // for int 21h tracking
+    uint16_t dx = 0U; // for DS tracking
 
     bool fPrimary = true;
     while( !toVisit.empty( ) ) {
@@ -568,10 +571,17 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                             if( InvalidAddress( addr, ptr ) )
                                 continue;
                             if( ZYDIS_REGISTER_NONE == op.mem.base ) {
-                                if( CreateDataEntry( addr, ptr.segment, dline.address, op ) )
+                                if( CreateDataEntry( addr, ptr.segment, dline.address, dline.realAddress.segment, op ) )
                                     added.insert( address );
                             } else if( op.mem.disp.value > dline.realAddress.offset )
                                 CreateDataWordSection( addr, ptr.segment );
+                        } else if( data_segment && ZYDIS_REGISTER_DS == op.mem.segment && ZYDIS_REGISTER_NONE == op.mem.base ) {
+                            ADDRESS_PAIR ptr = { data_segment, static_cast<uint32_t>( op.mem.disp.value ) };
+                            uint32_t addr = ptr.address( );
+                            if( InvalidAddress( addr, ptr ) )
+                                continue;
+                            if( CreateDataEntry( addr, ptr.segment, dline.address, dline.realAddress.segment, op ) )
+                                added.insert( address );
                         }
                     } if( i && ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type && ZYDIS_REGISTER_SI == dline.operands[0].reg.value ) {
                         uint32_t imm_address;
@@ -641,15 +651,27 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                 } else if( dline.mnemonicMask & MM_RET ) {
                     break;
                 } else if( dline.mnemonicMask & MM_MOV ) {
-                    if( dline.instruction.operand_count == 2 ) {
-                        if( dline.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER && ( dline.operands[0].reg.value == ZYDIS_REGISTER_AH || dline.operands[0].reg.value == ZYDIS_REGISTER_AX ) ) {
-                            if( dline.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE ) {
-                                if( dline.operands[0].reg.value == ZYDIS_REGISTER_AH )
-                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u );
-                                else
-                                    ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
+                    if( 2U == dline.instruction.operand_count && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type ) {
+                        if( ZYDIS_OPERAND_TYPE_IMMEDIATE == dline.operands[1].type ) {
+                            switch( dline.operands[0].reg.value ) {
+                            case ZYDIS_REGISTER_AH:
+                                ah = static_cast<uint8_t>( dline.operands[1].imm.value.u );
+                                break;
+                            case ZYDIS_REGISTER_AX:
+                                ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
+                                break;
+                            case ZYDIS_REGISTER_DX:
+                                if( !data_segment )
+                                    dx = static_cast<uint16_t>( dline.operands[1].imm.value.u );
+                                break;
+                            case ZYDIS_REGISTER_DS:
+                                if( !data_segment )
+                                    data_segment = static_cast<uint16_t>( dline.operands[1].imm.value.u );
+                            default:
+                                break;
                             }
-                        }
+                        } else if( !data_segment && dx && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[1].type && ZYDIS_REGISTER_DS == dline.operands[0].reg.value && ZYDIS_REGISTER_DX == dline.operands[1].reg.value )
+                            data_segment = dx;
                     }
                 }
             } else { // Decode failed...
@@ -901,6 +923,8 @@ static void CheckUnknown( ) { // attempt to identify non-disassembled parts...
     uint32_t address = ADDRESS_PAIR::Address( start_segment );
     uint16_t segment = start_segment;
     for( auto code_it = ordered_code.begin( ); code_it != ordered_code.end( ); code_it = CodeNext( code_it, address ), CheckNextSegment( nextSegment, nextSegmentAddress ) ) {
+        if( code_it->extra.mnemonicMask & MM_Data_Segment )
+            continue;
         if( code_it->extra.realAddress.segment > segment && ( SEG_CODE != nextSegment->extra.type || code_it->extra.realAddress.segment >= DOSBOX_SEGMENT ) )
             address = nextSegmentAddress;
         uint32_t unknown_address = address;

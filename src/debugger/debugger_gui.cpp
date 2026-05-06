@@ -1504,8 +1504,12 @@ void TemporaryDataSegment( ) {
 	if( dbg.segment[SEG_DATA] && dbg.segment[SEG_DATA] != dbg.segment[SEG_PSP] )
 		return;
 	auto dline = DecodedLine::last( );
-	uint32_t address = dline.address + dline.length;
-	dbg.segment[SEG_DATA] = ( address >> 4U ) + ( address & 0x0000000F ? 1U : 0U );
+	if( dline.mnemonicMask & MM_Data_Label )
+		dbg.segment[SEG_DATA] = dline.realAddress.segment;
+	else {
+		uint32_t address = dline.address + dline.length;
+		dbg.segment[SEG_DATA] = ( address >> 4U ) + ( address & 0x0000000F ? 1U : 0U );
+	}
 	ordered_segments.insert( { dbg.segment[SEG_DATA], { SEG_DATA, 0U } } );
 	fTemporaryDataSegment = true;
 }
