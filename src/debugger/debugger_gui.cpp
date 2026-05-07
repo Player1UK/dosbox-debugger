@@ -514,6 +514,26 @@ static void SetCursors( ) {
 	}
 }
 
+static uint16_t NumSegDiff( uint16_t segA, uint16_t segB ) {
+	if( segA == segB )
+		return 0U;
+	uint16_t result = 1U;
+	if( segB < segA )
+		std::swap( segA, segB );
+	auto ordered_segment_a = ordered_segments.find( { segA, {} } );
+	if( ordered_segment_a != ordered_segments.end( ) ) {
+		auto ordered_segment_b = ordered_segments.find( { segB, {} } );
+		if( ordered_segment_b != ordered_segments.end( ) ) {
+			while( ++ordered_segment_a != ordered_segment_b )
+				++result;
+		}
+	}
+	return result;
+}
+
+static uint32_t num_data_lines = 0U;
+static uint32_t data_line_index = 0U;
+
 static void DrawData( ) {
 	if( BeginSubWindow( WIN_DATA, "Data", ImGuiWindowFlags_None ) ) {
 		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
@@ -555,13 +575,14 @@ static void DrawData( ) {
 			char *line = &data_text_buffer[0];
 			float yPos = 0.0f;
 			SetCursors( );
-			for( ; count; --count, line += 82U, ++line_segment, yPos += line_height_no_spacing ) {
+			for( num_data_lines = 0; count; --count, line += 82U, ++line_segment, yPos += line_height, ++num_data_lines ) {
 				if( line_segment >= ordered_segment->value ) {
 					address_pair.segment = ordered_segment->value;
 					++ordered_segment;
 					address_pair.offset = 0U;
 					*line++ = '\n';
-					yPos += line_height_no_spacing;
+					yPos += line_height;
+					++num_data_lines;
 				}
 				// Address
 				bool f32bit = false;
@@ -592,7 +613,7 @@ static void DrawData( ) {
 						}
 					}
 				}
-				*reinterpret_cast<int16_t *>( &line[63] ) = 0x2020;
+				*reinterpret_cast<uint16_t *>( &line[63] ) = 0x2020;
 				line[81] = '\n';
 			}
 			*line = 0;
@@ -612,25 +633,60 @@ static void DrawData( ) {
 		ImGui::PopItemWidth( );
 		ImGui::Separator( );
 		if( ImGui::BeginChild( "ScrollRegion", { 0.0f, 0.0f }, false, ImGuiWindowFlags_HorizontalScrollbar ) ) {
-			ImVec2 top_left = ImGui::GetCursorScreenPos( ); // Top-left corner;
+			float scrollY = ImGui::GetScrollY( );
+			if( dbg.update_win_scroll[WIN_DATA] ) {
+				if( scroll_to_diff && !dataAddress[DATA_VIEW].offset && !data_diff[DATA_VIEW].empty( ) )
+					scrollY = data_diff[DATA_VIEW][0].pos.y;
+				else
+					scrollY = ( ( dataAddress[DATA_VIEW].segment - data_segment ) + ( dataAddress[DATA_VIEW].offset >> 4 ) + NumSegDiff( data_segment, dataAddress[DATA_VIEW].segment ) ) * line_height;
+				data_line_index = scrollY / line_height;
+			}
+			ImVec2 screen_top_left = ImGui::GetCursorScreenPos( ); // Top-left corner;
+
+			float yPosStart = scrollY;
+			float yPosEnd = yPosStart + window_size[WIN_DATA].y;
+			yPosStart -= window_size[WIN_DATA].y;
+			yPosEnd += window_size[WIN_DATA].y;
+			auto screen_yPosStart = screen_top_left.y + yPosStart;
+			auto screen_yPosEnd = screen_top_left.y + yPosEnd;
+
 			auto drawList = ImGui::GetWindowDrawList( );
 			for( const auto &diff : data_diff[DATA_VIEW] ) {
-				ImVec2 pos = { top_left.x + diff.pos.x, top_left.y + diff.pos.y };
-				drawList->AddRectFilled( pos, { pos.x + digit_width * 2.0f + space_width, pos.y + line_height_no_spacing }, diff_col, 4.0f );
+				ImVec2 posTopLeft = { screen_top_left.x + diff.pos.x, screen_top_left.y + diff.pos.y };
+				ImVec2 posBottomRight = { posTopLeft.x + digit_width * 2.0f + space_width, posTopLeft.y + line_height_no_spacing };
+				if( posBottomRight.y >= screen_yPosStart && posTopLeft.y <= screen_yPosEnd )
+					drawList->AddRectFilled( posTopLeft, posBottomRight, diff_col, 4.0f );
 			}
 			for( auto &cursor : data_cursor ) {
 				if( cursor.visible ) {
-					ImVec2 pos = { top_left.x + cursor.pos.x, top_left.y + cursor.pos.y };
-					drawList->AddRectFilled( pos, { pos.x + cursor_width, pos.y + line_height_no_spacing }, cursor.color );
+					ImVec2 posTopLeft = { screen_top_left.x + cursor.pos.x, screen_top_left.y + cursor.pos.y };
+					ImVec2 posBottomRight = { posTopLeft.x + cursor_width, posTopLeft.y + line_height_no_spacing };
+					if( posBottomRight.y >= screen_yPosStart && posTopLeft.y <= screen_yPosEnd )
+						drawList->AddRectFilled( posTopLeft, posBottomRight, cursor.color );
 				}
 			}
-			ImGui::TextUnformatted( &data_text_buffer[0] );
+			char id[12];
+			auto pTextBuffer = &data_text_buffer[0];
+			for( uint32_t count = num_data_lines, i = 0U; count; --count, ++i ) {
+				if( '\n' == *pTextBuffer ) {
+					ImGui::NewLine( );
+					++pTextBuffer;
+				} else {
+					float yPos = ImGui::GetCursorPosY( );
+					if( yPos >= yPosStart && yPos <= yPosEnd ) {
+						sprintf( id, "##%08X", i );
+						if( ImGui::Selectable( id, i == data_line_index, ImGuiSelectableFlags_SelectOnClick ) )
+							data_line_index = i;
+						ImGui::SameLine( 0.0f, 0.0f );
+						ImGui::TextUnformatted( pTextBuffer, pTextBuffer + 81 );
+					} else
+						ImGui::NewLine( );
+					pTextBuffer += 82U;
+				}
+			}
 			if( dbg.update_win_scroll[WIN_DATA] ) {
 				dbg.update_win_scroll[WIN_DATA] = false;
-				if( scroll_to_diff && !data_diff[DATA_VIEW].empty( ) )
-					ImGui::SetScrollY( data_diff[DATA_VIEW][0].pos.y );
-				else
-					ImGui::SetScrollY( ( ( dataAddress[DATA_VIEW].segment - data_segment ) + ( dataAddress[DATA_VIEW].offset >> 4 ) ) * line_height_no_spacing );
+				ImGui::SetScrollY( scrollY );
 			}
 		}
 		ImGui::EndChild( );
@@ -1058,6 +1114,12 @@ static void DrawLabels( ) {
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				labelView.Set( { label.extra.segment, offset }, true, false );
 				codeView.Set( { label.extra.segment, offset }, false );
+				if( label.extra.type & LABEL_DATA ) {
+					dataAddress[DATA_VIEW] = { label.extra.segment, offset };
+					dbg.update_win[WIN_DATA] = data_segment != label.extra.segment;
+					dbg.update_win_scroll[WIN_DATA] = true;
+				}
+
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", label.extra.segment );

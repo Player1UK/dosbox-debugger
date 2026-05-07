@@ -566,7 +566,9 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                         dline.mem_access[i].disp.value = op.mem.disp.value;
 
                         if( ZYDIS_REGISTER_CS == op.mem.segment && op.mem.disp.has_displacement && ( ZYDIS_REGISTER_NONE == op.mem.base || ( 0x10 == op.size && ( dline.mnemonicMask & MM_JMP ) ) ) ) {
-                            ADDRESS_PAIR ptr = { dline.realAddress.segment, static_cast<uint32_t>( op.mem.disp.value ) };
+                            ZyanU64 z64_result_address;
+                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &z64_result_address );
+                            ADDRESS_PAIR ptr = { dline.realAddress.segment, static_cast<uint32_t>( z64_result_address ) };
                             uint32_t addr = ptr.address( );
                             if( InvalidAddress( addr, ptr ) )
                                 continue;
@@ -576,7 +578,9 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                             } else if( op.mem.disp.value > dline.realAddress.offset )
                                 CreateDataWordSection( addr, ptr.segment );
                         } else if( data_segment && ZYDIS_REGISTER_DS == op.mem.segment && ZYDIS_REGISTER_NONE == op.mem.base ) {
-                            ADDRESS_PAIR ptr = { data_segment, static_cast<uint32_t>( op.mem.disp.value ) };
+                            ZyanU64 z64_result_address;
+                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &z64_result_address );
+                            ADDRESS_PAIR ptr = { data_segment, static_cast<uint32_t>( z64_result_address ) };
                             uint32_t addr = ptr.address( );
                             if( InvalidAddress( addr, ptr ) )
                                 continue;
@@ -586,9 +590,9 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     } if( i && ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type && ZYDIS_REGISTER_SI == dline.operands[0].reg.value ) {
                         uint32_t imm_address;
                         if( op.imm.is_relative ) {
-                            ZyanU64 result_address;
-                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &result_address );
-                            imm_address = static_cast<uint32_t>( result_address );
+                            ZyanU64 z64_result_address;
+                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &z64_result_address );
+                            imm_address = static_cast<uint32_t>( z64_result_address );
                         } else
                             imm_address = ADDRESS_PAIR::Address( ADDRESS_PAIR{ realAddress.segment, static_cast<uint32_t>( op.imm.value.u ) } );
                         if( imm_address > dline.address )
