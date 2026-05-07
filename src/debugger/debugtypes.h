@@ -23,13 +23,16 @@ typedef struct Address_Pair {
 	bool operator<( const Address_Pair &other ) const {
 		return this->segment < other.segment && this->offset < other.offset;
 	}
-	Address_Pair &operator++( ) { // Prefix increment
+	Address_Pair & operator++( ) { // Prefix increment
 		++offset;
 		return *this;
 	}
-	Address_Pair &operator+=( const uint32_t value ) {
+	Address_Pair & operator+=( const uint32_t value ) {
 		offset += value;
 		return *this;
+	}
+	Address_Pair operator+( const uint32_t value ) {
+		return { segment, offset + value };
 	}
 	uint32_t address( ) const {
 		return offset + ( segment << 4U );

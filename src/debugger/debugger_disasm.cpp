@@ -192,7 +192,7 @@ static bool CheckCode( const Pair<uint32_t, DecodedLine> &code ) {
     if( code.extra.length ) {
         if( !memcmp( &MemBase[code.extra.address], code.extra.opCode, code.extra.length ) )
             return true;
-        if( ( code.extra.mnemonicMask & MM_Data_Label ) && code.extra.pOperands && visited.contains( code.value ) ) {
+        if( ( code.extra.mnemonicMask & MM_Data_Label ) && code.extra.pOperands ) {
             auto &dline = const_cast<Pair<uint32_t, DecodedLine> &>( code ).extra;
             memcpy( dline.opCode, &MemBase[dline.address], dline.length );
             char *pOpCode = dline.szOpcode;
@@ -305,6 +305,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
     if( !visited.contains( address ) )
         ordered_code.extract( { address, {} } );
     const auto it = ordered_code.find( { address, {} } );
+    const uint8_t num_bits = op.element_size ? op.element_size : op.size ? op.size : 8U;
     if( it == ordered_code.end( ) ) {
         auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
         if( entry.second ) { // insert successful
@@ -312,17 +313,25 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
             visited.insert( address );
             dline = &const_cast<DecodedLine &>( entry.first->extra );
             dline->instruction = data_instruction;
-            dline->instruction.length = dline->length = op.element_size >> 3U;
-            dline->instruction.operand_width = op.element_size;
+            dline->instruction.operand_width = num_bits;
+            dline->instruction.length = dline->length = num_bits >> 3U;
             dline->operands[0] = imm_operand;
             dline->operands[0].imm = { false, false, { 0U } };
             dline->pOperands = &dline->szInstruction[3];
             dline->mnemonicMask = MM_Data_Label | ( segment != call_segment ? MM_Data_Segment : MM_NONE );
         }
-    } else if( op.element_size > it->extra.instruction.operand_width ) {
-        dline = &const_cast<DecodedLine &>( it->extra );
-        dline->instruction.length = dline->length = op.element_size >> 3U;
-        dline->instruction.operand_width = op.element_size;
+    } else if( num_bits != it->extra.instruction.operand_width ) {
+        if( it->extra.mnemonicMask & MM_Data_Segment ) {
+            if( num_bits < it->extra.instruction.operand_width ) {
+                auto &rdline = const_cast<DecodedLine &>( it->extra );
+                rdline.instruction.operand_width = num_bits;
+                rdline.instruction.length = rdline.length = num_bits >> 3U;
+            }
+        } else if( num_bits > it->extra.instruction.operand_width ) {
+            dline = &const_cast<DecodedLine &>( it->extra );
+            dline->instruction.operand_width = num_bits;
+            dline->instruction.length = dline->length = num_bits >> 3U;
+        }
     }
     if( dline ) {
         memcpy( dline->opCode, &MemBase[address], dline->length );
@@ -334,7 +343,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
                 visited.extract( address + i );
             }
         }
-        switch( op.element_size ) {
+        switch( num_bits ) {
         case 0x10:
             sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dw 0x%02X%02X", MemBase[address + 1U], MemBase[address] );
             dline->operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( MemBase[address] );
@@ -405,7 +414,78 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     }
 }
 
-uint16_t data_segment = 0U;
+static uint16_t data_segment = 0U;
+
+static void FindDS( const uint32_t startAddress, const uint32_t startOffset ) {
+    if( data_segment )
+        return;
+    std::vector<ADDRESS_PAIR> toReturn;
+    uint16_t dx = 0U; // for DS value tracking
+    ADDRESS_PAIR realAddress = { static_cast<uint16_t>( ( startAddress - startOffset ) >> 4 ), startOffset };
+    uint32_t address = realAddress.address( );
+    while( address < binarySize ) {
+        ZydisDecodedInstruction instruction;
+        ZydisDecoderContext context;
+        if( ZYAN_SUCCESS( ZydisDecoderDecodeInstruction( &decoder, &context, &MemBase[address], binarySize - address, &instruction ) ) ) {
+            if( ZYDIS_MNEMONIC_CALL == instruction.mnemonic || ZYDIS_MNEMONIC_JMP == instruction.mnemonic ) {
+                if( instruction.operand_count ) {
+                    ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+                    if( ZYAN_SUCCESS( ZydisDecoderDecodeOperands( &decoder, &context, &instruction, operands, instruction.operand_count ) ) ) {
+                        const auto &op = operands[0];
+                        if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type || ZYDIS_OPERAND_TYPE_POINTER == op.type ) {
+                            ADDRESS_PAIR ptr = { static_cast<uint16_t>( -1 ), static_cast<uint32_t>( -1 ) };
+                            if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type ) {
+                                ZyanU64 z64_result_address;
+                                ZydisCalcAbsoluteAddress( &instruction, &op, address, &z64_result_address );
+                                ptr = { realAddress.segment, static_cast<uint32_t>( z64_result_address ) };
+                            } else
+                                ptr = { op.ptr.segment, op.ptr.offset };
+                            uint32_t addr = ptr.address( );
+                            if( !InvalidAddress( addr, ptr ) ) {
+                                if( ZYDIS_MNEMONIC_CALL == instruction.mnemonic )
+                                    toReturn.push_back( realAddress + instruction.length );
+                                realAddress = ptr;
+                                address = realAddress.address( );
+                                continue;
+                            }
+                        }
+                    }
+                }
+            } else if( ZYDIS_MNEMONIC_RET == instruction.mnemonic ) {
+                realAddress = toReturn.back( );
+                toReturn.pop_back( );
+                address = realAddress.address( );
+                continue;
+            } else if( ZYDIS_MNEMONIC_MOV == instruction.mnemonic ) {
+                if( 2U == instruction.operand_count ) {
+                    ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+                    if( ZYAN_SUCCESS( ZydisDecoderDecodeOperands( &decoder, &context, &instruction, operands, instruction.operand_count ) ) ) {
+                        if( ZYDIS_OPERAND_TYPE_REGISTER == operands[0].type ) {
+                            if( ZYDIS_OPERAND_TYPE_IMMEDIATE == operands[1].type ) {
+                                switch( operands[0].reg.value ) {
+                                case ZYDIS_REGISTER_DX:
+                                    dx = static_cast<uint16_t>( operands[1].imm.value.u );
+                                    break;
+                                case ZYDIS_REGISTER_DS:
+                                    data_segment = static_cast<uint16_t>( operands[1].imm.value.u );
+                                    return;
+                                default:
+                                    break;
+                                }
+                            } else if( !data_segment && dx && ZYDIS_OPERAND_TYPE_REGISTER == operands[1].type && ZYDIS_REGISTER_DS == operands[0].reg.value && ZYDIS_REGISTER_DX == operands[1].reg.value ) {
+                                data_segment = dx;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            address += instruction.length;
+            realAddress += instruction.length;
+        } else
+            break;
+    }
+}
 
 // Recursive disassembly function (initial foundation credit: CoPilot)
 static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_t startOffset, const bool fKeepUnknownData ) {
@@ -414,7 +494,6 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
     std::unordered_set<uint32_t> added;
 
     uint8_t ah = 0U; // for int 21h tracking
-    uint16_t dx = 0U; // for DS tracking
 
     bool fPrimary = true;
     while( !toVisit.empty( ) ) {
@@ -663,19 +742,10 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                                 break;
                             case ZYDIS_REGISTER_AX:
                                 ah = static_cast<uint8_t>( dline.operands[1].imm.value.u >> 8U );
-                                break;
-                            case ZYDIS_REGISTER_DX:
-                                if( !data_segment )
-                                    dx = static_cast<uint16_t>( dline.operands[1].imm.value.u );
-                                break;
-                            case ZYDIS_REGISTER_DS:
-                                if( !data_segment )
-                                    data_segment = static_cast<uint16_t>( dline.operands[1].imm.value.u );
                             default:
                                 break;
                             }
-                        } else if( !data_segment && dx && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[1].type && ZYDIS_REGISTER_DS == dline.operands[0].reg.value && ZYDIS_REGISTER_DX == dline.operands[1].reg.value )
-                            data_segment = dx;
+                        }
                     }
                 }
             } else { // Decode failed...
@@ -685,6 +755,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     dline.length = dline.instruction.length;
                     dline.operands[0] = imm_operand;
                     dline.operands[0].imm = { false, false, { dw } };
+                    memcpy( dline.opCode, &MemBase[dline.address], dline.length );
                     char *pOpCode = dline.szOpcode;
                     for( auto i = 0; i < dline.length; ++i )
                         pOpCode += sprintf( pOpCode, "%02X ", MemBase[address + i] );
@@ -694,6 +765,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     address += dline.length;
                 } else { // Treat as data; step forward 1 byte
                     dline.length = 1U;
+                    *dline.opCode = MemBase[address];
                     sprintf( dline.szOpcode, "%02X", MemBase[address] );
                     ++address;
                     ++realAddress;
@@ -1035,6 +1107,7 @@ void DasmRecursiveDisassemble( const uint32_t startAddress, const uint32_t start
 
     if( ordered_code.empty( ) )
         segment0_phys = startAddress - startOffset;
+    FindDS( startAddress, startOffset );
     RecursiveDisassemble( startAddress, startOffset, false );
     for( auto code = ordered_code.begin( ), next = code; code != ordered_code.end( ); code = next ) {
         ++next;
