@@ -92,6 +92,7 @@ const ImVec4 light_pink_color = ImVec4( 1.0f, 0.68f, 0.79f, 1.0f );
 const ImVec4 pink_color = ImVec4( 0.93f, 0.54f, 0.97f, 1.0f );
 const ImVec4 purple_color = ImVec4( 0.75f, 0.72f, 1.0f, 1.0f );
 //const ImVec4 dark_purple_color = ImVec4( 0.74f, 0.38f, 0.97f, 1.0f );
+const ImVec4 light_violet_color = ImVec4( 0.97f, 0.54f, 0.72f, 1.0f );
 const ImVec4 violet_color = ImVec4( 0.97f, 0.38f, 0.64f, 1.0f );
 const ImVec4 jmp_color = ImVec4( 1.0f, 1.0f, 0.57f, 1.0f );
 const ImVec4 ret_color = ImVec4( 0.94f, 0.53f, 0.52f, 1.0f );
@@ -412,14 +413,16 @@ static void DrawCode( ) {
 				else if( dline.mnemonicMask & MM_CMP )
 					operator_color = &gold_color;
 				else if( dline.mnemonicMask & MM_IO )
-					operator_color = &light_pink_color;
+					operator_color = &white_color;
 				else if( dline.mnemonicMask & MM_Logical )
-					operator_color = &violet_color;
+					operator_color = &light_violet_color;
 				else if( dline.mnemonicMask & MM_Math )
 					operator_color = &pink_color;
+				else if( dline.mnemonicMask & MM_String )
+					operator_color = &light_pink_color;
 				else if( dline.mnemonicMask & MM_Stack )
 					operator_color = &light_grey_color;
-				else if( dline.mnemonicMask & MM_ConditionalJump )
+				else if( dline.mnemonicMask & ( MM_ConditionalJump | MM_LOOP ) )
 					operator_color = &yellow_color;
 				ImGui::SameLine( 30 * char_width );
 				ImGui::TextColored( *operator_color, "%s", dline.szInstruction );
