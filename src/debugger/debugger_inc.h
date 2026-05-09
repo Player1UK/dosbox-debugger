@@ -129,7 +129,6 @@ struct DBGBlock {
 	uint16_t segment[NUM_SEG_TYPES];
 };
 
-extern ADDRESS_PAIR dataAddress[NUM_DATA_VIEWS];
 extern WINDOW_ID win_data_view[NUM_DATA_VIEWS];
 extern WINDOW_ID win_diff_view[NUM_DATA_VIEWS];
 
@@ -140,32 +139,47 @@ extern bool exitNormalLoop;
 extern bool showExtend;
 
 #define MAXCMDLEN 254
-constexpr const uint8_t CODEVIEW_HISTORY_LIMIT = 32U;
-typedef enum CodeView_Mask : unsigned __int8 {
-	CV_UPDATE_NONE		= 0x00U,
-	CV_UPDATE_CODE		= 0x01U,
-	CV_UPDATE_SCROLL	= 0x02U,
-	CV_UPDATE_HISTORY	= 0x04U,
-	CV_UPDATE_DEFAULT = CV_UPDATE_CODE | CV_UPDATE_SCROLL,
-	CV_UPDATE_CODE_HISTORY = CV_UPDATE_CODE | CV_UPDATE_HISTORY,
-	CV_UPDATE_SCROLL_HISTORY = CV_UPDATE_SCROLL | CV_UPDATE_HISTORY,
-	CV_UPDATE_ALL = CV_UPDATE_CODE | CV_UPDATE_SCROLL | CV_UPDATE_HISTORY
-} CODEVIEW_MASK;
+constexpr const uint8_t VIEW_HISTORY_LIMIT = 64U;
+typedef enum View_Mask : unsigned __int8 {
+	V_UPDATE_NONE			= 0x00U,
+	V_UPDATE_VIEW			= 0x01U,
+	V_UPDATE_SCROLL			= 0x02U,
+	V_UPDATE_HISTORY		= 0x04U,
+	V_UPDATE_DEFAULT		= V_UPDATE_VIEW | V_UPDATE_SCROLL,
+	V_UPDATE_CODE_HISTORY	= V_UPDATE_VIEW | V_UPDATE_HISTORY,
+	V_UPDATE_SCROLL_HISTORY = V_UPDATE_SCROLL | V_UPDATE_HISTORY,
+	V_UPDATE_ALL			= V_UPDATE_VIEW | V_UPDATE_SCROLL | V_UPDATE_HISTORY
+} VIEW_MASK;
+constexpr VIEW_MASK operator|( VIEW_MASK lhs, VIEW_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<VIEW_MASK>;
+	return static_cast<VIEW_MASK>( static_cast<Underlying>( lhs ) | static_cast<Underlying>( rhs ) );
+}
+inline VIEW_MASK &operator|=( VIEW_MASK &lhs, VIEW_MASK rhs ) noexcept {
+	lhs = lhs | rhs;
+	return lhs;
+}
+constexpr VIEW_MASK operator&( VIEW_MASK lhs, VIEW_MASK rhs ) noexcept {
+	using Underlying = std::underlying_type_t<VIEW_MASK>;
+	return static_cast<VIEW_MASK>( static_cast<Underlying>( lhs ) & static_cast<Underlying>( rhs ) );
+}
+inline VIEW_MASK &operator&=( VIEW_MASK &lhs, VIEW_MASK rhs ) noexcept {
+	lhs = lhs & rhs;
+	return lhs;
+}
 
-struct SCodeView {
+struct SView {
+	const WINDOW_ID win_id;
 	ADDRESS_PAIR realAddress;
 	uint32_t address = 0;
-	ADDRESS_PAIR cursorRealAddress;
-	uint32_t cursorAddress = 0;
 
-	void Set( const ADDRESS_PAIR &, const CODEVIEW_MASK = CV_UPDATE_DEFAULT );
-	void SetToEIP( );
-	void SetCursor( const ADDRESS_PAIR & );
+	SView( const WINDOW_ID _win_id ) : win_id( _win_id ) {}
+
+	virtual bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
 
 	void HistoryNext( );
 	void HistoryPrev( );
 private:
-	ADDRESS_PAIR history[CODEVIEW_HISTORY_LIMIT], backup;
+	ADDRESS_PAIR history[VIEW_HISTORY_LIMIT], backup;
 	uint8_t history_index = 0U, history_begin = 0U, history_end = 0U;
 
 	void HistoryInsert( const ADDRESS_PAIR & );
@@ -173,7 +187,23 @@ private:
 	void IndexDec( );
 	bool UniquePrevious( const ADDRESS_PAIR & );
 };
-extern SCodeView codeView;
+
+struct SCodeView : public SView {
+	ADDRESS_PAIR cursorRealAddress;
+	uint32_t cursorAddress = 0;
+
+	SCodeView( WINDOW_ID win_id ) : SView( win_id ) {}
+
+	bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
+	bool SetToEIP( );
+	bool SetCursor( const ADDRESS_PAIR & );
+} extern codeView;
+
+struct SDataView : public SView {
+	SDataView( WINDOW_ID win_id ) : SView( win_id ) {}
+	
+	bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
+} extern dataView, stackView;
 
 // Event queue for debugger input
 struct DebuggerInputEvent {
@@ -181,7 +211,5 @@ struct DebuggerInputEvent {
 	std::string text = {};
 };
 extern std::queue<DebuggerInputEvent> debugger_event_queue;
-
 #endif // C_DEBUGGER
-
 #endif // DOSBOX_DEBUGGER_INC_H

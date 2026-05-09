@@ -362,17 +362,27 @@ bool ParseCommand( char *str ) {
 	if( command == "C" ) { // Set code overview
 		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", address_pair.segment, address_pair.offset );
-		codeView.Set( address_pair, CV_UPDATE_ALL );
+		codeView.Set( address_pair, V_UPDATE_ALL );
 		return true;
 	}
 
 	if( command == "D" ) { // Set data overview
 		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
-		if( address_pair.segment != dataAddress[dbg.active_data_view].segment || address_pair.offset > 0xFFFF )
-			dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
-		dataAddress[dbg.active_data_view] = address_pair;
-		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", dataAddress[dbg.active_data_view].segment, dataAddress[dbg.active_data_view].offset );
+		VIEW_MASK view_mask = V_UPDATE_SCROLL_HISTORY;
+		if( address_pair.segment != dataView.realAddress.segment || address_pair.offset > 0xFFFF )
+			view_mask |= V_UPDATE_VIEW;
+		dataView.Set( address_pair, view_mask );
+		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", address_pair.segment, address_pair.offset );
+		return true;
+	}
+
+	if( command == "S" ) { // Set stack overview
+		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
+		VIEW_MASK view_mask = V_UPDATE_SCROLL_HISTORY;
+		if( address_pair.segment != stackView.realAddress.segment || address_pair.offset > 0xFFFF )
+			view_mask |= V_UPDATE_VIEW;
+		stackView.Set( address_pair, view_mask );
+		DEBUG_ShowMsg( "DEBUG: Set data overview to %04X:%04X\n", address_pair.segment, address_pair.offset );
 		return true;
 	}
 
@@ -551,9 +561,9 @@ bool ParseCommand( char *str ) {
 #endif
 		DEBUG_ShowMsg( "BPLIST                    - List breakpoints.\n" );
 		DEBUG_ShowMsg( "BPDEL  [bpNr] / *         - Delete breakpoint nr / all.\n" );
-		DEBUG_ShowMsg( "C / D  [segment]:[offset] - Set code / data view address.\n" );
+		DEBUG_ShowMsg( "C/D/S  [segment]:[offset] - Set code/data/stack view address.\n" );
 		DEBUG_ShowMsg( "DOS MCBS                  - Show Memory Control Block chain.\n" );
-		DEBUG_ShowMsg( "INT [nr] / INTT [nr]      - Execute / Trace into interrupt.\n" );
+		DEBUG_ShowMsg( "INT [nr] / INTT [nr]      - Execute/Trace into interrupt.\n" );
 #if C_HEAVY_DEBUGGER
 		DEBUG_ShowMsg( "LOG [num]                 - Write cpu log file.\n" );
 		DEBUG_ShowMsg( "LOGS/LOGL/LOGC [num]      - Write short/long/cs:ip-only cpu log file.\n" );

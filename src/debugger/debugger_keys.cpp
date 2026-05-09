@@ -83,53 +83,41 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 	Bits ret = 0;
 
 	switch( key.key ) {
-	case SDLK_C: // ALT - C: CS:IP
+	case SDLK_C: // ALT+C: CS:IP
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( cs ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_eip : reg_ip };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( cs ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_eip : reg_ip }, V_UPDATE_ALL );
 		break;
-	case SDLK_D: // ALT - D: DS:SI
+	case SDLK_D: // ALT+D: DS:SI
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esi : reg_si };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esi : reg_si }, V_UPDATE_ALL );
 		break;
-	case SDLK_E: // ALT - E: es:di
+	case SDLK_E: // ALT+E: es:di
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edi : reg_di };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edi : reg_di }, V_UPDATE_ALL );
 		break;
-	case SDLK_X: // ALT - X: ds:dx
+	case SDLK_X: // ALT+X: ds:dx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edx : reg_dx };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( ds ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_edx : reg_dx }, V_UPDATE_ALL );
 		break;
-	case SDLK_B: // ALT -B: es:bx
+	case SDLK_B: // ALT+B: es:bx
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_ebx : reg_bx };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( es ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_ebx : reg_bx }, V_UPDATE_ALL );
 		break;
-	case SDLK_S: // ALT - S: ss:sp
+	case SDLK_S: // ALT+S: ss:sp
 		if( !( key.mod & SDL_KMOD_ALT ) )
 			break;
-		dataAddress[dbg.active_data_view] = { RealSegValue( ss ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esp : reg_sp };
-		dbg.update_win[win_data_view[dbg.active_data_view]] = true;
-		dbg.update_win_scroll[win_data_view[dbg.active_data_view]] = true;
+		dataView.Set( { RealSegValue( ss ), cpu.pmode && !( reg_flags & FLAG_VM ) ? reg_esp : reg_sp }, V_UPDATE_ALL );
 		break;
 	case SDLK_F1:
 		if( key.mod & SDL_KMOD_SHIFT )
 			DasmUnDisassemble( codeView.cursorAddress );
 		else
-			codeView.Set( codeView.cursorRealAddress, CV_UPDATE_CODE );
+			codeView.Set( codeView.cursorRealAddress, V_UPDATE_VIEW );
 		break;
 	case SDLK_F6: case SDLK_F7: case SDLK_F8: // Run to cursor
 		ret = DEBUG_Run( RUN_TO_TBP, codeView.cursorRealAddress );

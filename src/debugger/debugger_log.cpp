@@ -136,8 +136,8 @@ static void LogMCBChain( uint16_t mcb_segment ) {
 	DOS_MCB mcb( mcb_segment );
 	char filename[9]; // 8 characters plus a terminating NUL
 	const char *psp_seg_note;
-	auto realOffset = static_cast<uint16_t>( dataAddress[dbg.active_data_view].offset ); // Realmode addressing only
-	PhysPt dataAddr = PhysicalMake( dataAddress[dbg.active_data_view].segment, realOffset ); // location being viewed in the "Data Overview"
+	auto realOffset = static_cast<uint16_t>( dataView.realAddress.offset ); // Realmode addressing only
+	PhysPt dataAddr = PhysicalMake( dataView.realAddress.segment, realOffset ); // location being viewed in the "Data Overview"
 
 	// loop forever, breaking out of the loop once we've processed the last MCB
 	while( true ) {
@@ -162,7 +162,7 @@ static void LogMCBChain( uint16_t mcb_segment ) {
 		PhysPt mcbEndAddr = PhysicalMake( mcb_segment + 1 + mcb.GetSize( ), 0 );
 		if( dataAddr >= mcbStartAddr && dataAddr < mcbEndAddr ) {
 			LOG( LOG_MISC, LOG_ERROR )
-				( "   (data addr %04hX:%04X is %u bytes past this MCB)", dataAddress[dbg.active_data_view].segment, realOffset, dataAddr - mcbStartAddr );
+				( "   (data addr %04hX:%04X is %u bytes past this MCB)", dataView.realAddress.segment, realOffset, dataAddr - mcbStartAddr );
 		}
 		// if we've just processed the last MCB in the chain, break out of the loop
 		if( mcb.GetType( ) == 0x5a )

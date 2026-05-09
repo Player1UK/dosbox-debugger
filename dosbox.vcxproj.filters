@@ -100,6 +100,12 @@
     <ClCompile Include="src\webserver\dos.cpp">
       <Filter>Source Files\webserver</Filter>
     </ClCompile>
+    <ClCompile Include="src\debugger\debugger_gui_code.cpp">
+      <Filter>Source Files\debugger</Filter>
+    </ClCompile>
+    <ClCompile Include="src\debugger\debugger_gui_data.cpp">
+      <Filter>Source Files\debugger</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">
@@ -369,6 +375,9 @@
       <Filter>Source Files\debugger\header files</Filter>
     </ClInclude>
     <ClInclude Include="src\debugger\IBM_VGA_8x16.h">
+      <Filter>Source Files\debugger\header files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\debugger\debugger_gui.h">
       <Filter>Source Files\debugger\header files</Filter>
     </ClInclude>
   </ItemGroup>
