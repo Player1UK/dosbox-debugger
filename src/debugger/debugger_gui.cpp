@@ -159,7 +159,7 @@ static bool UpdateOrderedSegments( ) {
 		return false;
 	uint16_t seg_index = 0U;
 	for( const auto &segment : ordered_segments ) {
-		if( segment.extra.type == SEG_BASE || segment.extra.type == SEG_MAX )
+		if( SEG_BASE == segment.extra.type || SEG_MAX == segment.extra.type || ( SEG_DATA == segment.extra.type && segment.value == dbg.segment[SEG_DATA] ) )
 			continue;
 		const_cast<uint8_t &>( segment.extra.index ) = ( seg_index++ % ( MAX_ADDRESS_COLORS - 1U ) ) + 1U;
 	}
@@ -217,15 +217,17 @@ static void CheckSegmentRegisters( ) {
 	}
 }
 
-void SCodeView::Set( const ADDRESS_PAIR &address_pair, const bool update_code, const bool update_scroll ) {
+void SCodeView::Set( const ADDRESS_PAIR &address_pair, const CODEVIEW_MASK update_mask ) {
+	if( update_mask & CV_UPDATE_HISTORY )
+		HistoryInsert( realAddress );
 	realAddress = cursorRealAddress = address_pair;
 	address = cursorAddress = address_pair.address( );
-	if( update_code && !AddressVisited( address ) ) { // address not already disassembled
+	if( ( update_mask & CV_UPDATE_CODE ) && !AddressVisited( address ) ) { // address not already disassembled
 		DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
 		if( debugging && UpdateOrderedSegments( ) )
 			UpdateMemoryViews( );
 	}
-	dbg.update_win_scroll[WIN_CODE] = debugging && update_scroll;
+	dbg.update_win_scroll[WIN_CODE] = debugging && ( update_mask & CV_UPDATE_SCROLL );
 }
 
 void SCodeView::SetToEIP( ) {
@@ -235,6 +237,54 @@ void SCodeView::SetToEIP( ) {
 void SCodeView::SetCursor( const ADDRESS_PAIR &address_pair ) {
 	cursorRealAddress = address_pair;
 	cursorAddress = address_pair.offset + ( address_pair.segment << 4 );
+}
+
+void SCodeView::HistoryInsert( const ADDRESS_PAIR &address_pair ) {
+	if( !UniquePrevious( address_pair ) )
+		return;
+	history[history_index] = address_pair;
+	IndexInc( );
+	history_end = history_index;
+}
+void SCodeView::IndexInc( ) {
+	++history_index;
+	if( history_index >= CODEVIEW_HISTORY_LIMIT )
+		history_index = 0U;
+	if( history_index == history_begin )
+		++history_begin;
+}
+void SCodeView::IndexDec( ) {
+	if( history_index )
+		--history_index;
+	else
+		history_index = CODEVIEW_HISTORY_LIMIT - 1U;
+}
+bool SCodeView::UniquePrevious( const ADDRESS_PAIR &address_pair ) {
+	if( history_end == history_begin )
+		return true;
+	auto index = history_index;
+	if( index )
+		--index;
+	else
+		index = CODEVIEW_HISTORY_LIMIT - 1U;
+	return history[index] != address_pair;
+}
+
+void SCodeView::HistoryNext( ) {
+	if( history_index == history_end )
+		return;
+	++history_index;
+	if( history_index >= CODEVIEW_HISTORY_LIMIT )
+		history_index = 0U;
+	Set( history_index == history_end ? backup : history[history_index], CV_UPDATE_SCROLL );
+}
+void SCodeView::HistoryPrev( ) {
+	if( history_index == history_begin )
+		return;
+	if( history_index == history_end )
+		backup = realAddress;
+	IndexDec( );
+	Set( history[history_index], CV_UPDATE_SCROLL );
 }
 
 void SLabelView::Set( const ADDRESS_PAIR &address_pair, const bool fLabel, const bool update_scroll ) {
@@ -320,6 +370,12 @@ static void DrawCode( ) {
 	if( dbg.update_win_frame[WIN_CODE] )
 		dbg.update_win_scroll[WIN_CODE] = true;
 	if( BeginSubWindow( WIN_CODE, "Code" , ImGuiWindowFlags_HorizontalScrollbar ) && !DecodedLine::isEmpty( ) ) {
+		if( ImGui::IsWindowHovered( ImGuiHoveredFlags_ChildWindows ) ) {
+			if( ImGui::IsMouseClicked( 3 ) )
+				codeView.HistoryPrev( );
+			else if( ImGui::IsMouseClicked( 4 ) )
+				codeView.HistoryNext( );
+		}
 		uint32_t index = 0U;
 		uint16_t currentSegment = 0U;
 		float yPosStart = ImGui::GetScrollY( );
@@ -380,9 +436,17 @@ static void DrawCode( ) {
 				const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
 				sprintf( id, "##%08X", dline.address );
 				if( ImGui::Selectable( id, dline.address == codeView.cursorAddress, ImGuiSelectableFlags_SelectOnClick ) ) {
-					codeView.SetCursor( dline.realAddress );
-					if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
-						labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
+					if( ( dline.mnemonicMask & MM_Branch ) && ImGui::IsKeyDown( ImGuiMod_Ctrl ) ) {
+						ADDRESS_PAIR labelRealAddress;
+						if( CallerLabelRealAddress( dline.address, labelRealAddress ) ) {
+							codeView.Set( labelRealAddress, CV_UPDATE_SCROLL_HISTORY );
+							break;
+						}
+					} else {
+						codeView.SetCursor( dline.realAddress );
+						if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
+							labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
+					}
 				}
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color :
@@ -966,7 +1030,7 @@ static void DrawRegisters( ) {
 						dbg.update_win_scroll[WIN_STACK] = true;
 						break;
 					case cs:
-						codeView.Set( { segVal, 0U } );
+						codeView.Set( { segVal, 0U }, CV_UPDATE_SCROLL_HISTORY );
 					default:
 						dataAddress[DATA_VIEW] = { segVal, 0U };
 						dbg.update_win[WIN_DATA] = data_segment != segVal;
@@ -1074,9 +1138,9 @@ static void DrawSegments( ) {
 			char id[11];
 			sprintf( id, "##%04X", segment.value );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { text_width, 0.0f } ) ) {
-				if( segment.extra.type == SEG_CODE )
-					codeView.Set( { segment.value, 0U }, false );
-				if( segment.extra.type == SEG_STACK ) {
+				if( SEG_CODE == segment.extra.type || ( SEG_DATA == segment.extra.type && segment.value == dbg.segment[SEG_DATA] ) )
+					codeView.Set( { segment.value, 0U }, CV_UPDATE_SCROLL_HISTORY );
+				if( SEG_STACK == segment.extra.type ) {
 					const auto it = ++ordered_segments.find( { segment.value, {} } );
 					dataAddress[STACK_VIEW] = { segment.value, static_cast<uint32_t>( it->value - segment.value ) << 4 };
 					dbg.update_win[WIN_STACK] = stack_segment != segment.value;
@@ -1116,7 +1180,7 @@ static void DrawLabels( ) {
 			sprintf( id, "##%08X", label.value );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 				labelView.Set( { label.extra.segment, offset }, true, false );
-				codeView.Set( { label.extra.segment, offset }, false );
+				codeView.Set( { label.extra.segment, offset }, CV_UPDATE_SCROLL_HISTORY );
 				if( label.extra.type & LABEL_DATA ) {
 					dataAddress[DATA_VIEW] = { label.extra.segment, offset };
 					dbg.update_win[WIN_DATA] = data_segment != label.extra.segment;
@@ -1141,7 +1205,7 @@ static void DrawLabels( ) {
 				sprintf( id, "##c%08X", caller.value );
 				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 					labelView.Set( { caller.extra, offset }, false, false );
-					codeView.Set( { caller.extra, offset }, false );
+					codeView.Set( { caller.extra, offset }, CV_UPDATE_SCROLL_HISTORY );
 				}
 				uint8_t color_index = addressColorIndex;
 				const auto &ordered_segment = ordered_segments.find( { caller.extra, {} } );
@@ -1579,6 +1643,10 @@ void TemporaryDataSegment( ) {
 	fTemporaryDataSegment = true;
 }
 
+void UpdateDataSegment( const uint16_t segment ) {
+	dbg.segment[SEG_DATA] = segment;
+}
+
 void DBGUI_Shutdown( ) {
 	if( !imgui_initialized )
 		return;
@@ -1693,7 +1761,7 @@ void DEBUG_NewInstruction( ) {
 			return;
 	}
 	CheckSegmentRegisters( );
-	codeView.Set( ip_address_pair );
+	codeView.Set( ip_address_pair, debugging ? CV_UPDATE_DEFAULT : CV_UPDATE_CODE );
 	if( debugging ) {
 		UpdateOrderedSegments( );
 		UpdateMemoryViews( );

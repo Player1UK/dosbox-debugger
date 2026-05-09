@@ -94,6 +94,8 @@ const DecodedLine operator--( DecodedLine const &, int ); // Postfix decrement
 extern bool AddressVisited( uint32_t );
 extern bool AddressVisited( const ADDRESS_PAIR & );
 
+extern bool CallerLabelRealAddress( const uint32_t, ADDRESS_PAIR & );
+
 extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const bool, const bool );
 
 extern void DasmReset( );

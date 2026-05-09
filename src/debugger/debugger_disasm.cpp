@@ -90,6 +90,19 @@ bool AddressVisited( const ADDRESS_PAIR &address_pair ) {
     return AddressVisited( address_pair.offset + ( address_pair.segment << 4 ) );
 }
 
+bool CallerLabelRealAddress( const uint32_t address, ADDRESS_PAIR &realAddress ) {
+    const auto call = calls.find( { address, {} } );
+    if( call != calls.end( ) ) {
+        std::set<Pair<uint32_t, uint16_t>> callers;
+        auto label = labels.find( { call->extra, { LABEL_ALL, 0U, callers } } );
+        if( label != labels.end( ) ) {
+            realAddress = ADDRESS_PAIR::RealAddress( label->value, label->extra.segment );
+            return true;
+        }
+    }
+    return false;
+}
+
 uint8_t DasmI386( char *decodedInstruction, char *&pOperands, const uint32_t address, const uint32_t ip_offset, const bool f32bit, const bool fProtected ) {
     pOperands = nullptr;
 	ZydisDisassembledInstruction instruction;
@@ -285,21 +298,24 @@ static bool FindNextSegment( const uint16_t segment, std::set<Pair<uint16_t, Seg
     return true;
 }
 
-static bool CreateDataEntry( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const ZydisDecodedOperand &op ) {
-    bool result = false;
-    std::set<Pair<uint32_t, uint16_t>> callers, *pcallers = nullptr;
+static void CreateLabel( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const LABEL_MASK type ) {
+    std::set<Pair<uint32_t, uint16_t>> callers;
     auto label = labels.find( { address, { LABEL_ALL, segment, callers } } );
-    if( label != labels.end( ) )
-        pcallers = &label->extra.callers;
-    else {
-        auto label = labels.insert( { address, LabelInfo( LABEL_DATA, segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
-        if( label.second ) // insert success
-            pcallers = &label.first->extra.callers;
+    if( labels.end( ) == label ) {
+        auto new_label = labels.insert( { address, LabelInfo( type, segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+        if( new_label.second ) // insert success
+            label = new_label.first;
     }
-    if( pcallers ) {
-        pcallers->insert( { call_address, call_segment } );
+    if( label != labels.end( ) ) {
+        const_cast<LABEL_MASK &>( label->extra.type ) |= type;
+        label->extra.callers.insert( { call_address, call_segment } );
         calls.insert( { call_address, address } );
     }
+}
+
+static bool CreateDataEntry( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const ZydisDecodedOperand &op ) {
+    bool result = false;
+    CreateLabel( address, segment, call_address, call_segment, LABEL_DATA );
 
     DecodedLine *dline = nullptr;
     if( !visited.contains( address ) )
@@ -414,6 +430,8 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     }
 }
 
+extern void UpdateDataSegment( const uint16_t );
+
 static uint16_t data_segment = 0U;
 
 static void FindDS( const uint32_t startAddress, const uint32_t startOffset ) {
@@ -468,12 +486,16 @@ static void FindDS( const uint32_t startAddress, const uint32_t startOffset ) {
                                     break;
                                 case ZYDIS_REGISTER_DS:
                                     data_segment = static_cast<uint16_t>( operands[1].imm.value.u );
+                                    ordered_segments.insert( { data_segment, { SEG_DATA, 0U } } );
+                                    UpdateDataSegment( data_segment );
                                     return;
                                 default:
                                     break;
                                 }
                             } else if( !data_segment && dx && ZYDIS_OPERAND_TYPE_REGISTER == operands[1].type && ZYDIS_REGISTER_DS == operands[0].reg.value && ZYDIS_REGISTER_DX == operands[1].reg.value ) {
                                 data_segment = dx;
+                                ordered_segments.insert( { data_segment, { SEG_DATA, 0U } } );
+                                UpdateDataSegment( data_segment );
                                 return;
                             }
                         }
@@ -740,18 +762,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                                 if( !visited.contains( addr ) )
                                     toVisit.push_back( ptr );
                             }
-                            std::set<Pair<uint32_t, uint16_t>> callers;
-                            auto label = labels.find( { addr, { LABEL_BOTH, ptr.segment, callers } } );
-                            if( labels.end( ) == label ) {
-                                auto new_label = labels.insert( { addr, LabelInfo( ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP, ptr.segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
-                                if( new_label.second )// insert success
-                                    label = new_label.first;
-                            }
-                            if( label != labels.end( ) ) {
-                                const_cast<LABEL_MASK &>( label->extra.type ) |= ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP;
-                                label->extra.callers.insert( { dline.address, dline.realAddress.segment } );
-                                calls.insert( { dline.address, addr } );
-                            }
+                            CreateLabel( addr, ptr.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask &MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )

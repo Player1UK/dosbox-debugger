@@ -129,7 +129,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		if( key.mod & SDL_KMOD_SHIFT )
 			DasmUnDisassemble( codeView.cursorAddress );
 		else
-			codeView.Set( codeView.cursorRealAddress, true, false );
+			codeView.Set( codeView.cursorRealAddress, CV_UPDATE_CODE );
 		break;
 	case SDLK_F6: case SDLK_F7: case SDLK_F8: // Run to cursor
 		ret = DEBUG_Run( RUN_TO_TBP, codeView.cursorRealAddress );

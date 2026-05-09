@@ -362,7 +362,7 @@ bool ParseCommand( char *str ) {
 	if( command == "C" ) { // Set code overview
 		ADDRESS_PAIR address_pair = { static_cast<uint16_t>( GetHexValue( found ) ),  GetHexValue( ++found ) }; // skip ":"
 		DEBUG_ShowMsg( "DEBUG: Set code overview to %04X:%04X\n", address_pair.segment, address_pair.offset );
-		codeView.Set( address_pair );
+		codeView.Set( address_pair, CV_UPDATE_ALL );
 		return true;
 	}
 

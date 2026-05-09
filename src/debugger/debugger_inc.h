@@ -140,15 +140,38 @@ extern bool exitNormalLoop;
 extern bool showExtend;
 
 #define MAXCMDLEN 254
+constexpr const uint8_t CODEVIEW_HISTORY_LIMIT = 32U;
+typedef enum CodeView_Mask : unsigned __int8 {
+	CV_UPDATE_NONE		= 0x00U,
+	CV_UPDATE_CODE		= 0x01U,
+	CV_UPDATE_SCROLL	= 0x02U,
+	CV_UPDATE_HISTORY	= 0x04U,
+	CV_UPDATE_DEFAULT = CV_UPDATE_CODE | CV_UPDATE_SCROLL,
+	CV_UPDATE_CODE_HISTORY = CV_UPDATE_CODE | CV_UPDATE_HISTORY,
+	CV_UPDATE_SCROLL_HISTORY = CV_UPDATE_SCROLL | CV_UPDATE_HISTORY,
+	CV_UPDATE_ALL = CV_UPDATE_CODE | CV_UPDATE_SCROLL | CV_UPDATE_HISTORY
+} CODEVIEW_MASK;
+
 struct SCodeView {
 	ADDRESS_PAIR realAddress;
 	uint32_t address = 0;
 	ADDRESS_PAIR cursorRealAddress;
 	uint32_t cursorAddress = 0;
 
-	void Set( const ADDRESS_PAIR &, const bool = true, const bool = true );
+	void Set( const ADDRESS_PAIR &, const CODEVIEW_MASK = CV_UPDATE_DEFAULT );
 	void SetToEIP( );
 	void SetCursor( const ADDRESS_PAIR & );
+
+	void HistoryNext( );
+	void HistoryPrev( );
+private:
+	ADDRESS_PAIR history[CODEVIEW_HISTORY_LIMIT], backup;
+	uint8_t history_index = 0U, history_begin = 0U, history_end = 0U;
+
+	void HistoryInsert( const ADDRESS_PAIR & );
+	void IndexInc( );
+	void IndexDec( );
+	bool UniquePrevious( const ADDRESS_PAIR & );
 };
 extern SCodeView codeView;
 

@@ -37,6 +37,13 @@ typedef struct Address_Pair {
 	uint32_t address( ) const {
 		return offset + ( segment << 4U );
 	}
+	bool IsNull( ) const {
+		return 0U == segment && 0U == offset;
+	}
+	void Clear( ) {
+		segment = 0U;
+		offset = 0U;
+	}
 	static Address_Pair RealAddress( const uint32_t address, const uint16_t segment ) {
 		return { segment, address - ( segment << 4U ) };
 	}
