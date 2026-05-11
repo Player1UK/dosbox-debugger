@@ -4,20 +4,9 @@
 #include "debugger_gui.h"
 
 #if C_DEBUGGER
-#include <SDL3/SDL.h>
-
-#include <imgui.h>
-#include <imgui_impl_sdl3.h>
-#include <imgui_impl_sdlgpu3.h>
-#include <imgui_internal.h>
-
 #include "breakpoint.h"
 #include "cpu/cpu.h"
-#include "cpu/paging.h"
-#include "debugger_disasm.h"
-#include "debugvar.h"
 #include "hardware/timer.h"
-#include "utils/string_utils.h"
 
 SCodeView codeView = { WIN_CODE };
 
@@ -94,7 +83,9 @@ static void CheckSegmentRegisters( ) {
 }
 
 bool SCodeView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_mask ) {
-	if( !SView::Set( address_pair, ( update_mask & V_UPDATE_SCROLL_HISTORY ) ) )
+//	if( ( update_mask & V_UPDATE_HISTORY ) && cursorRealAddress != realAddress )
+//		HistoryInsert( cursorRealAddress );
+	if( !SView::Set( address_pair, ( update_mask & static_cast<VIEW_MASK>( ~V_UPDATE_VIEW ) ) ) )
 		return false;
 	cursorRealAddress = address_pair;
 	cursorAddress = address;
@@ -242,7 +233,7 @@ void DrawCode( ) {
 				else if( dline.mnemonicMask & ( MM_ConditionalJump | MM_LOOP ) )
 					operator_color = &yellow_color;
 				ImGui::SameLine( 30 * char_width );
-				ImGui::TextColored( *operator_color, "%s", dline.szInstruction );
+				ImGui::TextColored( *operator_color, "%s", dline.pMnemonic );
 				const ImVec4 *operands_color = is_current_ip ? &green_color : &purple_color;
 				if( dline.pOperands ) {
 					ImGui::SameLine( );
@@ -308,7 +299,7 @@ static void AnalyzeCurrentInstruction( ) {
 		return;
 	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
 	if( dline ) {
-		auto szResult = AnalyzeInstruction( dline->szInstruction, dline->pOperands, curSelectorName );
+		auto szResult = AnalyzeInstruction( dline->pMnemonic, dline->pOperands, curSelectorName );
 		if( *szResult )
 			strcpy( const_cast<char *>( &dline->szComment[0] ), szResult );
 		last_ip = reg_eip;

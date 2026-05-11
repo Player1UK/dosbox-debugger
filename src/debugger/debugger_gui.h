@@ -5,6 +5,8 @@
 
 #if C_DEBUGGER
 #include <imgui.h>
+#include <imgui_internal.h>
+#include "debugger_disasm.h"
 
 constexpr const uint8_t MAX_ADDRESS_COLORS = 9U;
 extern const ImVec4 address_colors[MAX_ADDRESS_COLORS][2];

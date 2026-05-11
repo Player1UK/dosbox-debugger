@@ -5,18 +5,14 @@
 
 #if C_DEBUGGER
 #include "debugger_gui.h"
-#include <SDL3/SDL.h>
 
+#include <SDL3/SDL.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
-#include <imgui_internal.h>
 
-#include "breakpoint.h"
 #include "cpu/cpu.h"
 #include "cpu/paging.h"
-#include "debugger_disasm.h"
 #include "debugvar.h"
-#include "hardware/timer.h"
 #include "utils/string_utils.h"
 
 #include "IBM_VGA_8x16.h"

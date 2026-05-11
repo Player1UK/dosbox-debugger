@@ -437,7 +437,9 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		upcase( INST );
 	}
 	if( !strncmp( INST, "CALLBACK", 8U ) ) { // If it is a callback add additional info
-		char *pos = &INST[9];
+		strcpy( OPS, pOperands );
+		upcase( OPS );
+		char *pos = OPS;
 		Bitu nr = GetHexValue( pos );
 		const char *descr = CALLBACK_GetDescription( nr );
 		if( descr )

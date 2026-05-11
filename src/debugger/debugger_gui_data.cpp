@@ -4,20 +4,6 @@
 #include "debugger_gui.h"
 
 #if C_DEBUGGER
-#include <SDL3/SDL.h>
-
-#include <imgui_impl_sdl3.h>
-#include <imgui_impl_sdlgpu3.h>
-#include <imgui_internal.h>
-
-#include "breakpoint.h"
-#include "cpu/cpu.h"
-#include "cpu/paging.h"
-#include "debugger_disasm.h"
-#include "debugvar.h"
-#include "hardware/timer.h"
-#include "utils/string_utils.h"
-
 SDataView dataView = { WIN_DATA };
 SDataView stackView = { WIN_STACK };
 Cursor data_cursor[NUM_DATA_CURSORS] = { { IM_COL32( 234, 63, 247, 255 ) }, { IM_COL32( 255, 142, 85, 255 ) } };

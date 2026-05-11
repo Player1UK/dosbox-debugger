@@ -75,6 +75,7 @@ struct DecodedLine {
 	char szOpcode[25] = "";
 	char szInstruction[266] = "";
 	char szComment[128] = "";
+	char const *pMnemonic = nullptr;
 	char const *pOperands = nullptr;
 	MEM_ACCESS mem_access[NUM_MEM_OPS];
 

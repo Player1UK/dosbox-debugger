@@ -178,11 +178,12 @@ struct SView {
 
 	void HistoryNext( );
 	void HistoryPrev( );
+protected:
+	void HistoryInsert( const ADDRESS_PAIR & );
 private:
 	ADDRESS_PAIR history[VIEW_HISTORY_LIMIT], backup;
 	uint8_t history_index = 0U, history_begin = 0U, history_end = 0U;
 
-	void HistoryInsert( const ADDRESS_PAIR & );
 	void IndexInc( );
 	void IndexDec( );
 	bool UniquePrevious( const ADDRESS_PAIR & );

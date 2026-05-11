@@ -328,6 +328,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
             result = true;
             visited.insert( address );
             dline = &const_cast<DecodedLine &>( entry.first->extra );
+            dline->pMnemonic = dline->szInstruction;
             dline->instruction = data_instruction;
             dline->instruction.operand_width = num_bits;
             dline->instruction.length = dline->length = num_bits >> 3U;
@@ -381,6 +382,7 @@ static void CreateDataWordEntry( const uint32_t address, const uint16_t segment,
     auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
     if( entry.second ) { // insert successful
         DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+        dline.pMnemonic = dline.szInstruction;
         dline.instruction = data_instruction;
         dline.instruction.length = dline.length = 2U;
         dline.instruction.operand_count = dline.instruction.operand_count_visible = 0U;
@@ -430,9 +432,39 @@ static void CreateDataWordSection( uint32_t address, const uint16_t segment ) {
     }
 }
 
-extern void UpdateDataSegment( const uint16_t );
-
 static uint16_t data_segment = 0U;
+
+static ADDRESS_PAIR CalculateRealAddress( const ZydisDecodedInstruction &instruction, const ZydisDecodedOperand &operand, const ADDRESS_PAIR &realAddress ) {
+    switch( operand.type ) {
+    case ZYDIS_OPERAND_TYPE_POINTER:
+        return { operand.ptr.segment, operand.ptr.offset };
+    case ZYDIS_OPERAND_TYPE_IMMEDIATE: {
+        ZyanU64 z64_result_address;
+        if( ZYAN_SUCCESS( ZydisCalcAbsoluteAddress( &instruction, &operand, realAddress.offset, &z64_result_address ) ) )
+            return { realAddress.segment, static_cast<uint32_t>( z64_result_address ) };
+    }
+        if( operand.imm.is_relative )
+            return { realAddress.segment, static_cast<uint32_t>( realAddress.offset + instruction.length + ( operand.imm.is_signed ? operand.imm.value.s : operand.imm.value.u ) ) };
+        return { realAddress.segment, static_cast<uint32_t>( operand.imm.value.u ) };
+    case ZYDIS_OPERAND_TYPE_MEMORY: {
+        ZyanU64 z64_result_address;
+        uint16_t segment = ZYDIS_REGISTER_CS == operand.mem.segment ? realAddress.segment : data_segment;
+        ZydisRegisterContext register_context;
+        if( ZYDIS_REGISTER_NONE != operand.mem.base )
+            register_context.values[operand.mem.base] = 0U;
+        if( ZYDIS_REGISTER_NONE != operand.mem.index )
+            register_context.values[operand.mem.index] = 0U;
+        if( ZYAN_SUCCESS( ZydisCalcAbsoluteAddressEx( &instruction, &operand, realAddress.offset, &register_context, &z64_result_address ) ) )
+            return { segment, static_cast<uint32_t>( z64_result_address ) };
+        return { segment, static_cast<uint32_t>( realAddress.offset + operand.mem.disp.value ) };
+    }
+    default:
+        break;
+    }
+    return { 0U, 0U };
+}
+
+extern void UpdateDataSegment( const uint16_t );
 
 static void FindDS( const uint32_t startAddress, const uint32_t startOffset ) {
     if( data_segment )
@@ -451,13 +483,7 @@ static void FindDS( const uint32_t startAddress, const uint32_t startOffset ) {
                     if( ZYAN_SUCCESS( ZydisDecoderDecodeOperands( &decoder, &context, &instruction, operands, instruction.operand_count ) ) ) {
                         const auto &op = operands[0];
                         if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type || ZYDIS_OPERAND_TYPE_POINTER == op.type ) {
-                            ADDRESS_PAIR ptr = { static_cast<uint16_t>( -1 ), static_cast<uint32_t>( -1 ) };
-                            if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type ) {
-                                ZyanU64 z64_result_address;
-                                ZydisCalcAbsoluteAddress( &instruction, &op, address, &z64_result_address );
-                                ptr = { realAddress.segment, static_cast<uint32_t>( z64_result_address ) };
-                            } else
-                                ptr = { op.ptr.segment, op.ptr.offset };
+                            ADDRESS_PAIR ptr = CalculateRealAddress( instruction, op, realAddress );
                             uint32_t addr = ptr.address( );
                             if( ValidateAddress( addr, ptr ) ) {
                                 if( ZYDIS_MNEMONIC_CALL == instruction.mnemonic )
@@ -542,6 +568,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
             if( !entry.second ) // insert failed
                 break;
             DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+            dline.pMnemonic = dline.szInstruction;
             if( ZYAN_SUCCESS( ZydisDecoderDecodeFull( &decoder, &MemBase[address], binarySize - address, &dline.instruction, dline.operands ) ) && dline.instruction.length ) {
                 dline.length = dline.instruction.length;
                 memcpy( dline.opCode, &MemBase[address], dline.length );
@@ -689,8 +716,9 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     dline.mnemonicMask |= MM_Has_Segment;
                 if( dline.mnemonicMask & ( MM_Branch | MM_RET | MM_String ) ) {
                     cs_disasm( cs_handle, &MemBase[dline.address], binarySize - dline.address, dline.realAddress.offset, 1, &dline.cs_instruction );
-                    strcpy( dline.szInstruction, dline.cs_instruction->mnemonic );
-                    dline.pOperands = dline.cs_instruction->op_str;
+                    dline.pMnemonic = dline.cs_instruction->mnemonic;
+                    if( !( dline.mnemonicMask & MM_Branch ) )
+                        dline.pOperands = dline.cs_instruction->op_str;
                 }
                 // check operands for memory references...
                 for( uint8_t i = 0U; i < NUM_MEM_OPS && i < dline.instruction.operand_count; ++i ) {
@@ -704,14 +732,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                         dline.mem_access[i].disp.value = op.mem.disp.value;
 
                         if( ( ZYDIS_REGISTER_CS == op.mem.segment || ZYDIS_REGISTER_DS == op.mem.segment ) && op.mem.disp.has_displacement && ( ZYDIS_REGISTER_NONE == op.mem.base || ( 0x10 == op.size && ( dline.mnemonicMask & MM_JMP ) ) ) ) {
-                            ZyanU64 z64_result_address;
-                            ZydisRegisterContext register_context;
-                            register_context.values[ZYDIS_REGISTER_CS] = dline.realAddress.segment;
-                            register_context.values[ZYDIS_REGISTER_DS] = data_segment;
-                            if( ZYDIS_REGISTER_NONE != op.mem.base )
-                                register_context.values[op.mem.base] = 0U;
-                            ZydisCalcAbsoluteAddressEx( &dline.instruction, &op, dline.address, &register_context, &z64_result_address );
-                            ADDRESS_PAIR ptr = { ZYDIS_REGISTER_CS == op.mem.segment ? dline.realAddress.segment : data_segment, static_cast<uint32_t>( z64_result_address ) };
+                            ADDRESS_PAIR ptr = CalculateRealAddress( dline.instruction, op, dline.realAddress );
                             uint32_t addr = ptr.address( );
                             if( ValidateAddress( addr, ptr ) ) {
                                 if( ZYDIS_REGISTER_NONE == op.mem.base ) {
@@ -722,39 +743,16 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                             }
                         }
                     } if( i && ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type && ZYDIS_REGISTER_SI == dline.operands[0].reg.value ) {
-                        uint32_t imm_address;
-                        if( op.imm.is_relative ) {
-                            ZyanU64 z64_result_address;
-                            ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &z64_result_address );
-                            imm_address = static_cast<uint32_t>( z64_result_address );
-                        } else
-                            imm_address = ADDRESS_PAIR::Address( ADDRESS_PAIR{ realAddress.segment, static_cast<uint32_t>( op.imm.value.u ) } );
+                        uint32_t imm_address = ADDRESS_PAIR::Address( CalculateRealAddress( dline.instruction, op, dline.realAddress ) );
                         if( imm_address > dline.address )
                             CreateDataWordSection( imm_address, realAddress.segment );
                     }
                 }
                 if( dline.mnemonicMask & MM_Branch ) {
-                    ADDRESS_PAIR ptr = { static_cast<uint16_t>( -1 ), static_cast<uint32_t>( -1 ) };
-                    for( uint8_t i = 0U; i < dline.instruction.operand_count; ++i ) {
-                        const auto &op = dline.operands[i];
-                        switch( op.type ) {
-                        case ZYDIS_OPERAND_TYPE_IMMEDIATE:
-                            if( op.imm.is_relative ) {
-                                ZyanU64 z64_result_address;
-                                ZydisCalcAbsoluteAddress( &dline.instruction, &op, dline.address, &z64_result_address );
-                                ptr = ADDRESS_PAIR::RealAddress( static_cast<uint32_t>( z64_result_address ), realAddress.segment );
-                            } else
-                                ptr = { realAddress.segment, static_cast<uint32_t>( op.imm.value.u ) };
-                        case ZYDIS_OPERAND_TYPE_POINTER:
-                            if( ZYDIS_OPERAND_TYPE_POINTER == op.type )
-                                ptr = { op.ptr.segment, op.ptr.offset };
-                            sprintf( const_cast<char *>( dline.pOperands ), "%04X:%04X", ptr.segment, ptr.offset );
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                    if( ptr.segment != static_cast<uint16_t>( -1 ) && ptr.offset != static_cast<uint32_t>( -1 ) ) {
+                    const auto &op = dline.operands[0];
+                    if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type || ZYDIS_OPERAND_TYPE_POINTER == op.type ) {
+                        ADDRESS_PAIR ptr = CalculateRealAddress( dline.instruction, op, dline.realAddress );
+                        sprintf( const_cast<char *>( dline.pOperands ), "%04X:%04X", ptr.segment, ptr.offset );
                         uint32_t addr = ptr.address( );
                         if( ValidateAddress( addr, ptr ) ) {
                             if( !added.contains( addr ) ) {
@@ -762,7 +760,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                                 if( !visited.contains( addr ) )
                                     toVisit.push_back( ptr );
                             }
-                            CreateLabel( addr, ptr.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask &MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
+                            CreateLabel( addr, ptr.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -801,6 +799,8 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     for( auto i = 0; i < dline.length; ++i )
                         pOpCode += sprintf( pOpCode, "%02X ", MemBase[address + i] );
                     sprintf_s( dline.szInstruction, sizeof( dline.szInstruction ), "callback 0x%02X", dw );
+                    dline.szInstruction[8] = 0;
+                    dline.pOperands = &dline.szInstruction[9];
                     strcat( dline.szComment, CALLBACK_GetDescription( dw ) );
                     realAddress += dline.length;
                     address += dline.length;
@@ -862,6 +862,7 @@ static void CreateAlignEntry( const uint32_t address, const uint16_t segment, co
     auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
     if( entry.second ) { // insert successful
         DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+        dline.pMnemonic = dline.szInstruction;
         dline.instruction = data_instruction;
         dline.mnemonicMask = MM_ALIGN;
         dline.instruction.length = dline.length = length + 1U;
@@ -881,6 +882,7 @@ static void CreateUnknownByteEntry( const uint32_t address, const uint16_t segme
     auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
     if( entry.second ) { // insert successful
         DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+        dline.pMnemonic = dline.szInstruction;
         dline.instruction = data_instruction;
         dline.instruction.length = dline.length = 1U;
         dline.instruction.operand_count = dline.instruction.operand_count_visible = 0U;
@@ -897,6 +899,7 @@ static void CreateUnknownDoubleWordEntry( const uint32_t address, const uint16_t
     auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
     if( entry.second ) { // insert successful
         DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+        dline.pMnemonic = dline.szInstruction;
         dline.instruction = data_instruction;
         dline.instruction.length = dline.length = 4U;
         dline.instruction.operand_count = dline.instruction.operand_count_visible = 0U;
@@ -911,6 +914,7 @@ static void CreateStringEntry( const uint32_t address, const uint16_t segment, c
     auto entry = ordered_code.insert( { address, DecodedLine( ADDRESS_PAIR::RealAddress( address, segment ), address ) } );
     if( entry.second ) { // insert successful
         DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+        dline.pMnemonic = dline.szInstruction;
         dline.instruction = data_instruction;
         dline.mnemonicMask = length > 4U ? MM_Data_Label : MM_NONE;
         dline.instruction.length = dline.length = length + 1U;
@@ -1195,6 +1199,7 @@ void DasmUnDisassemble( uint32_t address ) {
             auto entry = ordered_code.insert( { address, DecodedLine( address_pair, address ) } );
             if( entry.second ) { // insert successful
                 DecodedLine &dline = const_cast<DecodedLine &>( entry.first->extra );
+                dline.pMnemonic = dline.szInstruction;
                 dline.instruction = data_instruction;
                 dline.instruction.length = dline.length = 1U;
                 dline.instruction.operand_count = dline.instruction.operand_count_visible = 0U;
