@@ -450,46 +450,85 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 		bool jmp = false;
 		switch( INST[1] ) {
 		case 'A':
+			if( INST[2] == 'E' ) {
+				jmp = get_CF( ) ? false : true; // JAE
+				break;
+			}
 			jmp = ( get_CF( ) ? false : true ) && ( get_ZF( ) ? false : true ); // JA
 			break;
 		case 'B':
-			if( INST[2] == 'E' )
+			if( INST[2] == 'E' ) {
 				jmp = ( get_CF( ) ? true : false ) || ( get_ZF( ) ? true : false ); // JBE
-			else
-				jmp = get_CF( ) ? true : false; // JB
+				break;
+			}
+			jmp = get_CF( ) ? true : false; // JB
 			break;
 		case 'C':
-			if( INST[2] == 'X' )
-				jmp = reg_cx == 0; // JCXZ
-			else
-				jmp = get_CF( ) ? true : false; // JC
+			if( INST[2] == 'X' ) {
+				jmp = reg_cx == 0U; // JCXZ
+				break;
+			}
+			jmp = get_CF( ) ? true : false; // JC
 			break;
 		case 'E':
-			jmp = get_ZF( ) ? true : false; // JE
+			if( INST[2] == 'C' ) {
+				jmp = reg_ecx == 0U; // JECXZ
+				break;
+			}
+		case 'Z':
+			jmp = get_ZF( ) ? true : false; // JE / JZ
 			break;
 		case 'G':
-			if( INST[2] == 'E' )
+			if( INST[2] == 'E' ) {
 				jmp = ( get_SF( ) ? true : false ) == ( get_OF( ) ? true : false ); // JGE
-			else
-				jmp = ( get_ZF( ) ? false : true ) && ( ( get_SF( ) ? true : false ) == ( get_OF( ) ? true : false ) ); // JG
+				break;
+			}
+			jmp = ( get_ZF( ) ? false : true ) && ( ( get_SF( ) ? true : false ) == ( get_OF( ) ? true : false ) ); // JG
 			break;
 		case 'L':
-			if( INST[2] == 'E' )
+			if( INST[2] == 'E' ) {
 				jmp = ( get_ZF( ) ? true : false ) || ( ( get_SF( ) ? true : false ) != ( get_OF( ) ? true : false ) ); // JLE
-			else
-				jmp = ( get_SF( ) ? true : false ) != ( get_OF( ) ? true : false ); // JL
+				break;
+			}
+			jmp = ( get_SF( ) ? true : false ) != ( get_OF( ) ? true : false ); // JL
 			break;
 		case 'M':
 			jmp = true; // JMP
 			break;
 		case 'N':
 			switch( INST[2] ) {
+			case 'A':
+				if( INST[3] == 'E' ) {
+					jmp = get_CF( ) ? true : false; // JNAE
+					break;
+				}
+				jmp = ( get_CF( ) ? true : false ) || ( get_ZF( ) ? true : false ); // JNA
+				break;
 			case 'B':
+				if( INST[3] == 'E' ) {
+					jmp = ( get_CF( ) ? false : true ) && ( get_ZF( ) ? false : true ); // JNBE
+					break;
+				}
 			case 'C':
 				jmp = get_CF( ) ? false : true; // JNB / JNC
 				break;
 			case 'E':
-				jmp = get_ZF( ) ? false : true; // JNE
+			case 'Z':
+				jmp = get_ZF( ) ? false : true; // JNE / JNZ
+				break;
+			case 'G':
+				if( INST[3] == 'E' ) {
+					jmp = ( get_SF( ) ? true : false ) != ( get_OF( ) ? true : false ); // JNGE
+					break;
+				}
+				jmp = ( get_ZF( ) ? true : false ) || ( ( get_SF( ) ? true : false ) != ( get_OF( ) ? true : false ) ); // JNG
+				break;
+			case 'L':
+				if( INST[3] == 'E' ) {
+					jmp = ( get_ZF( ) ? false : true ) && ( ( get_SF( ) ? true : false ) == ( get_OF( ) ? true : false ) ); // JNLE
+					break;
+				}
+				jmp = ( get_SF( ) ? true : false ) == ( get_OF( ) ? true : false ); // JNL
 				break;
 			case 'O':
 				jmp = get_OF( ) ? false : true; // JNO
@@ -500,25 +539,20 @@ const char * AnalyzeInstruction( const char *inst, const char *pOperands, char *
 			case 'S':
 				jmp = get_SF( ) ? false : true; // JNS
 				break;
-			case 'Z':
-				jmp = get_ZF( ) ? false : true; // JNZ
-				break;
 			}
 			break;
 		case 'O':
 			jmp = get_OF( ) ? true : false; // JO
 			break;
 		case 'P':
-			if( INST[2] == 'O' )
+			if( INST[2] == 'O' ) {
 				jmp = get_PF( ) ? false : true; // JPO
-			else
-				jmp = get_SF( ) ? true : false; // JP / JPE
+				break;
+			}
+			jmp = get_PF( ) ? true : false; // JP / JPE
 			break;
 		case 'S':
 			jmp = get_SF( ) ? true : false; // JS
-			break;
-		case 'Z':
-			jmp = get_ZF( ) ? true : false; // JZ
 			break;
 		}
 		if( jmp ) {

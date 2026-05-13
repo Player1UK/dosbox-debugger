@@ -126,7 +126,7 @@ uint32_t DEBUG_ProcessKey( SDL_KeyboardEvent key ) {
 		ret = DEBUG_Run( RUN_FOREVER );
 		break;
 	case SDLK_F9: { // Set/Remove Breakpoint. Hold SHIFT for permanent breakpoint
-		const bool ftemp = ( key.mod & SDL_KMOD_SHIFT ) ? false : true;
+		const bool ftemp = ( key.mod & SDL_KMOD_SHIFT ) ? true : false;
 		if( CBreakpoint::IsBreakpoint( codeView.cursorRealAddress, ftemp ) ) {
 			if( CBreakpoint::DeleteBreakpoint( codeView.cursorRealAddress, ftemp ) )
 				DEBUG_ShowMsg( "DEBUG: %sreakpoint deletion success.\n", ftemp ? "Temporary b" : "B" );

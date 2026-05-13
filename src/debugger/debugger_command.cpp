@@ -430,7 +430,7 @@ bool ParseCommand( char *str ) {
 		auto intNr = static_cast<uint8_t>( GetHexValue( found ) );
 		DEBUG_ShowMsg( "DEBUG: Tracing INT %02X\n", intNr );
 		CPU_HW_Interrupt( intNr );
-		codeView.SetToEIP( );
+		codeView.SetToEIP( V_UPDATE_ALL );
 		return true;
 	}
 

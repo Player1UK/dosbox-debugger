@@ -10,7 +10,6 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
 
-#include "cpu/cpu.h"
 #include "cpu/paging.h"
 #include "debugvar.h"
 #include "utils/string_utils.h"
@@ -119,62 +118,50 @@ void DEBUG_ShowMsg( const char* format, ... ) {
 }
 
 bool SView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_mask ) {
+	dbg.update_win_scroll[win_id] = debugging && ( update_mask & V_UPDATE_SCROLL );
 	if( address_pair == realAddress )
 		return false;
-	if( update_mask & V_UPDATE_HISTORY )
-		HistoryInsert( realAddress );
 	realAddress = address_pair;
 	address = address_pair.address( );
 	dbg.update_win[win_id] = debugging && ( update_mask & V_UPDATE_VIEW );
-	dbg.update_win_scroll[win_id] = debugging && ( update_mask & V_UPDATE_SCROLL );
+	if( ( update_mask & V_UPDATE_HISTORY ) )
+		HistoryInsert( realAddress );
 	return true;
 }
 
-void SView::HistoryInsert( const ADDRESS_PAIR &address_pair ) {
-	if( !UniquePrevious( address_pair ) )
-		return;
+void SView::HistorySet( const ADDRESS_PAIR &address_pair ) {
+	history_begin = history_end = history_index = 0U;
 	history[history_index] = address_pair;
-	IndexInc( );
+}
+void SView::HistoryInsert( const ADDRESS_PAIR &address_pair ) {
+	if( address_pair == history[history_index] )
+		return;
+	Inc( history_index );
+	history[history_index] = address_pair;
 	history_end = history_index;
-}
-void SView::IndexInc( ) {
-	++history_index;
-	if( history_index >= VIEW_HISTORY_LIMIT )
-		history_index = 0U;
-	if( history_index == history_begin )
-		++history_begin;
-}
-void SView::IndexDec( ) {
-	if( history_index )
-		--history_index;
-	else
-		history_index = VIEW_HISTORY_LIMIT - 1U;
-}
-bool SView::UniquePrevious( const ADDRESS_PAIR &address_pair ) {
 	if( history_end == history_begin )
-		return true;
-	auto index = history_index;
+		Inc( history_begin );
+}
+void SView::Inc( uint8_t &index ) {
+	++index;
+	index %= VIEW_HISTORY_LIMIT;
+}
+void SView::Dec( uint8_t &index ) {
 	if( index )
 		--index;
 	else
 		index = VIEW_HISTORY_LIMIT - 1U;
-	return history[index] != address_pair;
 }
-
 void SView::HistoryNext( ) {
-	if( history_index == history_end )
+	if( history_end == history_index )
 		return;
-	++history_index;
-	if( history_index >= VIEW_HISTORY_LIMIT )
-		history_index = 0U;
-	Set( history_index == history_end ? backup : history[history_index], V_UPDATE_SCROLL );
+	Inc( history_index );
+	Set( history[history_index], V_UPDATE_SCROLL );
 }
 void SView::HistoryPrev( ) {
-	if( history_index == history_begin )
+	if( history_begin == history_index )
 		return;
-	if( history_index == history_end )
-		backup = realAddress;
-	IndexDec( );
+	Dec( history_index );
 	Set( history[history_index], V_UPDATE_SCROLL );
 }
 
@@ -385,7 +372,7 @@ static void DrawRegisters( ) {
 				entry_width = ImGui::GetCursorPosX( ) - label_x;
 				ImGui::SetCursorPosX( label_x );
 				if( ImGui::Selectable( "##reg_ip", false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) )
-					codeView.SetToEIP( );
+					codeView.SetToEIP( V_UPDATE_ALL );
 				break;
 			case tMODE: {
 				const char* mode_str = "Real";
@@ -718,7 +705,7 @@ void DBGUI_DrawScreen( ) {
 		return;
 	if( fReset ) {
 		fReset = false;
-		codeView.SetToEIP( );
+		codeView.SetToEIP( V_UPDATE_ALL );
 	}
 	DrawCode( );
 	DrawRegisters( );
@@ -890,7 +877,10 @@ bool DBGUI_StartUp( ) {
 		++seg_type;
 	}
 	// Point stack view to top of stack
-	stackView.Set( { RealSegValue( ss ), reg_sp } );
+	codeView.HistorySet( { dbg.segment[SEG_CODE], reg_eip } );
+	dataView.HistorySet( { 0U, 0U } );
+	stackView.HistorySet( { dbg.segment[SEG_STACK], reg_sp } );
+	stackView.Set( { dbg.segment[SEG_STACK], reg_sp } );
 
 	start_address = GetPhysicalAddress( { SegValue( cs ), reg_eip } );
 

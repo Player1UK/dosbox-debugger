@@ -303,7 +303,7 @@ void DrawStack( ) {
 			char *line = &stack_text_buffer[0];
 			float yPos = 0.0f;
 			sp_cursor.visible = false;
-			sp_cursor.realAddress = { RealSegValue( ss ), reg_esp };
+			sp_cursor.realAddress = { RealSegValue( ss ), ( cpu.code.big ? reg_esp : reg_sp ) };
 			for( uint32_t count = stack_lines; count; --count, line += 82, --line_segment, yPos += line_height_no_spacing ) {
 				if( line_segment < ordered_segment->value ) {
 					--ordered_segment;

@@ -5,7 +5,6 @@
 
 #if C_DEBUGGER
 #include "breakpoint.h"
-#include "cpu/cpu.h"
 #include "hardware/timer.h"
 
 SCodeView codeView = { WIN_CODE };
@@ -83,8 +82,6 @@ static void CheckSegmentRegisters( ) {
 }
 
 bool SCodeView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_mask ) {
-//	if( ( update_mask & V_UPDATE_HISTORY ) && cursorRealAddress != realAddress )
-//		HistoryInsert( cursorRealAddress );
 	if( !SView::Set( address_pair, ( update_mask & static_cast<VIEW_MASK>( ~V_UPDATE_VIEW ) ) ) )
 		return false;
 	cursorRealAddress = address_pair;
@@ -97,8 +94,8 @@ bool SCodeView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_ma
 	return true;
 }
 
-bool SCodeView::SetToEIP( ) {
-	return Set( { RealSegValue( cs ), reg_eip } );
+bool SCodeView::SetToEIP( const VIEW_MASK update_mask ) {
+	return Set( { RealSegValue( cs ), reg_eip }, update_mask );
 }
 
 bool SCodeView::SetCursor( const ADDRESS_PAIR &address_pair ) {
@@ -233,7 +230,7 @@ void DrawCode( ) {
 				else if( dline.mnemonicMask & ( MM_ConditionalJump | MM_LOOP ) )
 					operator_color = &yellow_color;
 				ImGui::SameLine( 30 * char_width );
-				ImGui::TextColored( *operator_color, "%s", dline.pMnemonic );
+				ImGui::TextColored( *operator_color, "%s", dline.pMnemonic ? dline.pMnemonic : dline.szInstruction );
 				const ImVec4 *operands_color = is_current_ip ? &green_color : &purple_color;
 				if( dline.pOperands ) {
 					ImGui::SameLine( );
@@ -293,18 +290,18 @@ void UpdateDataSegment( const uint16_t segment ) {
 
 extern char curSelectorName[3];
 
-static uint32_t last_ip = static_cast<uint32_t>( -1 );
-static void AnalyzeCurrentInstruction( ) {
-	if( reg_eip == last_ip )
+static uint32_t last_ip_address = static_cast<uint32_t>( -1 );
+/*static void AnalyzeCurrentInstruction( ) {
+	if( reg_eip == last_ip_address )
 		return;
 	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
 	if( dline ) {
 		auto szResult = AnalyzeInstruction( dline->pMnemonic, dline->pOperands, curSelectorName );
 		if( *szResult )
 			strcpy( const_cast<char *>( &dline->szComment[0] ), szResult );
-		last_ip = reg_eip;
+		last_ip_address = reg_eip;
 	}
-}
+}*/
 
 constexpr const uint8_t MAX_RECENT_IP = 64U;
 static uint32_t recent_ip_addresses[MAX_RECENT_IP] = {};
@@ -314,8 +311,13 @@ void DEBUG_NewInstruction( ) {
 	if( !imgui_initialized )
 		return;
 	const ADDRESS_PAIR ip_address_pair = { RealSegValue( cs ), reg_eip };
+	const uint32_t ip_address = ip_address_pair.address( );
 	if( !debugging ) {
-		const uint32_t ip_address = ip_address_pair.address( );
+		if( dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
+			DEBUG_ShowDOSBox( );
+		if( ip_address == last_ip_address )
+			return;
+		last_ip_address = ip_address;
 		uint8_t count = 0U;
 		for( const auto &recent_ip_address : recent_ip_addresses ) {
 			if( recent_ip_address == ip_address ) {
@@ -334,8 +336,8 @@ void DEBUG_NewInstruction( ) {
 	if( debugging ) {
 		UpdateOrderedSegments( );
 		UpdateMemoryViews( );
-	} else if( dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
-		DEBUG_ShowDOSBox( );
-	AnalyzeCurrentInstruction( );
+	}
+	//AnalyzeCurrentInstruction( );
+	DasmAnalyzeInstruction( ip_address );
 }
 #endif // C_DEBUGGER

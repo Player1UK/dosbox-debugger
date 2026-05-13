@@ -176,17 +176,17 @@ struct SView {
 
 	virtual bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
 
+	void HistorySet( const ADDRESS_PAIR & );
 	void HistoryNext( );
 	void HistoryPrev( );
 protected:
 	void HistoryInsert( const ADDRESS_PAIR & );
 private:
-	ADDRESS_PAIR history[VIEW_HISTORY_LIMIT], backup;
+	ADDRESS_PAIR history[VIEW_HISTORY_LIMIT];
 	uint8_t history_index = 0U, history_begin = 0U, history_end = 0U;
 
-	void IndexInc( );
-	void IndexDec( );
-	bool UniquePrevious( const ADDRESS_PAIR & );
+	void Inc( uint8_t & );
+	void Dec( uint8_t & );
 };
 
 struct SCodeView : public SView {
@@ -196,7 +196,7 @@ struct SCodeView : public SView {
 	SCodeView( WINDOW_ID win_id ) : SView( win_id ) {}
 
 	bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
-	bool SetToEIP( );
+	bool SetToEIP( const VIEW_MASK = V_UPDATE_DEFAULT );
 	bool SetCursor( const ADDRESS_PAIR & );
 } extern codeView;
 
