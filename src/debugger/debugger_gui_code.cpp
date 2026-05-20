@@ -291,53 +291,25 @@ void UpdateDataSegment( const uint16_t segment ) {
 extern char curSelectorName[3];
 
 static uint32_t last_ip_address = static_cast<uint32_t>( -1 );
-/*static void AnalyzeCurrentInstruction( ) {
-	if( reg_eip == last_ip_address )
-		return;
-	auto dline = DecodedLine::find( { RealSegValue( cs ), reg_eip } );
-	if( dline ) {
-		auto szResult = AnalyzeInstruction( dline->pMnemonic, dline->pOperands, curSelectorName );
-		if( *szResult )
-			strcpy( const_cast<char *>( &dline->szComment[0] ), szResult );
-		last_ip_address = reg_eip;
-	}
-}*/
-
-constexpr const uint8_t MAX_RECENT_IP = 64U;
-static uint32_t recent_ip_addresses[MAX_RECENT_IP] = {};
-static uint8_t recent_ip_index = 0U;
 
 void DEBUG_NewInstruction( ) {
 	if( !imgui_initialized )
 		return;
+	if( !debugging && dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
+		DEBUG_ShowDOSBox( );
 	const ADDRESS_PAIR ip_address_pair = { RealSegValue( cs ), reg_eip };
 	const uint32_t ip_address = ip_address_pair.address( );
-	if( !debugging ) {
-		if( dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
-			DEBUG_ShowDOSBox( );
-		if( ip_address == last_ip_address )
-			return;
-		last_ip_address = ip_address;
-		uint8_t count = 0U;
-		for( const auto &recent_ip_address : recent_ip_addresses ) {
-			if( recent_ip_address == ip_address ) {
-				++count;
-				break;
-			}
-		}
-		recent_ip_addresses[recent_ip_index] = ip_address;
-		if( MAX_RECENT_IP == ++recent_ip_index )
-			recent_ip_index = 0U;
-		if( count )
-			return;
-	}
+	if( ip_address == last_ip_address )
+		return;
+	last_ip_address = ip_address;
 	CheckSegmentRegisters( );
-	codeView.Set( ip_address_pair, debugging ? V_UPDATE_DEFAULT : V_UPDATE_VIEW );
-	if( debugging ) {
-		UpdateOrderedSegments( );
-		UpdateMemoryViews( );
-	}
-	//AnalyzeCurrentInstruction( );
 	DasmAnalyzeInstruction( ip_address );
+}
+void DBGUI_Resume( ) {
+	if( !imgui_initialized )
+		return;
+	codeView.SetToEIP( V_UPDATE_ALL );
+	UpdateOrderedSegments( );
+	UpdateMemoryViews( );
 }
 #endif // C_DEBUGGER

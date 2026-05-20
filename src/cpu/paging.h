@@ -334,9 +334,11 @@ static inline PhysPt PAGING_GetPhysicalAddress(PhysPt linAddr) {
 template <MemOpMode op_mode = MemOpMode::WithBreakpoints>
 static inline uint8_t mem_readb_inline(const PhysPt address)
 {
+#if C_DEBUGGER && C_HEAVY_DEBUGGER
 	if constexpr (op_mode == MemOpMode::WithBreakpoints) {
 		DEBUG_UpdateMemoryReadBreakpoints<uint8_t>(address);
 	}
+#endif
 	HostPt tlb_addr = get_tlb_read(address);
 	if (tlb_addr) {
 		return host_readb(tlb_addr + address);
@@ -348,9 +350,11 @@ static inline uint8_t mem_readb_inline(const PhysPt address)
 template <MemOpMode op_mode = MemOpMode::WithBreakpoints>
 static inline uint16_t mem_readw_inline(const PhysPt address)
 {
+#if C_DEBUGGER && C_HEAVY_DEBUGGER
 	if constexpr (op_mode == MemOpMode::WithBreakpoints) {
 		DEBUG_UpdateMemoryReadBreakpoints<uint16_t>(address);
 	}
+#endif
 	if ((address & 0xfff) < 0xfff) {
 		HostPt tlb_addr = get_tlb_read(address);
 		if (tlb_addr) {
@@ -366,9 +370,11 @@ static inline uint16_t mem_readw_inline(const PhysPt address)
 template <MemOpMode op_mode = MemOpMode::WithBreakpoints>
 static inline uint32_t mem_readd_inline(const PhysPt address)
 {
+#if C_DEBUGGER && C_HEAVY_DEBUGGER
 	if constexpr (op_mode == MemOpMode::WithBreakpoints) {
 		DEBUG_UpdateMemoryReadBreakpoints<uint32_t>(address);
 	}
+#endif
 	if ((address & 0xfff) < 0xffd) {
 		HostPt tlb_addr = get_tlb_read(address);
 		if (tlb_addr)
@@ -383,9 +389,11 @@ static inline uint32_t mem_readd_inline(const PhysPt address)
 template <MemOpMode op_mode = MemOpMode::WithBreakpoints>
 static inline uint64_t mem_readq_inline(PhysPt address)
 {
+#if C_DEBUGGER && C_HEAVY_DEBUGGER
 	if constexpr (op_mode == MemOpMode::WithBreakpoints) {
 		DEBUG_UpdateMemoryReadBreakpoints<uint64_t>(address);
 	}
+#endif
 	if ((address & 0xfff) < 0xff9) {
 		HostPt tlb_addr = get_tlb_read(address);
 		if (tlb_addr) {

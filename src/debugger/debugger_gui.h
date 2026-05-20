@@ -38,7 +38,7 @@ struct SLabelView {
 	bool fLabel = true;
 
 	void Set( const ADDRESS_PAIR &, const bool, const bool = true );
-	bool IsMatch( const ADDRESS_PAIR &, const bool ) const;
+	bool IsMatch( const ADDRESS_PAIR &, const uint32_t, const bool ) const;
 } extern labelView;
 
 enum DataCursor : uint8_t {

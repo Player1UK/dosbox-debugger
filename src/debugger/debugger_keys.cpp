@@ -65,9 +65,10 @@ int32_t DEBUG_Run( const RUN_TYPE run_type, const ADDRESS_PAIR &breakpoint_addre
 	CPU_CycleLeft += CPU_Cycles - 1;
 	CPU_Cycles = 1;
 	int32_t ret = ( *cpudecoder )( );
-	if( quickexit )
+	if( quickexit ) {
 		DEBUG_NewInstruction( );
-	else {
+		DBGUI_Resume( );
+	} else {
 		debugging = false;
 		CBreakpoint::ActivateBreakpoints( ); // ensure all breakpoints are activated
 		normalLoopTickCount = GetTicks( );

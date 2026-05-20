@@ -109,6 +109,7 @@ extern void TemporaryDataSegment( );
 void DEBUG_Enable( bool pressed ) {
 	if( !pressed )
 		return;
+	debugging = true;
 
 	static bool was_ui_started = false;
 	if( !was_ui_started ) {
@@ -129,13 +130,13 @@ void DEBUG_Enable( bool pressed ) {
 		DEBUG_ShowMsg( "           TYPE ? or HELP (+ENTER) TO GET AN OVERVIEW OF ALL COMMANDS           \n" );
 		was_help_shown = true;
 	}
-	debugging = true;
 	tickCounter = GetTicks( );
 	DOSBOX_SetLoop( &DEBUG_Loop ); // Start the debugging loop
 
 	KEYBOARD_ClrBuffer( );
 
 	DEBUG_NewInstruction( );
+	DBGUI_Resume( );
 	TemporaryDataSegment( );
 }
 

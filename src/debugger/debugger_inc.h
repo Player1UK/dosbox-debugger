@@ -50,6 +50,7 @@ void DBGUI_NewFrame( );
 void DBGUI_Render( );
 void DBGUI_Reset( );
 void DBGUI_Resize( );
+void DBGUI_Resume( );
 
 extern int32_t DEBUG_Run( const RUN_TYPE, const ADDRESS_PAIR & = { 0U, 0U } );
 

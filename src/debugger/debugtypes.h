@@ -37,6 +37,9 @@ typedef struct Address_Pair {
 	uint32_t address( ) const {
 		return offset + ( segment << 4U );
 	}
+	bool InRange( const Address_Pair &other, const uint32_t offset_max ) const {
+		return ( this->segment == other.segment && this->offset >= other.offset && this->offset <= offset_max );
+	}
 	bool IsNull( ) const {
 		return 0U == segment && 0U == offset;
 	}

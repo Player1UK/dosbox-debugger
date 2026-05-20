@@ -53,7 +53,7 @@
 #define C_DYNREC 0
 
 // Define to 1 to use FPU core implemented in x86 assembler
-#define C_FPU_X86 1
+#define C_FPU_X86 0
 
 // TODO Define to 1 to use inlined memory functions in cpu core
 #define C_CORE_INLINE 1
@@ -72,13 +72,13 @@
 #define C_DEBUGGER 1
 
 // Define to 1 to enable heavy debugging (requires C_DEBUGGER)
-#define C_HEAVY_DEBUGGER 1
+#define C_HEAVY_DEBUGGER 0
 
 // Define to 1 to enable MT-32 emulator
-#define C_MT32EMU 1
+#define C_MT32EMU 0
 
 // Define to 1 to enable mouse mapping support
-#define C_MANYMOUSE 1
+#define C_MANYMOUSE 0
 
 // ManyMouse optionally supports the X Input 2.0 protocol (regardless of OS). It
 // uses the following define to definitively indicate if it should or shouldn't
@@ -108,7 +108,7 @@
 // between operating systems.
 
 // Define to 1 when zlib-ng support is provided by the system
-#define C_SYSTEM_ZLIB_NG 0
+#define C_SYSTEM_ZLIB_NG 1
 
 // Defined if synchronous I/O multiplexing is available
 #define HAVE_FD_ZERO

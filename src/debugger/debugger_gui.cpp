@@ -171,8 +171,8 @@ void SLabelView::Set( const ADDRESS_PAIR &address_pair, const bool fLabel, const
 	dbg.update_win_scroll[WIN_LABELS] = update_scroll;
 }
 
-bool SLabelView::IsMatch( const ADDRESS_PAIR &address_pair, const bool fLabel ) const {
-	return( realAddress == address_pair && this->fLabel == fLabel );
+bool SLabelView::IsMatch( const ADDRESS_PAIR &address_pair, const uint32_t offset_max, const bool fLabel ) const {
+	return( realAddress.InRange( address_pair, offset_max ) && this->fLabel == fLabel );
 }
 
 static void SnapToGrid( WINDOW_ID winID ) { // Detect movement and snap
@@ -482,41 +482,54 @@ static void DrawLabels( ) {
 		uint16_t currentSegment = 0U;
 		for( const auto &label : labels ) {
 			static uint8_t addressColorIndex = 0U;
-			const uint32_t offset = label.value - ( label.extra.segment << 4 );
 			if( currentSegment != label.extra.segment ) { // match segment to defined segments
 				currentSegment = label.extra.segment;
 				const auto &ordered_segment = ordered_segments.find( { currentSegment, {} } );
 				if( ordered_segment != ordered_segments.end( ) )
 					addressColorIndex = ordered_segment->extra.index % MAX_ADDRESS_COLORS;
 			}
-			const bool isSelected = labelView.IsMatch( { label.extra.segment, offset }, true );
+			const uint32_t offset = ADDRESS_PAIR::Offset( label.value, currentSegment );
+			const uint32_t offset_max = ADDRESS_PAIR::Offset( label.extra.address_max, currentSegment );
+			const bool isSelected = labelView.IsMatch( { currentSegment, offset }, offset_max, true );
 			if( dbg.update_win_scroll[WIN_LABELS] && isSelected ) {
 				dbg.update_win_scroll[WIN_LABELS] = false;
 				ImGui::SetScrollHereY( );
 			}
-			char id[11];
-			sprintf( id, "##%08X", label.value );
-			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
-				labelView.Set( { label.extra.segment, offset }, true, false );
-				codeView.Set( { label.extra.segment, offset }, V_UPDATE_SCROLL_HISTORY );
+			char id[20];
+			sprintf_s( id, sizeof( id ), "##%08X", label.value );
+			if( ImGui::Selectable( id, isSelected && offset == labelView.realAddress.offset, ImGuiSelectableFlags_SelectOnClick ) ) {
+				labelView.Set( { currentSegment, offset }, true, false );
+				codeView.Set( { currentSegment, offset }, V_UPDATE_SCROLL_HISTORY );
 				if( label.extra.type & LABEL_DATA )
-					dataView.Set( { label.extra.segment, offset }, V_UPDATE_SCROLL_HISTORY | ( data_segment != label.extra.segment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+					dataView.Set( { currentSegment, offset }, V_UPDATE_SCROLL_HISTORY | ( data_segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", label.extra.segment );
+			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", currentSegment );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( grey_color, ":" );
 			ImGui::SameLine( 0.0f, 0.0f );
 			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			if( offset_max != offset ) {
+				sprintf( id, "##%08X_MAX", label.value );
+				if( ImGui::Selectable( id, isSelected && offset != labelView.realAddress.offset, ImGuiSelectableFlags_SelectOnClick ) ) {
+					labelView.Set( { currentSegment, offset_max }, true, false );
+					codeView.Set( { currentSegment, offset_max }, V_UPDATE_SCROLL_HISTORY );
+					if( label.extra.type & LABEL_DATA )
+						dataView.Set( { currentSegment, offset_max }, V_UPDATE_SCROLL_HISTORY | ( data_segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+				}
+				ImGui::SameLine( 4 * char_width );
+				ImGui::TextColored( grey_color, ":" );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset_max );
+			}
 			for( const auto &caller : label.extra.callers ) {
 				const uint32_t offset = ADDRESS_PAIR::Offset( caller.value, caller.extra );
-				const bool isSelected = labelView.IsMatch( { caller.extra, offset }, false );
+				const bool isSelected = labelView.IsMatch( { caller.extra, offset }, offset, false );
 				if( dbg.update_win_scroll[WIN_LABELS] && isSelected ) {
 					dbg.update_win_scroll[WIN_LABELS] = false;
 					ImGui::SetScrollHereY( );
 				}
-				char id[12];
-				sprintf( id, "##c%08X", caller.value );
+				sprintf_s( id, sizeof( id ), "##%08X%08X", label.value, caller.value );
 				if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick ) ) {
 					labelView.Set( { caller.extra, offset }, false, false );
 					codeView.Set( { caller.extra, offset }, V_UPDATE_SCROLL_HISTORY );

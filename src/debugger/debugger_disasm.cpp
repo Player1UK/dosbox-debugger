@@ -96,7 +96,7 @@ bool CallerLabelRealAddress( const uint32_t address, ADDRESS_PAIR &realAddress )
     const auto call = calls.find( { address, {} } );
     if( call != calls.end( ) ) {
         std::set<Pair<uint32_t, uint16_t>> callers;
-        auto label = labels.find( { call->extra, { LABEL_ALL, 0U, callers } } );
+        auto label = labels.find( { call->extra, { {}, {}, {}, callers } } );
         if( label != labels.end( ) ) {
             realAddress = ADDRESS_PAIR::RealAddress( label->value, label->extra.segment );
             return true;
@@ -196,7 +196,7 @@ static void RemoveCode( const Pair<uint32_t, DecodedLine> &code ) {
     const auto nhc = calls.extract( { code.extra.address, {} } );
     if( !nhc.empty( ) ) {
         std::set<Pair<uint32_t, uint16_t>> callers;
-        auto label = labels.find( { nhc.value( ).extra, { LABEL_ALL, 0U, callers } } );
+        auto label = labels.find( { nhc.value( ).extra, { {}, {}, {}, callers } } );
         if( label != labels.end( ) )
             label->extra.callers.extract( { code.extra.address, {} } );
     }
@@ -215,11 +215,11 @@ static bool CheckCode( const Pair<uint32_t, DecodedLine> &code ) {
                 pOpCode += sprintf( pOpCode, "%02X ", MemBase[dline.address + i] );
             switch( dline.length ) {
             case 2U:
-                sprintf( const_cast<char *>( dline.pOperands ), "0x%02X%02X", MemBase[dline.address + 1U], MemBase[dline.address] );
+                sprintf( const_cast<char *>( dline.pOperands ), "0x%04X", *reinterpret_cast<const uint16_t *>( &MemBase[dline.address] ) );
                 dline.operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( MemBase[dline.address] );
                 break;
             case 4U:
-                sprintf( const_cast<char *>( dline.pOperands ), "0x%02X%02X%02X%02X", MemBase[dline.address + 3U], MemBase[dline.address + 2U], MemBase[dline.address + 1U], MemBase[dline.address] );
+                sprintf( const_cast<char *>( dline.pOperands ), "0x%08X", *reinterpret_cast<const uint32_t *>( &MemBase[dline.address] ) );
                 dline.operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( MemBase[dline.address] );
                 break;
             default:
@@ -265,7 +265,7 @@ static void RemoveSegment( std::set<Pair<uint16_t, SegmentInfo>>::iterator segme
             }
         }
         std::set<Pair<uint32_t, uint16_t>> callers;
-        for( auto label = labels.lower_bound( { segmentAddress, { LABEL_ALL, 0U, callers } } ), next = label, codeEnd = labels.upper_bound( { nextSegmentAddress, { LABEL_ALL, 0U, callers } } ); label != labels.end( ) && label != codeEnd; label = next ) {
+        for( auto label = labels.lower_bound( { segmentAddress, { {}, {}, {}, callers } } ), next = label, codeEnd = labels.upper_bound( { nextSegmentAddress, { {}, {}, {}, callers } } ); label != labels.end( ) && label != codeEnd; label = next ) {
             ++next;
             if( segment->value == label->extra.segment )
                 RemoveLabel( *label );
@@ -300,23 +300,35 @@ static bool FindNextSegment( const uint16_t segment, std::set<Pair<uint16_t, Seg
     return true;
 }
 
-static bool CreateLabel( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const LABEL_MASK type ) {
-    if( calls.contains( { call_address, {} } ) )
-        return false;
+static uint32_t CreateLabel( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const LABEL_MASK type ) {
+    uint32_t label_address = address;
+    if( LABEL_DATA == type ) {
+        const auto call = calls.find( { call_address, {} } );
+        if( calls.end( ) != call ) {
+            if( address == call->extra )
+                return static_cast<uint32_t>( -1 );
+            label_address = call->extra;
+        }
+    }
     std::set<Pair<uint32_t, uint16_t>> callers;
-    auto label = labels.find( { address, { LABEL_ALL, segment, callers } } );
+    auto label = labels.find( { label_address, { {}, {}, {}, callers } } );
     if( labels.end( ) == label ) {
-        auto new_label = labels.insert( { address, LabelInfo( type, segment, *new std::set<Pair<uint32_t, uint16_t>> ) } );
+        auto new_label = labels.insert( { address, LabelInfo( type, segment, address, *new std::set<Pair<uint32_t, uint16_t>> ) } );
         if( new_label.second ) // insert success
             label = new_label.first;
     }
     if( label != labels.end( ) ) {
         const_cast<LABEL_MASK &>( label->extra.type ) |= type;
-        label->extra.callers.insert( { call_address, call_segment } );
-        calls.insert( { call_address, address } );
-        return true;
+        if( label->extra.callers.insert( { call_address, call_segment } ).second )
+            calls.insert( { call_address, address } );
+        else if( LABEL_DATA == label->extra.type && segment == label->extra.segment && label->value < address )
+            const_cast<uint32_t &>( label->extra.address_max ) = address;
+        auto code_it = ordered_code.find( { label->value, {} } );
+        if( code_it != ordered_code.end( ) )
+            const_cast<DecodedLine &>( code_it->extra ).mnemonicMask |= ( ( label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE );
+        return label->extra.address_max - label->value;
     }
-    return false;
+    return static_cast<uint32_t>( -1 );
 }
 
 static bool IsStackSegment( const uint16_t segment ) {
@@ -330,7 +342,7 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
     if( IsStackSegment( segment ) )
         return false;
 
-    if( !CreateLabel( address, segment, call_address, call_segment, LABEL_DATA ) )
+    if( CreateLabel( address, segment, call_address, call_segment, LABEL_DATA ) >= 256U )
         return false;
 
     bool result = false;
@@ -379,11 +391,11 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
         }
         switch( num_bits ) {
         case 0x10:
-            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dw 0x%02X%02X", MemBase[address + 1U], MemBase[address] );
+            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dw 0x%04X", *reinterpret_cast<const uint16_t *>( &MemBase[address] ) );
             dline->operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( MemBase[address] );
             break;
         case 0x20:
-            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dd 0x%02X%02X%02X%02X", MemBase[address + 3U], MemBase[address + 2U], MemBase[address + 1U], MemBase[address] );
+            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dd 0x%08X", *reinterpret_cast<const uint32_t *>( &MemBase[address] ) );
             dline->operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( MemBase[address] );
             break;
         default:
@@ -1266,9 +1278,11 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
     auto code_it = ordered_code.find( { address, {} } );
     if( ordered_code.end( ) == code_it || !code_it->extra.length )
         return;
-    if( !code_it->extra.mnemonicMask || ( code_it->extra.mnemonicMask & MM_Data_Label ) ) {
-        uint32_t offset = code_it->extra.realAddress.offset;
-        ordered_code.extract( code_it );
+    const uint32_t offset = code_it->extra.realAddress.offset;
+    const bool fRemoved = !CheckCode( *code_it );
+    if( fRemoved || !code_it->extra.mnemonicMask || ( code_it->extra.mnemonicMask & MM_Data_Label ) ) {
+        if( !fRemoved )
+            ordered_code.extract( code_it );
         RecursiveDisassemble( address, offset, false );
         code_it = ordered_code.find( { address, {} } );
         if( ordered_code.end( ) == code_it || !code_it->extra.length || !code_it->extra.mnemonicMask || ( code_it->extra.mnemonicMask & MM_Data_Label ) )
@@ -1311,14 +1325,19 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
             pComm += sprintf_s( pComm, pCommEnd - pComm, "%04X:%04X=", ptr.segment, ptr.offset );
             const auto *pMemBase = &MemBase[ptr_address];
             switch( num_bits ) {
-            case 0x10: pComm += sprintf_s( pComm, pCommEnd - pComm, "%02X%02X", pMemBase[1], *pMemBase ); break;
-            case 0x20: pComm += sprintf_s( pComm, pCommEnd - pComm, "%02X%02X%02X%02X", pMemBase[3], pMemBase[2], pMemBase[1], *pMemBase ); break;
+            case 0x10: pComm += sprintf_s( pComm, pCommEnd - pComm, "%04X", *reinterpret_cast<const uint16_t *>( pMemBase ) ); break;
+            case 0x20: pComm += sprintf_s( pComm, pCommEnd - pComm, "%08X", *reinterpret_cast<const uint32_t *>( pMemBase ) ); break;
             default: pComm += sprintf_s( pComm, pCommEnd - pComm, "%02X", *pMemBase ); break;
             }
-            if( !i && ( dline.mnemonicMask & MM_Branch ) )
-                branch_ptr = ptr;
-            if( ZYDIS_OPERAND_VISIBILITY_HIDDEN != operand.visibility && ValidateAddress( ptr_address, ptr ) )
+            if( ValidateAddress( ptr_address, ptr ) )
                 CreateDataEntry( ptr_address, ptr.segment, dline.address, dline.realAddress.segment, operand );
+            if( !i && ( dline.mnemonicMask & MM_Branch ) ) {
+                if( 0x20 == num_bits )
+                    branch_ptr.segment = reinterpret_cast<const uint16_t *>( pMemBase )[1];
+                else
+                    branch_ptr.segment = dline.realAddress.segment;
+                branch_ptr.offset = *reinterpret_cast<const uint16_t *>( pMemBase );
+            }
         } break;
         default: break;
         }
@@ -1382,7 +1401,7 @@ void DasmUnDisassemble( uint32_t address ) {
     const auto nhc = calls.extract( { address, {} } );
     if( !nhc.empty( ) ) {
         std::set<Pair<uint32_t, uint16_t>> callers;
-        auto label = labels.find( { nhc.value( ).extra, { LABEL_ALL, 0U, callers } } );
+        auto label = labels.find( { nhc.value( ).extra, { {}, {}, {}, callers } } );
         if( label != labels.end( ) )
             label->extra.callers.extract( { address, {} } );
     }

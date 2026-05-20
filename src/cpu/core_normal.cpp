@@ -141,14 +141,14 @@ Bits CPU_Core_Normal_Run() noexcept
 		BaseSS=SegBase(ss);
 		core.base_val_ds=ds;
 #if C_DEBUGGER
-#if C_HEAVY_DEBUGGER
 		DEBUG_NewInstruction( );
+#if C_HEAVY_DEBUGGER
 		if (DEBUG_HeavyIsBreakpoint()) {
 			FillFlags();
 			return debugCallback;
 		};
 #endif
-		cycle_count++;
+		++cycle_count;
 #endif
 restart_opcode:
 		switch (core.opcode_index+Fetchb()) {

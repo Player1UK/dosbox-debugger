@@ -41,11 +41,6 @@ void DEBUG_HeavyWriteLogInstruction( );
 
 template <typename T>
 void DEBUG_UpdateMemoryReadBreakpoints( const PhysPt addr );
-#else
-template <typename T>
-constexpr void DEBUG_UpdateMemoryReadBreakpoints( const PhysPt ) {
-	// no-op
-}
 #endif // C_DEBUGGER && C_HEAVY_DEBUGGER
 
 #endif // DOSBOX_DEBUGGER_H

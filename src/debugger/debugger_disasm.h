@@ -117,6 +117,7 @@ struct SegmentInfo {
 struct LabelInfo {
 	LABEL_MASK type;
 	const uint16_t segment;
+	uint32_t address_max;
 	std::set<Pair<uint32_t, uint16_t>> &callers;
 };
 
