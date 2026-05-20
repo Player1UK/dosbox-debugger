@@ -92,19 +92,6 @@ bool AddressVisited( const ADDRESS_PAIR &address_pair ) {
     return AddressVisited( address_pair.offset + ( address_pair.segment << 4 ) );
 }
 
-bool CallerLabelRealAddress( const uint32_t address, ADDRESS_PAIR &realAddress ) {
-    const auto call = calls.find( { address, {} } );
-    if( call != calls.end( ) ) {
-        std::set<Pair<uint32_t, uint16_t>> callers;
-        auto label = labels.find( { call->extra, { {}, {}, {}, callers } } );
-        if( label != labels.end( ) ) {
-            realAddress = ADDRESS_PAIR::RealAddress( label->value, label->extra.segment );
-            return true;
-        }
-    }
-    return false;
-}
-
 uint8_t DasmI386( char *decodedInstruction, char *&pOperands, const uint32_t address, const uint32_t ip_offset, const bool f32bit, const bool fProtected ) {
     pOperands = nullptr;
 	ZydisDisassembledInstruction instruction;
@@ -126,7 +113,6 @@ static uint32_t segment0_phys = 0U;
 static uint32_t binarySize = static_cast<uint32_t>( -1 );
 
 void DasmReset( ) {
-    calls.clear( );
     labels.clear( );
     ordered_segments.clear( );
     visited.clear( );
@@ -184,47 +170,62 @@ static ZydisFormatter formatter;
 static void RemoveLabel( const Pair<uint32_t, LabelInfo> &label ) {
     auto it = ordered_code.find( { label.value, {} } );
     if( it != ordered_code.end( ) )
-        const_cast<DecodedLine &>( it->extra ).mnemonicMask &= static_cast<MNEMONIC_MASK>( ~( MM_Label | MM_Data_Label ) );
-    for( const auto caller : label.extra.callers )
-        calls.extract( { caller.value, {} } );
+        const_cast<DecodedLine &>( it->extra ).mnemonicMask &= static_cast<MNEMONIC_MASK>( ~( ( ( label.extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( label.extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( label.extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE ) ) );
     label.extra.callers.clear( );
     labels.extract( label );
 }
 
 static void RemoveCode( const Pair<uint32_t, DecodedLine> &code ) {
     visited.extract( code.extra.address );
-    const auto nhc = calls.extract( { code.extra.address, {} } );
-    if( !nhc.empty( ) ) {
+    if( ( code.extra.mnemonicMask & MM_Branch ) && !code.extra.branchAddress.IsNull( ) ) {
         std::set<Pair<uint32_t, uint16_t>> callers;
-        auto label = labels.find( { nhc.value( ).extra, { {}, {}, {}, callers } } );
+        auto label = labels.find( { code.extra.branchAddress.address( ), { {}, {}, {}, callers } } );
         if( label != labels.end( ) )
             label->extra.callers.extract( { code.extra.address, {} } );
+    }
+    if( ( code.extra.mnemonicMask & MM_Memory_Access ) && !code.extra.branchAddress.IsNull( ) ) {
+        std::set<Pair<uint32_t, uint16_t>> callers;
+        for( uint8_t i = 0U; i < NUM_MEM_OPS && i < code.extra.instruction.operand_count; ++i ) {
+            if( !code.extra.memoryAddress[i].IsNull( ) ) {
+                auto label = labels.find( { code.extra.memoryAddress[i].address( ), { {}, {}, {}, callers } } );
+                if( label != labels.end( ) )
+                    label->extra.callers.extract( { code.extra.address, {} } );
+            }
+        }
     }
     ordered_code.extract( code );
 }
 
 static bool CheckCode( const Pair<uint32_t, DecodedLine> &code ) {
     if( code.extra.length ) {
-        if( !memcmp( &MemBase[code.extra.address], code.extra.opCode, code.extra.length ) )
+        bool fChanged = false;
+        for( uint8_t i = 0U; i < code.extra.length; ++i ) {
+            if( mem_readb<MemOpMode::SkipBreakpoints>( code.extra.address + i ) != code.extra.opCode[i] ) {
+                fChanged = true;
+                break;
+            }
+        }
+        if( !fChanged )
             return true;
         if( ( code.extra.mnemonicMask & MM_Data_Label ) && code.extra.pOperands ) {
             auto &dline = const_cast<Pair<uint32_t, DecodedLine> &>( code ).extra;
-            memcpy( dline.opCode, &MemBase[dline.address], dline.length );
             char *pOpCode = dline.szOpcode;
-            for( uint8_t i = 0U; i < dline.length; ++i )
-                pOpCode += sprintf( pOpCode, "%02X ", MemBase[dline.address + i] );
+            for( uint8_t i = 0U; i < dline.length; ++i ) {
+                dline.opCode[i] = mem_readb<MemOpMode::SkipBreakpoints>( dline.address + i );
+                pOpCode += sprintf( pOpCode, "%02X ", dline.opCode[i] );
+            }
             switch( dline.length ) {
             case 2U:
-                sprintf( const_cast<char *>( dline.pOperands ), "0x%04X", *reinterpret_cast<const uint16_t *>( &MemBase[dline.address] ) );
-                dline.operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( MemBase[dline.address] );
+                sprintf( const_cast<char *>( dline.pOperands ), "0x%04X", *reinterpret_cast<const uint16_t *>( dline.opCode ) );
+                dline.operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( dline.opCode );
                 break;
             case 4U:
-                sprintf( const_cast<char *>( dline.pOperands ), "0x%08X", *reinterpret_cast<const uint32_t *>( &MemBase[dline.address] ) );
-                dline.operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( MemBase[dline.address] );
+                sprintf( const_cast<char *>( dline.pOperands ), "0x%08X", *reinterpret_cast<const uint32_t *>( dline.opCode ) );
+                dline.operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( dline.opCode );
                 break;
             default:
-                sprintf( const_cast<char *>( dline.pOperands ), "0x%02X", MemBase[dline.address] );
-                dline.operands[0].imm.value.u = MemBase[dline.address];
+                sprintf( const_cast<char *>( dline.pOperands ), "0x%02X", *dline.opCode );
+                dline.operands[0].imm.value.u = *dline.opCode;
             }
             return true;
         }
@@ -242,7 +243,7 @@ static bool CheckAddress( const uint32_t address ) {
 
 static bool CheckIsData( const uint32_t address ) {
     const auto it = ordered_code.find( { address, {} } );
-    return it != ordered_code.end( ) && ( it->extra.mnemonicMask & MM_Data_Label );
+    return it != ordered_code.end( ) && !( it->extra.mnemonicMask & ~MM_Data );
 }
 
 static void RemoveSegment( std::set<Pair<uint16_t, SegmentInfo>>::iterator segment ) {
@@ -300,32 +301,38 @@ static bool FindNextSegment( const uint16_t segment, std::set<Pair<uint16_t, Seg
     return true;
 }
 
+static void SetCodeLabel( const uint32_t address, const MNEMONIC_MASK mask ) {
+    auto code_it = ordered_code.find( { address, {} } );
+    if( code_it != ordered_code.end( ) )
+        const_cast<DecodedLine &>( code_it->extra ).mnemonicMask |= mask;
+}
+
 static uint32_t CreateLabel( const uint32_t address, const uint16_t segment, const uint32_t call_address, const uint16_t call_segment, const LABEL_MASK type ) {
-    uint32_t label_address = address;
-    if( LABEL_DATA == type ) {
-        const auto call = calls.find( { call_address, {} } );
-        if( calls.end( ) != call ) {
-            if( address == call->extra )
-                return static_cast<uint32_t>( -1 );
-            label_address = call->extra;
-        }
-    }
     std::set<Pair<uint32_t, uint16_t>> callers;
-    auto label = labels.find( { label_address, { {}, {}, {}, callers } } );
+    auto label = labels.find( { address, { {}, {}, {}, callers } } );
     if( labels.end( ) == label ) {
+        if( LABEL_DATA == type ) {
+            auto prev_label = labels.lower_bound( { address, { {}, {}, {}, callers } } );
+            for( uint8_t count = 4U; count && labels.begin( ) != prev_label; --count ) {
+                --prev_label;
+                if( LABEL_DATA == prev_label->extra.type && segment == prev_label->extra.segment && prev_label->extra.callers.contains( { call_address, {} } ) ) {
+                    if( prev_label->extra.address_max < address && ( address - prev_label->extra.address_max <= 8U ) ) {
+                        const_cast<uint32_t &>( prev_label->extra.address_max ) = address;
+                        SetCodeLabel( prev_label->value, ( ( prev_label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( prev_label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( prev_label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE ) );
+                    }
+                    if( prev_label->value <= address && address <= prev_label->extra.address_max )
+                        return prev_label->extra.address_max - prev_label->value;
+                }
+            }
+        }
         auto new_label = labels.insert( { address, LabelInfo( type, segment, address, *new std::set<Pair<uint32_t, uint16_t>> ) } );
         if( new_label.second ) // insert success
             label = new_label.first;
     }
     if( label != labels.end( ) ) {
         const_cast<LABEL_MASK &>( label->extra.type ) |= type;
-        if( label->extra.callers.insert( { call_address, call_segment } ).second )
-            calls.insert( { call_address, address } );
-        else if( LABEL_DATA == label->extra.type && segment == label->extra.segment && label->value < address )
-            const_cast<uint32_t &>( label->extra.address_max ) = address;
-        auto code_it = ordered_code.find( { label->value, {} } );
-        if( code_it != ordered_code.end( ) )
-            const_cast<DecodedLine &>( code_it->extra ).mnemonicMask |= ( ( label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE );
+        label->extra.callers.insert( { call_address, call_segment } );
+        SetCodeLabel( label->value, ( ( label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE ) );
         return label->extra.address_max - label->value;
     }
     return static_cast<uint32_t>( -1 );
@@ -391,16 +398,16 @@ static bool CreateDataEntry( const uint32_t address, const uint16_t segment, con
         }
         switch( num_bits ) {
         case 0x10:
-            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dw 0x%04X", *reinterpret_cast<const uint16_t *>( &MemBase[address] ) );
-            dline->operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( MemBase[address] );
+            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dw 0x%04X", *reinterpret_cast<const uint16_t *>( dline->opCode ) );
+            dline->operands[0].imm.value.u = reinterpret_cast<const uint16_t &>( *dline->opCode );
             break;
         case 0x20:
-            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dd 0x%08X", *reinterpret_cast<const uint32_t *>( &MemBase[address] ) );
-            dline->operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( MemBase[address] );
+            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "dd 0x%08X", *reinterpret_cast<const uint32_t *>( dline->opCode ) );
+            dline->operands[0].imm.value.u = reinterpret_cast<const uint32_t &>( *dline->opCode );
             break;
         default:
-            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "db 0x%02X", MemBase[address] );
-            dline->operands[0].imm.value.u = MemBase[address];
+            sprintf_s( dline->szInstruction, sizeof( dline->szInstruction ), "db 0x%02X", *dline->opCode );
+            dline->operands[0].imm.value.u = *dline->opCode;
         }
         dline->szInstruction[2] = 0;
     }
@@ -419,7 +426,7 @@ static void CreateDataWordEntry( const uint32_t address, const uint16_t segment,
 
         *dline.opCode = MemBase[address];
         dline.opCode[1] = MemBase[address + 1U];
-        sprintf_s( dline.szOpcode, sizeof( dline.szOpcode ), "%02X %02X ", MemBase[address], MemBase[address + 1U] );
+        sprintf_s( dline.szOpcode, sizeof( dline.szOpcode ), "%02X %02X ", *dline.opCode, dline.opCode[1] );
     }
 }
 
@@ -663,7 +670,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                 memcpy( dline.opCode, &MemBase[address], dline.length );
                 char *pOpCode = dline.szOpcode;
                 for( uint8_t i = 0U; i < dline.length; ++i ) {
-                    pOpCode += sprintf( pOpCode, "%02X ", MemBase[address + i] );
+                    pOpCode += sprintf( pOpCode, "%02X ", dline.opCode[i] );
                     if( i ) {
                         ordered_code.extract( { address + i, {} } );
                         visited.extract( address + i );
@@ -811,21 +818,15 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     const auto &op = dline.operands[i];
                     if( ZYDIS_OPERAND_TYPE_MEMORY == op.type && ZYDIS_REGISTER_SS != op.mem.segment ) {
                         dline.mnemonicMask |= MM_Memory_Access;
-                        dline.mem_access[i].size = op.element_size;
-                        dline.mem_access[i].segment_id = op.mem.segment;
-                        dline.mem_access[i].base_id = op.mem.base;
-                        dline.mem_access[i].disp.has_displacement = op.mem.disp.has_displacement;
-                        dline.mem_access[i].disp.value = op.mem.disp.value;
-
                         if( ( ZYDIS_REGISTER_CS == op.mem.segment || ZYDIS_REGISTER_DS == op.mem.segment ) && op.mem.disp.has_displacement && ( ZYDIS_REGISTER_NONE == op.mem.base || ( 0x10 == op.size && ( dline.mnemonicMask & MM_JMP ) ) ) ) {
-                            ADDRESS_PAIR ptr = CalculateRealAddress( dline.instruction, op, dline.realAddress, true );
-                            uint32_t addr = ptr.address( );
-                            if( ValidateAddress( addr, ptr ) ) {
+                            dline.memoryAddress[i] = CalculateRealAddress( dline.instruction, op, dline.realAddress, true );
+                            uint32_t addr = dline.memoryAddress[i].address( );
+                            if( ValidateAddress( addr, dline.memoryAddress[i] ) ) {
                                 if( ZYDIS_REGISTER_NONE == op.mem.base ) {
-                                    if( CreateDataEntry( addr, ptr.segment, dline.address, dline.realAddress.segment, op ) )
+                                    if( CreateDataEntry( addr, dline.memoryAddress[i].segment, dline.address, dline.realAddress.segment, op ) )
                                         added.insert( address );
                                 } else if( op.mem.disp.value > dline.realAddress.offset )
-                                    CreateDataWordSection( addr, ptr.segment );
+                                    CreateDataWordSection( addr, dline.memoryAddress[i].segment );
                             }
                         }
                     } if( i && ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type && ZYDIS_OPERAND_TYPE_REGISTER == dline.operands[0].type && ZYDIS_REGISTER_SI == dline.operands[0].reg.value ) {
@@ -837,16 +838,16 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                 if( dline.mnemonicMask & MM_Branch ) {
                     const auto &op = dline.operands[0];
                     if( ZYDIS_OPERAND_TYPE_IMMEDIATE == op.type || ZYDIS_OPERAND_TYPE_POINTER == op.type ) {
-                        ADDRESS_PAIR ptr = CalculateRealAddress( dline.instruction, op, dline.realAddress, true );
-                        sprintf( const_cast<char *>( dline.pOperands ), "%04X:%04X", ptr.segment, ptr.offset );
-                        uint32_t addr = ptr.address( );
-                        if( ValidateAddress( addr, ptr ) ) {
+                        dline.branchAddress = CalculateRealAddress( dline.instruction, op, dline.realAddress, true );
+                        sprintf( const_cast<char *>( dline.pOperands ), "%04X:%04X", dline.branchAddress.segment, dline.branchAddress.offset );
+                        uint32_t addr = dline.branchAddress.address( );
+                        if( ValidateAddress( addr, dline.branchAddress ) ) {
                             if( !added.contains( addr ) ) {
                                 added.insert( addr );
                                 if( !visited.contains( addr ) )
-                                    toVisit.push_back( ptr );
+                                    toVisit.push_back( dline.branchAddress );
                             }
-                            CreateLabel( addr, ptr.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
+                            CreateLabel( addr, dline.branchAddress.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
                         }
                     }
                     if( dline.mnemonicMask & MM_JMP )
@@ -884,7 +885,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                     memcpy( dline.opCode, &MemBase[dline.address], dline.length );
                     char *pOpCode = dline.szOpcode;
                     for( auto i = 0; i < dline.length; ++i )
-                        pOpCode += sprintf( pOpCode, "%02X ", MemBase[address + i] );
+                        pOpCode += sprintf( pOpCode, "%02X ", dline.opCode[i] );
                     sprintf_s( dline.szInstruction, sizeof( dline.szInstruction ), "callback 0x%02X", dw );
                     dline.szInstruction[8] = 0;
                     dline.pOperands = &dline.szInstruction[9];
@@ -894,7 +895,7 @@ static uint32_t RecursiveDisassemble( const uint32_t startAddress, const uint32_
                 } else { // Treat as data; step forward 1 byte
                     dline.length = 1U;
                     *dline.opCode = MemBase[address];
-                    sprintf( dline.szOpcode, "%02X", MemBase[address] );
+                    sprintf( dline.szOpcode, "%02X", *dline.opCode );
                     ++address;
                     ++realAddress;
                 }
@@ -993,7 +994,7 @@ static void CreateUnknownDoubleWordEntry( const uint32_t address, const uint16_t
         dline.mnemonicMask = MM_NONE;
 
         memcpy( dline.opCode, &MemBase[address], dline.length );
-        sprintf_s( dline.szOpcode, sizeof( dline.szOpcode ), "%02X %02X %02X %02X ", MemBase[address], MemBase[address + 1U], MemBase[address + 2U], MemBase[address + 3U] );
+        sprintf_s( dline.szOpcode, sizeof( dline.szOpcode ), "%02X %02X %02X %02X ", *dline.opCode, dline.opCode[1], dline.opCode[2], dline.opCode[3] );
     }
 }
 
@@ -1275,17 +1276,19 @@ void DasmRecursiveDisassemble( const uint32_t startAddress, const uint32_t start
 }
 
 void DasmAnalyzeInstruction( const uint32_t address ) {
+    if( 0xCC == MemBase[address] )
+        return;
     auto code_it = ordered_code.find( { address, {} } );
     if( ordered_code.end( ) == code_it || !code_it->extra.length )
         return;
     const uint32_t offset = code_it->extra.realAddress.offset;
     const bool fRemoved = !CheckCode( *code_it );
-    if( fRemoved || !code_it->extra.mnemonicMask || ( code_it->extra.mnemonicMask & MM_Data_Label ) ) {
+    if( fRemoved || !( code_it->extra.mnemonicMask & ~MM_Data ) ) {
         if( !fRemoved )
             ordered_code.extract( code_it );
         RecursiveDisassemble( address, offset, false );
         code_it = ordered_code.find( { address, {} } );
-        if( ordered_code.end( ) == code_it || !code_it->extra.length || !code_it->extra.mnemonicMask || ( code_it->extra.mnemonicMask & MM_Data_Label ) )
+        if( ordered_code.end( ) == code_it || !code_it->extra.length || !( code_it->extra.mnemonicMask & ~MM_Data ) )
             return;
     }
     auto &dline = code_it->extra;
@@ -1295,7 +1298,6 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
     auto pCommEnd = sizeof dline.szComment + pComm;
     *pComm = '-';
     pComm[1] = 0;
-    ADDRESS_PAIR branch_ptr;
     for( uint8_t i = 0U; i < dline.instruction.operand_count; ++i ) {
         if( i && pComm != dline.szComment ) {
             *pComm++ = ',';
@@ -1310,7 +1312,7 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
         } break;
         case ZYDIS_OPERAND_TYPE_POINTER:
             if( !i && ( dline.mnemonicMask & MM_Branch ) )
-                branch_ptr = { operand.ptr.segment, operand.ptr.offset };
+                const_cast<ADDRESS_PAIR &>( dline.branchAddress ) = { operand.ptr.segment, operand.ptr.offset };
             break;
         case ZYDIS_OPERAND_TYPE_IMMEDIATE:
             switch( num_bits ) {
@@ -1329,14 +1331,16 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
             case 0x20: pComm += sprintf_s( pComm, pCommEnd - pComm, "%08X", *reinterpret_cast<const uint32_t *>( pMemBase ) ); break;
             default: pComm += sprintf_s( pComm, pCommEnd - pComm, "%02X", *pMemBase ); break;
             }
-            if( ValidateAddress( ptr_address, ptr ) )
-                CreateDataEntry( ptr_address, ptr.segment, dline.address, dline.realAddress.segment, operand );
+            if( ValidateAddress( ptr_address, ptr ) ) {
+                if( CreateDataEntry( ptr_address, ptr.segment, dline.address, dline.realAddress.segment, operand ) && i < NUM_MEM_OPS )
+                    const_cast<ADDRESS_PAIR &>( dline.memoryAddress[i] ) = ptr;
+            }
             if( !i && ( dline.mnemonicMask & MM_Branch ) ) {
                 if( 0x20 == num_bits )
-                    branch_ptr.segment = reinterpret_cast<const uint16_t *>( pMemBase )[1];
+                    const_cast<ADDRESS_PAIR &>( dline.branchAddress ).segment = reinterpret_cast<const uint16_t *>( pMemBase )[1];
                 else
-                    branch_ptr.segment = dline.realAddress.segment;
-                branch_ptr.offset = *reinterpret_cast<const uint16_t *>( pMemBase );
+                    const_cast<ADDRESS_PAIR &>( dline.branchAddress ).segment = dline.realAddress.segment;
+                const_cast<ADDRESS_PAIR &>( dline.branchAddress ).offset = *reinterpret_cast<const uint16_t *>( pMemBase );
             }
         } break;
         default: break;
@@ -1370,7 +1374,7 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
             default: break;
             }
         }
-        uint32_t branch_address = branch_ptr.address( );
+        uint32_t branch_address = dline.branchAddress.address( );
         if( fBranch ) {
             if( address > branch_address )
                 strcpy_s( pComm, pCommEnd - pComm, " <-" );
@@ -1379,9 +1383,9 @@ void DasmAnalyzeInstruction( const uint32_t address ) {
         } else
             strcpy_s( pComm, pCommEnd - pComm, " ><" );
         pComm += 3;
-        if( ValidateAddress( branch_address, branch_ptr ) ) {
-            CreateLabel( branch_address, branch_ptr.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
-            RecursiveDisassemble( branch_address, branch_ptr.offset, false );
+        if( ValidateAddress( branch_address, dline.branchAddress ) ) {
+            CreateLabel( branch_address, dline.branchAddress.segment, dline.address, dline.realAddress.segment, ( dline.mnemonicMask & MM_CALL ) ? LABEL_CALL : LABEL_JUMP );
+            RecursiveDisassemble( branch_address, dline.branchAddress.offset, false );
         }
     } else if( ZYDIS_MNEMONIC_POPA == dline.instruction.mnemonic || ZYDIS_MNEMONIC_POPAD == dline.instruction.mnemonic ) {
         const uint32_t sp_address = ADDRESS_PAIR::Address( { RealSegValue( ss ), ( cpu.code.big ? reg_esp : reg_sp ) } );
@@ -1418,7 +1422,7 @@ void DasmUnDisassemble( uint32_t address ) {
                 dline.instruction.operand_count = dline.instruction.operand_count_visible = 0U;
                 dline.mnemonicMask = MM_NONE;
                 *dline.opCode = MemBase[address];
-                sprintf( dline.szOpcode, "%02X ", MemBase[address] );
+                sprintf( dline.szOpcode, "%02X ", *dline.opCode );
             }
             ++address;
             ++address_pair.offset;

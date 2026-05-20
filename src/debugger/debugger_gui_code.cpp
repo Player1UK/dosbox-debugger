@@ -146,7 +146,7 @@ void DrawCode( ) {
 				ImGui::Separator( );
 				ImGui::Spacing( );
 			}
-			if( dline.mnemonicMask & MM_Label ) {
+			if( dline.mnemonicMask & MM_BranchLabel ) {
 				sprintf( id, "##L%08X", dline.address );
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick ) ) {
 					codeView.SetCursor( dline.realAddress );
@@ -177,15 +177,13 @@ void DrawCode( ) {
 				const bool is_temporary_breakpoint = CBreakpoint::IsBreakpoint( dline.realAddress, true );
 				sprintf( id, "##%08X", dline.address );
 				if( ImGui::Selectable( id, dline.address == codeView.cursorAddress, ImGuiSelectableFlags_SelectOnClick ) ) {
-					if( ( dline.mnemonicMask & MM_Branch ) && ImGui::IsKeyDown( ImGuiMod_Ctrl ) ) {
-						ADDRESS_PAIR labelRealAddress;
-						if( CallerLabelRealAddress( dline.address, labelRealAddress ) ) {
-							codeView.Set( labelRealAddress, V_UPDATE_SCROLL_HISTORY );
-							break;
-						}
+					if( ( dline.mnemonicMask & MM_Branch ) && ImGui::IsKeyDown( ImGuiMod_Ctrl ) && !dline.branchAddress.IsNull( ) ) {
+						codeView.Set( dline.branchAddress, V_UPDATE_SCROLL_HISTORY );
+						labelView.Set( dline.branchAddress, true );
+						break;
 					} else {
 						codeView.SetCursor( dline.realAddress );
-						if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Data_Label | MM_Memory_Access ) )
+						if( dline.mnemonicMask & ( MM_Branch | MM_Label | MM_Memory_Access ) )
 							labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
 					}
 				}
@@ -290,20 +288,13 @@ void UpdateDataSegment( const uint16_t segment ) {
 
 extern char curSelectorName[3];
 
-static uint32_t last_ip_address = static_cast<uint32_t>( -1 );
-
 void DEBUG_NewInstruction( ) {
 	if( !imgui_initialized )
 		return;
 	if( !debugging && dbg.graphics_window_hidden && GetTicksSince( normalLoopTickCount ) > 2000 )
 		DEBUG_ShowDOSBox( );
-	const ADDRESS_PAIR ip_address_pair = { RealSegValue( cs ), reg_eip };
-	const uint32_t ip_address = ip_address_pair.address( );
-	if( ip_address == last_ip_address )
-		return;
-	last_ip_address = ip_address;
 	CheckSegmentRegisters( );
-	DasmAnalyzeInstruction( ip_address );
+	DasmAnalyzeInstruction( ADDRESS_PAIR::Address( { RealSegValue( cs ), reg_eip } ) );
 }
 void DBGUI_Resume( ) {
 	if( !imgui_initialized )

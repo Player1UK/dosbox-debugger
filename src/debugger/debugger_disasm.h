@@ -46,7 +46,9 @@ typedef enum Mnemonic_Mask : uint32_t {
 	MM_Memory_Access	= 0x00200000,
 	MM_DOSBox_internal	= 0x00400000,
 	MM_Branch		    = MM_ConditionalJump | MM_JMP | MM_CALL | MM_LOOP,
-	MM_Label			= MM_Call_Label | MM_Jump_Label,
+	MM_BranchLabel		= MM_Call_Label | MM_Jump_Label,
+	MM_Label			= MM_BranchLabel | MM_Data_Label,
+	MM_Data				= MM_Data_Label | MM_Data_Segment,
 } MNEMONIC_MASK;
 constexpr MNEMONIC_MASK operator|( MNEMONIC_MASK lhs, MNEMONIC_MASK rhs ) noexcept {
 	using Underlying = std::underlying_type_t<MNEMONIC_MASK>;
@@ -79,7 +81,8 @@ struct DecodedLine {
 	char szComment[192] = "";
 	char const *pMnemonic = nullptr;
 	char const *pOperands = nullptr;
-	MEM_ACCESS mem_access[NUM_MEM_OPS];
+	ADDRESS_PAIR branchAddress;
+	ADDRESS_PAIR memoryAddress[NUM_MEM_OPS];
 
 	static const DecodedLine * find( const uint32_t );
 	static const DecodedLine * find( const ADDRESS_PAIR & );
@@ -96,8 +99,6 @@ const DecodedLine operator--( DecodedLine const &, int ); // Postfix decrement
 
 extern bool AddressVisited( uint32_t );
 extern bool AddressVisited( const ADDRESS_PAIR & );
-
-extern bool CallerLabelRealAddress( const uint32_t, ADDRESS_PAIR & );
 
 extern uint8_t DasmI386( char *, char *&, const uint32_t, const uint32_t, const bool, const bool );
 
