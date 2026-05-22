@@ -34,7 +34,6 @@ void SaveMemoryState( ) {
 std::vector<char> data_text_buffer;
 static std::vector<DIFF> data_diff[NUM_DATA_VIEWS];
 static ImU32 diff_col = IM_COL32( 0, 96, 0, 255 );
-uint16_t data_segment = static_cast<uint16_t>( -1 );
 
 static void SetCursors( ) {
 	data_cursor[DI_CURSOR].visible = false;
@@ -93,30 +92,27 @@ void DrawData( ) {
 		}
 		if( ImGui::IsWindowFocused( ImGuiFocusedFlags_ChildWindows ) && dbg.active_data_view != DATA_VIEW )
 			dbg.active_data_view = DATA_VIEW;
-		static char szAddressStart[5], szAddressEnd[5];
+		static char szAddressStart[9], szAddressEnd[9];
 		bool scroll_to_diff = false;
 		if( dbg.update_win[WIN_DATA] ) {
 			dbg.update_win[WIN_DATA] = false;
-			data_segment = dataView.realAddress.segment;
-			ADDRESS_PAIR address_pair = { data_segment, 0U };
-			auto ordered_segment = ordered_segments.begin( );
-			for( ; ordered_segment != ordered_segments.end( ); ++ordered_segment ) {
-				if( address_pair.segment < ordered_segment->value )
-					break;
+			dataView.segment = dataView.realAddress.segment;
+			dataView.address_segment = ADDRESS_PAIR::Address( dataView.segment );
+			ADDRESS_PAIR address_pair = { dataView.segment, 0U };
+			uint32_t count = 0x10000;
+			auto ordered_segment_next = ordered_segments.end( );
+			if( dataView.address >= LOWER_MEMORY_LIMIT )
+				address_pair.offset = dataView.realAddress.offset;
+			else {
+				ordered_segment_next = ordered_segments.find( { dataView.segment, {} } );
+				if( ordered_segment_next != ordered_segments.end( ) )
+					++ordered_segment_next;
+				count = ( dataView.address_max - dataView.address_min ) >> 4;
+				if( count > 0x10000 )
+					count = 0x10000;
 			}
-			uint32_t count = ( dataView.realAddress.offset + 1U ) >> 4;
-			if( ( count << 4 ) < dataView.realAddress.offset + 1U )
-				++count;
-			count += address_pair.segment;
-			if( count >= dbg.segment[SEG_STACK_END] ) {
-				count -= address_pair.segment;
-				count = ( count < 0x1000 ? 0x1000 : count );
-			} else if( count >= dbg.segment[SEG_STACK] )
-				count = dbg.segment[SEG_STACK_END] - address_pair.segment;
-			else
-				count = dbg.segment[SEG_STACK] - address_pair.segment;
 			uint32_t line_segment = address_pair.segment;
-			const uint32_t data_base = address_pair.segment << 4;
+			const uint32_t data_base = address_pair.address( );
 			auto mem = &MemBase[data_base];
 			const auto mem_compare_end = &MemBase[savedMemorySize];
 			if( data_base >= savedMemorySize )
@@ -131,9 +127,9 @@ void DrawData( ) {
 			float yPos = 0.0f;
 			SetCursors( );
 			for( num_data_lines = 0; count; --count, line += 82U, ++line_segment, yPos += line_height, ++num_data_lines ) {
-				if( line_segment >= ordered_segment->value ) {
-					address_pair.segment = ordered_segment->value;
-					++ordered_segment;
+				if( ordered_segment_next != ordered_segments.end( ) && line_segment >= ordered_segment_next->value ) {
+					address_pair.segment = ordered_segment_next->value;
+					++ordered_segment_next;
 					address_pair.offset = 0U;
 					*line++ = '\n';
 					yPos += line_height;
@@ -143,6 +139,8 @@ void DrawData( ) {
 				bool f32bit = false;
 				if( address_pair.offset <= 0xFFFF )
 					sprintf( line, "%04X:%04X      ", address_pair.segment, address_pair.offset );
+				else if( address_pair.offset >= LOWER_MEMORY_LIMIT )
+					sprintf( line, "%08X       ", address_pair.offset );
 				else {
 					sprintf( line, "%04X:%08X  ", address_pair.segment, address_pair.offset );
 					f32bit = true;
@@ -176,15 +174,15 @@ void DrawData( ) {
 				scroll_to_diff = true;
 				dbg.update_win_scroll[WIN_DATA] = true;
 			}
-			sprintf( szAddressStart, "%04X", data_segment );
-			sprintf( szAddressEnd, "%04X", line_segment );
+			sprintf( szAddressStart, "%08X", dataView.address_min );
+			sprintf( szAddressEnd, "%08X", dataView.address_max );
 		}
 		ImGui::PushStyleColor( ImGuiCol_NavHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent highlight
 		ImGui::PushStyleColor( ImGuiCol_NavWindowingHighlight, IM_COL32( 0, 0, 0, 0 ) ); // Transparent window highlight
-		ImGui::PushItemWidth( digit_width * 5.0f );
-		ImGui::InputText( "##StartAddress", szAddressStart, 5U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
+		ImGui::PushItemWidth( digit_width * 10.0f );
+		ImGui::InputText( "##StartAddress", szAddressStart, 9U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
 		ImGui::SameLine( );
-		ImGui::InputText( "##EndAddress", szAddressEnd, 5U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
+		ImGui::InputText( "##EndAddress", szAddressEnd, 9U, ImGuiInputTextFlags_CharsHexadecimal | ImGuiInputTextFlags_CharsUppercase | ImGuiInputTextFlags_CharsNoBlank );
 		ImGui::PopItemWidth( );
 		ImGui::Separator( );
 		if( ImGui::BeginChild( "ScrollRegion", { 0.0f, 0.0f }, false, ImGuiWindowFlags_HorizontalScrollbar ) ) {
@@ -193,7 +191,7 @@ void DrawData( ) {
 				if( scroll_to_diff && !dataView.realAddress.offset && !data_diff[DATA_VIEW].empty( ) )
 					scrollY = data_diff[DATA_VIEW][0].pos.y;
 				else
-					scrollY = ( ( dataView.realAddress.segment - data_segment ) + ( dataView.realAddress.offset >> 4 ) + NumSegDiff( data_segment, dataView.realAddress.segment ) ) * line_height;
+					scrollY = ( ( ( dataView.address - dataView.address_min ) >> 4 ) + NumSegDiff( dataView.segment, dataView.realAddress.segment ) ) * line_height;
 				data_line_index = scrollY / line_height;
 			}
 			ImVec2 screen_top_left = ImGui::GetCursorScreenPos( ); // Top-left corner;
@@ -252,7 +250,6 @@ void DrawData( ) {
 
 std::vector<char> stack_text_buffer;
 uint32_t stack_lines = 0U;
-uint16_t stack_segment = static_cast<uint16_t>( -1 );
 static Cursor sp_cursor = { IM_COL32( 94, 219, 247, 255 ) };
 
 void DrawStack( ) {
@@ -269,7 +266,8 @@ void DrawStack( ) {
 		if( dbg.update_win[WIN_STACK] ) {
 			dbg.update_win[WIN_STACK] = false;
 			ADDRESS_PAIR address_pair = stackView.realAddress;
-			stack_segment = address_pair.segment;
+			stackView.segment = stackView.realAddress.segment;
+			stackView.address_segment = ADDRESS_PAIR::Address( stackView.segment );
 			address_pair.offset = ( address_pair.offset & 0x0000000F ? 16U : 0U ) + ( ( address_pair.offset >> 4 ) << 4 );
 			uint32_t line_segment = address_pair.segment + ( address_pair.offset >> 4 );
 			auto ordered_segment = ordered_segments.end( );
@@ -295,7 +293,7 @@ void DrawStack( ) {
 				const_cast<uint32_t &>( data_base ) = savedMemorySize - 1U;
 			auto data = &data_buffer[data_base];
 			data_diff[STACK_VIEW].clear( );
-			stack_lines = line_segment - stack_segment;
+			stack_lines = line_segment - stackView.segment;
 			if( ( stack_lines << 7U ) > stack_text_buffer.size( ) ) {
 				stack_text_buffer.clear( );
 				stack_text_buffer.resize( stack_lines << 7U );
@@ -362,7 +360,7 @@ void DrawStack( ) {
 			if( scroll_to_diff && !data_diff[STACK_VIEW].empty( ) )
 				ImGui::SetScrollY( data_diff[STACK_VIEW][0].pos.y );
 			else
-				ImGui::SetScrollY( ( stack_lines - ( ( stackView.realAddress.segment - stack_segment ) + ( stackView.realAddress.offset >> 4 ) + ( stackView.realAddress.offset & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
+				ImGui::SetScrollY( ( stack_lines - ( ( stackView.realAddress.segment - stackView.segment ) + ( stackView.realAddress.offset >> 4 ) + ( stackView.realAddress.offset & 0x0000000F ? 1U : 0U ) ) ) * line_height_no_spacing );
 		}
 	}
 	EndSubWindow( WIN_STACK );

@@ -316,7 +316,7 @@ static uint32_t CreateLabel( const uint32_t address, const uint16_t segment, con
             for( uint8_t count = 4U; count && labels.begin( ) != prev_label; --count ) {
                 --prev_label;
                 if( LABEL_DATA == prev_label->extra.type && segment == prev_label->extra.segment && prev_label->extra.callers.contains( { call_address, {} } ) ) {
-                    if( prev_label->extra.address_max < address && ( address - prev_label->extra.address_max <= 8U ) ) {
+                    if( prev_label->extra.address_max < address && ( address - prev_label->extra.address_max <= ( count >= 2U ? 0x500 : 8U ) ) ) {
                         const_cast<uint32_t &>( prev_label->extra.address_max ) = address;
                         SetCodeLabel( prev_label->value, ( ( prev_label->extra.type & LABEL_CALL ) ? MM_Call_Label : MM_NONE ) | ( ( prev_label->extra.type & LABEL_JUMP ) ? MM_Jump_Label : MM_NONE ) | ( ( prev_label->extra.type & LABEL_DATA ) ? MM_Data_Label : MM_NONE ) );
                     }

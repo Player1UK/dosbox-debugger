@@ -62,7 +62,5 @@ typedef struct Diff {
 } DIFF;
 
 extern uint32_t data_buffer_size;
-extern uint16_t data_segment;
-extern uint16_t stack_segment;
 #endif // C_DEBUGGER
 #endif // DOSBOX_DEBUGGER_GUI_H

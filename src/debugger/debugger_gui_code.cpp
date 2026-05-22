@@ -82,14 +82,17 @@ static void CheckSegmentRegisters( ) {
 }
 
 bool SCodeView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_mask ) {
-	if( !SView::Set( address_pair, ( update_mask & static_cast<VIEW_MASK>( ~V_UPDATE_VIEW ) ) ) )
+	if( !SView::Set( address_pair, update_mask ) )
 		return false;
 	cursorRealAddress = address_pair;
 	cursorAddress = address;
-	if( ( update_mask & V_UPDATE_VIEW ) && !AddressVisited( address ) ) { // address not already disassembled
-		DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
-		if( debugging && UpdateOrderedSegments( ) )
-			UpdateMemoryViews( );
+	if( update_mask & V_UPDATE_VIEW ) {
+		dbg.update_win[win_id] = false;
+		if( !AddressVisited( address ) ) { // address not already disassembled
+			DasmRecursiveDisassemble( address, address_pair.offset, cpu.code.big, cpu.pmode );
+			if( debugging && UpdateOrderedSegments( ) )
+				UpdateMemoryViews( );
+		}
 	}
 	return true;
 }
@@ -123,7 +126,9 @@ void DrawCode( ) {
 		float yPosEnd = yPosStart + window_size[WIN_CODE].y;
 		yPosStart -= window_size[WIN_CODE].y;
 		yPosEnd += window_size[WIN_CODE].y;
-		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ); previous_dline = dline, ++dline, ++index ) {
+		for( auto dline = DecodedLine::first( ), previous_dline = dline; !DecodedLine::isEnd( ) && dline.address < codeView.address_max; previous_dline = dline, ++dline, ++index ) {
+			if( dline.address < codeView.address_min )
+				continue;
 			static uint8_t addressColorIndex = 0U;
 			if( dbg.update_win_scroll[WIN_CODE] && dline.address >= codeView.address ) {
 				dbg.update_win_scroll[WIN_CODE] = false;
@@ -187,14 +192,16 @@ void DrawCode( ) {
 							labelView.Set( dline.realAddress, ( dline.mnemonicMask & ( MM_Branch | MM_Memory_Access ) ) ? false : true );
 					}
 				}
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color :
-					( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.realAddress.segment );
-				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
+				if( dline.realAddress.offset < LOWER_MEMORY_LIMIT ) {
+					ImGui::SameLine( 0.0f, 0.0f );
+					ImGui::TextColored( ( is_current_ip ? dark_green_color : ( is_breakpoint ? dark_red_color :
+						( is_temporary_breakpoint ? grey_color : address_colors[addressColorIndex][0] ) ) ), "%04X", dline.realAddress.segment );
+					ImGui::SameLine( 0.0f, 0.0f );
+					ImGui::TextColored( is_breakpoint || is_temporary_breakpoint || is_current_ip ? white_color : grey_color, ":" );
+				}
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( ( is_current_ip ? green_color : ( is_temporary_breakpoint ? light_grey_color :
-					( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), "%04X%c", dline.realAddress.offset,
+					( is_breakpoint ? red_color : address_colors[addressColorIndex][1] ) ) ), ( dline.realAddress.offset < LOWER_MEMORY_LIMIT ? "%04X%c" : "%08X %c" ), dline.realAddress.offset,
 					is_breakpoint && is_temporary_breakpoint ? '+' : is_breakpoint ? '*' : is_temporary_breakpoint ? '-' : ' ' );
 				ImGui::SameLine( 0.0f, 0.0f );
 				ImGui::TextColored( is_current_ip ? light_grey_color : grey_color, "%s", dline.szOpcode );

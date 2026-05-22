@@ -123,9 +123,27 @@ bool SView::Set( const ADDRESS_PAIR &address_pair, const VIEW_MASK update_mask )
 		return false;
 	realAddress = address_pair;
 	address = address_pair.address( );
-	dbg.update_win[win_id] = debugging && ( update_mask & V_UPDATE_VIEW );
 	if( ( update_mask & V_UPDATE_HISTORY ) )
 		HistoryInsert( realAddress );
+	if( debugging && ( update_mask & ( V_UPDATE_VIEW | V_UPDATE_SCROLL ) ) ) {
+		dbg.update_win[win_id] = ( update_mask & V_UPDATE_VIEW );
+		if( address >= LOWER_MEMORY_LIMIT ) {
+			address_min = LOWER_MEMORY_LIMIT;
+			address_max = static_cast<uint32_t>( -1 );
+		} else if( realAddress.segment < dbg.segment[SEG_DATA] ) {
+			address_min = ADDRESS_PAIR::Address( dbg.segment[SEG_CODE] );
+			address_max = ADDRESS_PAIR::Address( dbg.segment[SEG_DATA] );
+			if( address_min > address )
+				address_min = address;
+		} else {
+			address_min = ADDRESS_PAIR::Address( realAddress.segment );
+			auto segment_next = ordered_segments.find( { realAddress.segment, {} } );
+			if( segment_next != ordered_segments.end( ) ) {
+				++segment_next;
+				address_max = ADDRESS_PAIR::Address( segment_next->value );
+			}
+		}
+	}
 	return true;
 }
 
@@ -319,7 +337,7 @@ static void DrawRegisters( ) {
 						switch( e.x ) {
 						case REGI_SP:
 						case REGI_BP:
-							stackView.Set( { RealSegValue( ss ), cpu_regs.regs[e.x].word[W_INDEX] }, V_UPDATE_SCROLL_HISTORY | ( stack_segment != stackView.realAddress.segment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+							stackView.Set( { RealSegValue( ss ), cpu_regs.regs[e.x].word[W_INDEX] }, V_UPDATE_SCROLL_HISTORY | ( stackView.segment != stackView.realAddress.segment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 							break;
 						case REGI_DX:
 							segment = RealSegValue( ds );
@@ -332,7 +350,7 @@ static void DrawRegisters( ) {
 								segment = data_cursor[DI_CURSOR].realAddress.segment;
 							else if( e.x == REGI_BX )
 								segment = RealSegValue( es );
-							dataView.Set( { segment, cpu_regs.regs[e.x].word[W_INDEX] }, V_UPDATE_SCROLL_HISTORY | ( data_segment != dataView.realAddress.segment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+							dataView.Set( { segment, cpu_regs.regs[e.x].word[W_INDEX] }, V_UPDATE_SCROLL_HISTORY | ( dataView.segment != dataView.realAddress.segment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 							break;
 						}
 					}
@@ -352,12 +370,12 @@ static void DrawRegisters( ) {
 				if( ImGui::Selectable( id, false, ImGuiSelectableFlags_SelectOnClick, { entry_width, 0.0f } ) ) {
 					switch( e.x ) {
 					case ss:
-						stackView.Set( { segVal, reg_esp }, V_UPDATE_SCROLL_HISTORY | ( stack_segment != segVal ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+						stackView.Set( { segVal, reg_esp }, V_UPDATE_SCROLL_HISTORY | ( stackView.segment != segVal ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 						break;
 					case cs:
 						codeView.Set( { segVal, 0U }, V_UPDATE_SCROLL_HISTORY );
 					default:
-						dataView.Set( { segVal, 0U }, V_UPDATE_SCROLL_HISTORY | ( data_segment != segVal ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+						dataView.Set( { segVal, 0U }, V_UPDATE_SCROLL_HISTORY | ( dataView.segment != segVal ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 						break;
 					}
 				}
@@ -443,21 +461,21 @@ static void DrawRegisters( ) {
 	EndSubWindow( WIN_REG );
 }
 
-const char seg_label[NUM_SEG_TYPES][4] = { "   ", "En:", "PS:", "CS:", "SS:", "SP:", "HP:", "DS:", "   " };
+const char seg_label[NUM_SEG_TYPES][8] = { "   ", "En:", "PS:", "CS:", "SS:", "SP:", "HP:", "DS:", "  XMS  " };
 
 static void DrawSegments( ) {
 	if( BeginSubWindow( WIN_SEG, "Segments", ImGuiWindowFlags_NoNav ) ) {
 		for( const auto &segment : ordered_segments ) {
-			if( segment.extra.type == SEG_MAX )
-				continue;
 			float text_start_x = ImGui::GetCursorPosX( );
 			ImGui::TextColored( grey_color, "%s", seg_label[segment.extra.type] );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[segment.extra.index % MAX_ADDRESS_COLORS][1], "%04X", segment.value );
+			if( SEG_MAX != segment.extra.type ) {
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( address_colors[segment.extra.index % MAX_ADDRESS_COLORS][1], "%04X", segment.value );
+			}
 			ImGui::SameLine( 0.0f, 0.0f );
 			float text_width = ImGui::GetCursorPosX( ) - text_start_x;
 			ImGui::SetCursorPosX( text_start_x );
-			const bool isSelected = ( codeView.realAddress.segment == segment.value );
+			const bool isSelected = ( SEG_MAX == segment.extra.type && LOWER_MEMORY_LIMIT <= codeView.realAddress.offset ) || ( codeView.realAddress.segment == segment.value );
 			char id[11];
 			sprintf( id, "##%04X", segment.value );
 			if( ImGui::Selectable( id, isSelected, ImGuiSelectableFlags_SelectOnClick, { text_width, 0.0f } ) ) {
@@ -465,9 +483,12 @@ static void DrawSegments( ) {
 					codeView.Set( { segment.value, 0U }, V_UPDATE_SCROLL_HISTORY );
 				if( SEG_STACK == segment.extra.type ) {
 					const auto it = ++ordered_segments.find( { segment.value, {} } );
-					stackView.Set( { segment.value, static_cast<uint32_t>( it->value - segment.value ) << 4 }, V_UPDATE_SCROLL_HISTORY | ( stack_segment != segment.value ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+					stackView.Set( { segment.value, static_cast<uint32_t>( it->value - segment.value ) << 4 }, V_UPDATE_SCROLL_HISTORY | ( stackView.segment != segment.value ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+				} else if( SEG_MAX == segment.extra.type ) {
+					codeView.Set( { 0U, LOWER_MEMORY_LIMIT }, V_UPDATE_SCROLL_HISTORY );
+					dataView.Set( { 0U, LOWER_MEMORY_LIMIT }, V_UPDATE_SCROLL_HISTORY | ( dataView.address < LOWER_MEMORY_LIMIT ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 				} else
-					dataView.Set( { segment.value, 0U }, V_UPDATE_SCROLL_HISTORY | ( data_segment != segment.value ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+					dataView.Set( { segment.value, 0U }, V_UPDATE_SCROLL_HISTORY | ( dataView.segment != segment.value ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 			}
 			ImGui::SameLine( );
 			if( ImGui::GetCursorPosX( ) + ( text_width + space_width ) > window_size[WIN_SEG].x )
@@ -501,26 +522,28 @@ static void DrawLabels( ) {
 				labelView.Set( { currentSegment, offset }, true, false );
 				codeView.Set( { currentSegment, offset }, V_UPDATE_SCROLL_HISTORY );
 				if( label.extra.type & LABEL_DATA )
-					dataView.Set( { currentSegment, offset }, V_UPDATE_SCROLL_HISTORY | ( data_segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+					dataView.Set( { currentSegment, offset }, V_UPDATE_SCROLL_HISTORY | ( dataView.segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+			}
+			if( offset < LOWER_MEMORY_LIMIT ) {
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", currentSegment );
+				ImGui::SameLine( 0.0f, 0.0f );
+				ImGui::TextColored( grey_color, ":" );
 			}
 			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][0], "%04X", currentSegment );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( grey_color, ":" );
-			ImGui::SameLine( 0.0f, 0.0f );
-			ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset );
+			ImGui::TextColored( address_colors[addressColorIndex][1], ( offset < LOWER_MEMORY_LIMIT ? "%04X" : "%08X" ), offset );
 			if( offset_max != offset ) {
 				sprintf( id, "##%08X_MAX", label.value );
 				if( ImGui::Selectable( id, isSelected && offset != labelView.realAddress.offset, ImGuiSelectableFlags_SelectOnClick ) ) {
 					labelView.Set( { currentSegment, offset_max }, true, false );
 					codeView.Set( { currentSegment, offset_max }, V_UPDATE_SCROLL_HISTORY );
 					if( label.extra.type & LABEL_DATA )
-						dataView.Set( { currentSegment, offset_max }, V_UPDATE_SCROLL_HISTORY | ( data_segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
+						dataView.Set( { currentSegment, offset_max }, V_UPDATE_SCROLL_HISTORY | ( dataView.segment != currentSegment ? V_UPDATE_VIEW : V_UPDATE_NONE ) );
 				}
-				ImGui::SameLine( 4 * char_width );
+				ImGui::SameLine( ( offset_max < LOWER_MEMORY_LIMIT ? 4 : 2 ) * char_width );
 				ImGui::TextColored( grey_color, ":" );
 				ImGui::SameLine( 0.0f, 0.0f );
-				ImGui::TextColored( address_colors[addressColorIndex][1], "%04X", offset_max );
+				ImGui::TextColored( address_colors[addressColorIndex][1], ( offset_max < LOWER_MEMORY_LIMIT ? "%04X" : "%08X" ), offset_max );
 			}
 			for( const auto &caller : label.extra.callers ) {
 				const uint32_t offset = ADDRESS_PAIR::Offset( caller.value, caller.extra );

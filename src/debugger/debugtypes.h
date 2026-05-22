@@ -4,6 +4,9 @@
 #include "dosbox.h"
 
 #if C_DEBUGGER
+constexpr const uint32_t LOWER_MEMORY_LIMIT = 0x10FFF0;
+constexpr const uint8_t NUM_MEM_OPS = 2U;
+
 typedef struct Address_Pair {
 	uint16_t segment = 0U;
 	uint32_t offset = 0U;
@@ -63,8 +66,6 @@ typedef struct Address_Pair {
 		return ( address >> 4U );
 	}
 } ADDRESS_PAIR;
-
-constexpr const uint8_t NUM_MEM_OPS = 2U;
 
 typedef enum Label_Mask : unsigned __int8 {
 	LABEL_CALL		= 0x1u,
@@ -127,5 +128,4 @@ typedef enum Size_Type : uint8_t {
 	SIZE_DWORD		= 4u
 } SIZE_TYPE;
 #endif // C_DEBUGGER
-
 #endif // DOSBOX_DEBUGTYPES_H

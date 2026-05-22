@@ -171,7 +171,9 @@ inline VIEW_MASK &operator&=( VIEW_MASK &lhs, VIEW_MASK rhs ) noexcept {
 struct SView {
 	const WINDOW_ID win_id;
 	ADDRESS_PAIR realAddress;
-	uint32_t address = 0;
+	uint32_t address = 0U;
+	uint32_t address_min = 0U;
+	uint32_t address_max = static_cast<uint32_t>( -1 );
 
 	SView( const WINDOW_ID _win_id ) : win_id( _win_id ) {}
 
@@ -202,6 +204,8 @@ struct SCodeView : public SView {
 } extern codeView;
 
 struct SDataView : public SView {
+	uint16_t	segment;
+	uint32_t	address_segment;
 	SDataView( WINDOW_ID win_id ) : SView( win_id ) {}
 	
 	bool Set( const ADDRESS_PAIR &, const VIEW_MASK = V_UPDATE_DEFAULT );
