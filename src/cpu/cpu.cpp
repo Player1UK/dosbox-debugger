@@ -3278,7 +3278,11 @@ public:
 		};
 
 		// Real mode
+#if C_DEBUGGER
+		const std::string cpu_cycles_pref = secprop->GetString( "cpu_cycles_debug" );
+#else
 		const std::string cpu_cycles_pref = secprop->GetString("cpu_cycles");
+#endif // C_DEBUGGER
 
 		if (cpu_cycles_pref == "max") {
 			modern_cycles_config.real_mode = {};

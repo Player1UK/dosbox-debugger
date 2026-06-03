@@ -546,11 +546,20 @@ static ADDRESS_PAIR CalculateRealAddress( const ZydisDecodedInstruction &instruc
         ZyanU64 z64_result_address;
         uint16_t segment = GetRegisterValue( operand.mem.segment, fRegZero, realAddress.segment );
         ZydisRegisterContext register_context;
-        if( ZYDIS_REGISTER_NONE != operand.mem.base )
-            register_context.values[operand.mem.base] = GetRegisterValue( operand.mem.base, fRegZero, realAddress.segment );
-        if( ZYDIS_REGISTER_NONE != operand.mem.index )
-            register_context.values[operand.mem.index] = GetRegisterValue( operand.mem.index, fRegZero, realAddress.segment );
-        if( ZYAN_SUCCESS( ZydisCalcAbsoluteAddressEx( &instruction, &operand, realAddress.offset, &register_context, &z64_result_address ) ) )
+        bool fMemBaseOK = true, fMemIndexOK = true;
+        if( ZYDIS_REGISTER_NONE != operand.mem.base ) {
+            if( ZYDIS_REGISTER_MAX_VALUE >= operand.mem.base )
+                register_context.values[operand.mem.base] = GetRegisterValue( operand.mem.base, fRegZero, realAddress.segment );
+            else
+                fMemBaseOK = false;
+        }
+        if( ZYDIS_REGISTER_NONE != operand.mem.index ) {
+            if( ZYDIS_REGISTER_MAX_VALUE >= operand.mem.index )
+                register_context.values[operand.mem.index] = GetRegisterValue( operand.mem.index, fRegZero, realAddress.segment );
+            else
+                fMemIndexOK = false;
+        }
+        if( fMemBaseOK && fMemIndexOK && ZYAN_SUCCESS( ZydisCalcAbsoluteAddressEx( &instruction, &operand, realAddress.offset, &register_context, &z64_result_address ) ) )
             return { segment, static_cast<uint32_t>( z64_result_address ) };
         return { segment, static_cast<uint32_t>( realAddress.offset + operand.mem.disp.value ) };
     }
